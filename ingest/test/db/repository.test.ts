@@ -4,6 +4,7 @@ import { connect, hasDb, resetAndSeed } from './setup.js';
 import { MssqlRepository, DuplicatePackError, ReferenceError_ } from '../../src/mssql/repository.js';
 import { loadReferenceData } from '../../src/mssql/reference.js';
 import { ingest } from '../../src/ingest.js';
+import { loadRunSheetInputs } from '../../src/runsheet/query.js';
 import { buildXml, FakePdf, type PackSpec } from '../helpers.js';
 
 /**
@@ -53,6 +54,19 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     // requested (XML) vs actual settings are both kept and can be compared
     expect(await scalar(`SELECT COUNT(*) AS n FROM idoc.v_pack_requested_vs_actual WHERE job_id = ${jobId} AND requested_format = N'Letter' AND actual_format = N'Letter' AND format_changed = 0`)).toBe(3);
     expect(await scalar('SELECT COUNT(*) AS n FROM idoc.v_rule_violations')).toBe(0);
+  });
+
+  it('gives every batch its own global batch code and the run sheet loader finds the data', async () => {
+    const r = await load([person('Cy', 'Day'), person('Di', 'Day')], 'job-runsheet.xml');
+    expect(r.persisted).toBe(true);
+    const jobId = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-runsheet'`);
+    const inputs = await loadRunSheetInputs(pool, jobId);
+    expect(inputs.length).toBe(r.batches.length);
+    expect(inputs.reduce((n, i) => n + i.mailpieces, 0)).toBe(2);
+    expect(new Set(inputs.map((i) => i.batchCode)).size).toBe(inputs.length);
+    expect(inputs[0]!.envelopeCode).not.toBe('');
+    expect(inputs[0]!.weightBandsG).toHaveLength(inputs[0]!.mailpieces);
+    expect(await scalar('SELECT COUNT(*) - COUNT(DISTINCT batch_code) AS n FROM idoc.batch')).toBe(0);
   });
 
   it('stores address lines without the postcode line and keeps >6 lines', async () => {

@@ -333,6 +333,10 @@ GO
    =========================================================================== */
 /* A batch = all mailpieces in ONE job that share the same production identity.
    Batches are never combined across different envelopes, brands etc. to reach the machine threshold. */
+/* One global running number for batch codes (FileMaker: Settings::batchCode). Start it at FileMaker's current value:
+   ALTER SEQUENCE idoc.batch_code_seq RESTART WITH <next number>; */
+CREATE SEQUENCE idoc.batch_code_seq AS BIGINT START WITH 1 INCREMENT BY 1 NO CYCLE;
+GO
 CREATE TABLE idoc.batch (
     batch_id                BIGINT IDENTITY(1, 1) NOT NULL CONSTRAINT pk_batch PRIMARY KEY,
     job_id                  BIGINT                NOT NULL CONSTRAINT fk_batch_job REFERENCES idoc.job (job_id),
@@ -348,10 +352,11 @@ CREATE TABLE idoc.batch (
     batch_key               CHAR(64)              NOT NULL,   -- SHA-256 of all of the above, canonical form
     fulfilment_department   NVARCHAR(30)          NOT NULL,   -- Reception | Machine enclosing | Hand enclosing (set after counting)
     mailpiece_count         INT                   NOT NULL CONSTRAINT df_batch_count DEFAULT (0),
-    batch_code              NVARCHAR(50)          NULL,
+    batch_code              BIGINT                NOT NULL CONSTRAINT df_batch_code DEFAULT (NEXT VALUE FOR idoc.batch_code_seq), -- print file / run sheet name
     current_status          NVARCHAR(30)          NOT NULL CONSTRAINT df_batch_status DEFAULT (N'Created'),
     created_at              DATETIME2(0)          NOT NULL CONSTRAINT df_batch_created DEFAULT (SYSUTCDATETIME()),
     CONSTRAINT uq_batch_key UNIQUE (job_id, batch_key),
+    CONSTRAINT uq_batch_code UNIQUE (batch_code),
     CONSTRAINT ck_batch_route CHECK (enclosing_route IN (N'RECEPTION', N'MACHINE_CANDIDATE', N'HAND')),
     CONSTRAINT ck_batch_department CHECK (fulfilment_department IN (N'Reception', N'Machine enclosing', N'Hand enclosing')),
     -- Only a MACHINE_CANDIDATE batch can ever be machine enclosed; the count threshold is checked in v_rule_violations

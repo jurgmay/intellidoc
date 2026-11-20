@@ -7,16 +7,18 @@ import type { Plan } from './plan.js';
  */
 export function referenceFromPlan(plan: Plan): ReferenceData {
   const codeOf = new Map(plan.stock.map((s) => [s.legacyId, s.code ?? `ID-${s.legacyId.slice(0, 8)}`]));
-  const stock = new Map<string, { code: string; weightG: number; thicknessMm: number; linked?: string[] }>();
-  for (const s of plan.stock) stock.set(codeOf.get(s.legacyId)!, { code: codeOf.get(s.legacyId)!, weightG: s.weightG, thicknessMm: s.thicknessMm });
+  const stock = new Map<string, { code: string; weightG: number; thicknessMm: number; description?: string; linked?: string[] }>();
+  for (const s of plan.stock) stock.set(codeOf.get(s.legacyId)!, { code: codeOf.get(s.legacyId)!, weightG: s.weightG, thicknessMm: s.thicknessMm, description: s.description });
   for (const s of plan.stock) if (s.parentLegacyId) { const p = stock.get(codeOf.get(s.parentLegacyId)!); if (p) (p.linked ??= []).push(codeOf.get(s.legacyId)!); }
   const sizeOf = new Map(plan.stock.map((s) => [s.legacyId, s.sizeCode ?? '']));
   const brandName = new Map(plan.brands.map((b) => [b.legacyId, b.name]));
+  const serviceCodeOf = new Map(plan.rates.map((r) => [`${r.provider}|${r.format}|${r.service}`, r.serviceCode]));
   const byCustomer = new Map<string, EnvelopeOption[]>();
   for (const e of plan.envelopes) {
     const list = byCustomer.get(e.customerLegacyId) ?? [];
     list.push({ brand: e.brandLegacyId ? brandName.get(e.brandLegacyId) ?? null : null, reference: e.reference ?? '', postalFormat: e.rate.format,
-      size: sizeOf.get(e.stockLegacyId) ?? '', stockCode: codeOf.get(e.stockLegacyId)!, deliveryBand: e.deliveryBand, minWeightG: 0, maxWeightG: e.rate.maxG });
+      size: sizeOf.get(e.stockLegacyId) ?? '', stockCode: codeOf.get(e.stockLegacyId)!, deliveryBand: e.deliveryBand, minWeightG: 0, maxWeightG: e.rate.maxG,
+      postalProvider: e.rate.provider, postalServiceName: e.rate.service, serviceCode: serviceCodeOf.get(`${e.rate.provider}|${e.rate.format}|${e.rate.service}`) ?? null });
     byCustomer.set(e.customerLegacyId, list);
   }
   const accById = new Map(plan.accounts.map((a) => [a.legacyId, a]));
