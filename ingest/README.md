@@ -125,3 +125,10 @@ Decisions applied by the import: stock with no owner and no WH code is dropped; 
 5. Machine enclosing: C5, at most 12 sheets, in a batch of MORE than 25 mailpieces. Everything else is hand enclosed. The limits live in `idoc.settings`.
 
 For an existing database the machine limit must be changed by hand:  `UPDATE idoc.settings SET machine_enclosing_max_sheets = 12;`
+
+### Trial run of a real XML/PDF pair (no database)
+Runs the full ingest of one pair against the real configuration in the FileMaker exports (same four .mer files as the import) and prints the batches,
+the issues, and a comparison with the delivery band the customer system wrote in the XML:
+```
+npx tsx src/import/trial.ts C:\imports C:\samples\file.xml C:\samples\file.pdf
+```
