@@ -124,6 +124,11 @@ describe('batching and enclosing', () => {
     expect(m.postalFormat).toBe('Large Letter'); expect(m.envelopeSize).toBe('C4'); expect(m.envelopeCode).toBe('C4-REMUS');
     expect(r.batches[0]!.enclosing).toBe('HAND');
   });
+  it('an envelope code we do not hold is only a hint: the envelope comes from the account configuration', async () => {
+    const r = await run(many(2, { envCode: 'WH99999' }));
+    expect(r.mailpieces).toHaveLength(2);
+    expect(r.mailpieces[0]!.envelopeCode).toBe('WH21518');
+  });
   it('linked stock children add weight', async () => {
     const light = (await run([{ ...many(1)[0]!, pages: 2, inserts: ['INSERT-PARENT'] }])).mailpieces[0]!;
     // 1 sheet*5.625 + 5 + 4 + 3.5 = 18.125 -> 19
@@ -161,9 +166,8 @@ describe('file validation', () => {
     const r = await ingest(bad, 't', 'x', { ref: fixtureReference(), pdf: new FakePdf(4), repo: new InMemoryRepository() });
     expect(r.issues.some((i) => /gap or overlap/.test(i.message))).toBe(true);
   });
-  it('unknown account / unknown envelope reject the job', async () => {
+  it('an unknown account rejects the job', async () => {
     expect((await run([{ account: 'NOPE' }])).persisted).toBe(false);
-    expect((await run([{ envCode: 'WH99999' }])).persisted).toBe(false);
   });
   it('re-ingesting the same file skips every pack (duplicate guid)', async () => {
     const repo = new InMemoryRepository();

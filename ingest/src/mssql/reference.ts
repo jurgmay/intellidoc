@@ -22,7 +22,7 @@ export async function loadReferenceData(pool: sql.ConnectionPool): Promise<Refer
       maxThicknessMm: f.max_thickness_mm === null ? null : Number(f.max_thickness_mm), maxSheets: f.max_sheets }));
 
   const stockRows = await q<{ stock_item_id: number; parent_stock_item_id: number | null; stock_code: string; weight_g: number; thickness_mm: number }>(
-    'SELECT stock_item_id, parent_stock_item_id, stock_code, CAST(weight_g AS FLOAT) AS weight_g, CAST(thickness_mm AS FLOAT) AS thickness_mm FROM idoc.stock_item');
+    'SELECT stock_item_id, parent_stock_item_id, stock_code, CAST(weight_g AS FLOAT) AS weight_g, CAST(thickness_mm AS FLOAT) AS thickness_mm FROM idoc.stock_item WHERE stock_code IS NOT NULL');
   const codeById = new Map(stockRows.map((r) => [r.stock_item_id, r.stock_code]));
   const stock = new Map<string, StockItem>();
   for (const r of stockRows) stock.set(r.stock_code, { code: r.stock_code, weightG: Number(r.weight_g), thicknessMm: Number(r.thickness_mm), linked: [] });

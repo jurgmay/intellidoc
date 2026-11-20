@@ -14,3 +14,8 @@ ddr/
 *.env
 !.env.example
 watch/
+
+# FileMaker exports contain customer data and credentials - never commit
+*.mer
+*.csv
+import-data/

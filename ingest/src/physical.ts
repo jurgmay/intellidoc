@@ -51,12 +51,12 @@ export function choosePhysical(
   const thickness = sheets * s.a4SheetThicknessMm + insThick;
   const formats = [...ref.postalFormats].sort((a, b) => a.rank - b.rank);
 
-  const requested = ref.stock.get(requestedEnvelopeCode);
-  if (!requested) throw new PhysicalError(`Unknown envelope stock code ${requestedEnvelopeCode}`);
-  let envWeight = requested.weightG;
+  // The envelope code in the XML is only a hint: customer systems send codes that differ from our stock codes.
+  // Unknown code -> start from 0 g; the envelope is derived from the account configuration and the weight re-checked.
+  let envWeight = ref.stock.get(requestedEnvelopeCode)?.weightG ?? 0;
   let fmtIdx = 0;
 
-  for (let guard = 0; guard <= formats.length + 1; guard++) {
+  for (let guard = 0; guard <= formats.length + 2; guard++) {
     const weight = Math.ceil(sheets * s.a4SheetWeightG + insWeight + envWeight);
     // smallest format at or above the current one that fits
     let idx = fmtIdx;

@@ -11,7 +11,9 @@
     "watch": "tsx src/watch.ts",
     "db:init": "tsx src/initDevDb.ts",
     "watch:env": "tsx --env-file=.env src/watch.ts",
-    "db:init:env": "tsx --env-file=.env src/initDevDb.ts"
+    "db:init:env": "tsx --env-file=.env src/initDevDb.ts",
+    "import:ref": "tsx src/import/cli.ts",
+    "import:ref:env": "tsx --env-file=.env src/import/cli.ts"
   },
   "dependencies": {
     "mssql": "^12.8.0",
