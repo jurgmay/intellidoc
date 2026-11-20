@@ -20,7 +20,7 @@ export function matchKey(p: IngestPack, acct: AccountConfig): string {
   if (p.matchExclusion) return `X:${p.parsed.guid}`;
   const inc = acct.matchIncludeKeys.map((k) => `${k}=${p.parsed.passthrough[k] ?? ''}`);
   return [
-    p.address.hash, p.accountCode, p.brand ?? '', p.parsed.options.envelopeCode,
+    p.address.hash, p.customerCode, p.brand ?? '', p.parsed.options.envelopeCode,
     p.parsed.options.deliveryMethod, p.parsed.options.paper, p.batchingValue, ...inc,
   ].join('\u001f');
 }
@@ -30,7 +30,7 @@ export function groupPacks(packs: IngestPack[], ref: ReferenceData): IngestPack[
   const groups = new Map<string, IngestPack[]>();
   for (const p of packs) {
     const acct = ref.accounts.get(p.accountCode)!;
-    const k = matchKey(p, acct);
+    const k = p.matchKey || matchKey(p, acct);
     const g = groups.get(k);
     if (g) g.push(p); else groups.set(k, [p]);
   }

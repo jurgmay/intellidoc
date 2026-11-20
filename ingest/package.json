@@ -6,12 +6,15 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "dry-run": "tsx src/cli.ts"
+    "dry-run": "tsx src/cli.ts",
+    "test:db": "vitest run test/db"
   },
   "dependencies": {
+    "mssql": "^12.8.0",
     "saxes": "^6.0.0"
   },
   "devDependencies": {
+    "@types/mssql": "^12.3.0",
     "@types/node": "^26.6.6",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",

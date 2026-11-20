@@ -40,6 +40,7 @@ export function choosePhysical(
   brand: string | null,
   reference: string,
   requestedEnvelopeCode: string,
+  deliveryMethod: string,
   ref: ReferenceData,
 ): Physical {
   const s = ref.settings;
@@ -70,7 +71,7 @@ export function choosePhysical(
     if (idx >= formats.length) throw new PhysicalError(`No postal format fits ${sheets} sheets / ${weight}g / ${thickness.toFixed(2)}mm`);
     fmtIdx = idx;
     const fmt = formats[idx]!;
-    const opt = pickEnvelope(account, brand, reference, fmt.name);
+    const opt = pickEnvelope(account, brand, reference, fmt.name, deliveryMethod, weight);
     if (!opt) throw new PhysicalError(`Account ${account.code}: no envelope configured for brand=${brand ?? '-'} ref=${reference || '-'} format=${fmt.name}`);
     const chosen = ref.stock.get(opt.stockCode);
     if (!chosen) throw new PhysicalError(`Unknown envelope stock code ${opt.stockCode}`);
@@ -82,7 +83,9 @@ export function choosePhysical(
   throw new PhysicalError('Envelope/format selection did not converge');
 }
 
-function pickEnvelope(a: AccountConfig, brand: string | null, reference: string, format: string): EnvelopeOption | undefined {
-  const base = a.envelopes.filter((e) => e.postalFormat === format && (e.brand ?? null) === (brand ?? null));
+function pickEnvelope(a: AccountConfig, brand: string | null, reference: string, format: string, deliveryMethod: string, weightG: number): EnvelopeOption | undefined {
+  const base = a.envelopes.filter((e) => e.postalFormat === format && (e.brand ?? null) === (brand ?? null)
+    && (e.deliveryBand === undefined || e.deliveryBand.toUpperCase() === deliveryMethod.toUpperCase())
+    && (e.minWeightG === undefined || weightG >= e.minWeightG) && (e.maxWeightG === undefined || weightG <= e.maxWeightG));
   return base.find((e) => e.reference === reference) ?? base.find((e) => e.reference === '');
 }
