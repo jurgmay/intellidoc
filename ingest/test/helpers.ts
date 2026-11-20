@@ -20,7 +20,7 @@ export function buildXml(specs: PackSpec[], version = '6'): { xml: string; pages
     const brand = s.brand === undefined ? 'Remus' : s.brand;
     const pt = { ...(brand ? { Brand: brand } : {}), ...(s.passthrough ?? {}) };
     return `<Pack Guid="${guid}" PageCount="${pages}" StartPage="${start}" EndPage="${start + pages - 1}" Status="Processed" DeliveryPointSuffix="" ReleaseDate="2026-01-01T00:00:00Z" AttachmentCount="0">
-<Source Guid="s" OwnerAccount="${s.account ?? 'FEXCO'}" OwnerUser="u" />
+<Source Guid="2ce8e2ed-b620-4ce3-9ef7-f52f7b449789" OwnerAccount="${s.account ?? 'FEXCO'}" OwnerUser="u" />
 <Address FirstName="${esc(s.first ?? 'A')}" Surname="${esc(s.surname ?? 'Smith')}" Postcode="${pc}" Country="gb">${lines.map((l) => `<Line>${esc(l)}</Line>`).join('')}</Address>
 <Options><Colour Value="Colour" /><DeliveryMethod DeliveryBand="Letter (Up to 100g)" Value="${s.method ?? '2nd Class'}" /><Envelope Value="${s.envText ?? 'C5 Envelope ref: Remus'}" Code="${s.envCode ?? 'WH21518'}" /><Duplex Value="${s.duplex === false ? 'No' : 'Yes'}" /><Paper Value="A4 White" /></Options>
 ${s.inserts?.length ? `<Inserts>${s.inserts.map((c) => `<Insert Code="${c}" Name="n" PublicationDate="" />`).join('')}</Inserts>` : ''}
