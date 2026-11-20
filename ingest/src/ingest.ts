@@ -1,6 +1,8 @@
+import { createHash } from 'node:crypto';
+import { basename } from 'node:path';
 import { parseHpodV6 } from './parser.js';
 import { normaliseAddress } from './address.js';
-import { exclusionFor, groupPacks } from './matching.js';
+import { exclusionFor, groupPacks, matchKey } from './matching.js';
 import { choosePhysical, PhysicalError } from './physical.js';
 import { batchKey, buildBatches, routeFor } from './batching.js';
 import type { PdfInspector } from './pdf.js';
@@ -65,12 +67,17 @@ export async function ingest(
     const address = normaliseAddress(p);
     const reference = refText(p.options.envelopeValue);
     const brand = deriveBrand(p, acct, reference);
-    packs.push({
-      parsed: p, address, accountCode: acct.code, brand, brandReference: reference,
+    const seqKey = acct.packSequence ? p.passthrough[acct.packSequence.key] : undefined;
+    const ip: IngestPack = {
+      parsed: p, address, accountCode: acct.code, customerCode: acct.customerCode, brand, brandReference: reference,
       sheets: p.options.duplex ? Math.ceil(p.pageCount / 2) : p.pageCount,
       matchExclusion: exclusionFor(p, address, acct, ref),
       batchingValue: acct.batchingKey ? (p.passthrough[acct.batchingKey] ?? '') : '',
-    });
+      documentSequence: (seqKey !== undefined ? acct.packSequence?.rules.get(seqKey) : undefined) ?? 99,
+      matchKey: '',
+    };
+    ip.matchKey = createHash('sha256').update(matchKey(ip, acct), 'utf8').digest('hex');
+    packs.push(ip);
     if (opts.checkPostcodes) {
       const text = (await pdf.pageText(pdfPath, p.startPage)).replace(/\s+/g, '').toUpperCase();
       if (!text.includes(address.postcode.replace(/\s+/g, ''))) {
@@ -83,6 +90,7 @@ export async function ingest(
   if (!issues.some((i) => i.severity === 'error')) {
     let id = 1;
     for (const g of groupPacks(packs, ref)) {
+      g.sort((a, b) => a.documentSequence - b.documentSequence || a.parsed.startPage - b.parsed.startPage);
       const first = g[0]!;
       const acct = ref.accounts.get(first.accountCode)!;
       // union of inserts, one per code per mailpiece (quantity = max over packs)
@@ -94,15 +102,16 @@ export async function ingest(
       }
       const insertCodes = [...q].map(([code, quantity]) => ({ code, quantity })).sort((a, b) => a.code.localeCompare(b.code));
       try {
-        const phys = choosePhysical(g, insertCodes, acct, first.brand, first.brandReference, first.parsed.options.envelopeCode, ref);
+        const phys = choosePhysical(g, insertCodes, acct, first.brand, first.brandReference, first.parsed.options.envelopeCode, first.parsed.options.deliveryMethod, ref);
         const base = {
-          addressHash: first.address.hash, packs: g, accountCode: first.accountCode, brand: first.brand,
+          addressHash: first.address.hash, packs: g, accountCode: first.customerCode, brand: first.brand,
           sheets: phys.sheets, insertCodes, weightG: phys.weightG, thicknessMm: phys.thicknessMm,
           postalFormat: phys.postalFormat, envelopeCode: phys.envelope.stockCode, envelopeSize: phys.envelope.size,
           postalService: first.parsed.options.deliveryMethod,
           paper: ref.paperBatchNames.get(first.parsed.options.paper) ?? first.parsed.options.paper,
           batchingValue: first.batchingValue,
           route: routeFor(phys.sheets, phys.envelope.size, ref),
+          accountEnvelopeId: phys.envelope.accountEnvelopeId, postalRateId: phys.envelope.postalRateId, postalServiceId: phys.envelope.postalServiceId,
         };
         mailpieces.push({ ...base, id: id++, batchKey: batchKey(base) });
       } catch (e) {
@@ -114,7 +123,7 @@ export async function ingest(
 
   const batches = buildBatches(mailpieces, ref);
   const failed = issues.some((i) => i.severity === 'error');
-  const result: IngestResult = { xmlName, pdfPages, packs, mailpieces, batches, duplicates, issues, persisted: false };
+  const result: IngestResult = { xmlName, pdfName: basename(pdfPath), pdfPages, packs, mailpieces, batches, duplicates, issues, persisted: false };
   if (!failed && packs.length > 0) { await repo.saveJob(result); result.persisted = true; }
   return result;
 }

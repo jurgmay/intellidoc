@@ -25,10 +25,22 @@ export interface EnvelopeOption {
   postalFormat: string;
   size: string; // C5 | C4
   stockCode: string;
+  /** Optional narrowing, filled when loaded from account_envelope/postal_rate: */
+  deliveryBand?: string;
+  minWeightG?: number;
+  maxWeightG?: number;
+  accountEnvelopeId?: number;
+  postalRateId?: number;
+  postalServiceId?: number;
 }
 
 export interface AccountConfig {
+  /** Submitting account code (XML OwnerAccount). */
   code: string;
+  /** Customer (grouping account) code; equals code when the account is its own customer. */
+  customerCode: string;
+  /** Passthrough key + value -> position inside a merged envelope. */
+  packSequence?: { key: string; rules: Map<string, number> };
   brands: string[];
   /** Passthrough key whose value is part of batch identity (e.g. Property). null = none. */
   batchingKey: string | null;

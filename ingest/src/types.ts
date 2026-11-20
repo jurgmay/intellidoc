@@ -46,9 +46,16 @@ export type EnclosingMethod = 'MACHINE' | 'HAND' | 'RECEPTION';
 export interface IngestPack {
   parsed: ParsedPack;
   address: NormalisedAddress;
+  /** Submitting account (XML OwnerAccount). */
   accountCode: string;
+  /** Customer = grouping account; this is what batches and mailpieces belong to. */
+  customerCode: string;
   brand: string | null;
   brandReference: string;
+  /** Position inside a merged envelope (account pack-sequence rule); 99 = unlisted. */
+  documentSequence: number;
+  /** SHA-256 hex of the match key; unique per pack when excluded. */
+  matchKey: string;
   sheets: number;
   matchExclusion: MatchExclusionReason | null;
   /** Value of the account's customer-specified batching key (e.g. Property), or ''. */
@@ -59,10 +66,15 @@ export interface Mailpiece {
   id: number;
   addressHash: string;
   packs: IngestPack[];
+  /** Customer (grouping account) code. */
   accountCode: string;
   brand: string | null;
   sheets: number;
   insertCodes: { code: string; quantity: number }[];
+  /** Identity of the chosen outer envelope in the account_envelope table, when known. */
+  accountEnvelopeId?: number;
+  postalRateId?: number;
+  postalServiceId?: number;
   weightG: number;
   thicknessMm: number;
   postalFormat: string;
@@ -85,9 +97,11 @@ export interface Batch {
   postalFormat: string;
   paper: string;
   insertCodes: string[];
+  inserts: { code: string; quantity: number }[];
   batchingValue: string;
   route: EnclosingRoute;
   enclosing: EnclosingMethod;
+  postalServiceId?: number;
   mailpieceIds: number[];
   sheetTotal: number;
 }
@@ -100,6 +114,7 @@ export interface IngestIssue {
 
 export interface IngestResult {
   xmlName: string;
+  pdfName: string;
   pdfPages: number;
   packs: IngestPack[];
   mailpieces: Mailpiece[];

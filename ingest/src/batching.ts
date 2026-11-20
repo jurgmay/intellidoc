@@ -12,7 +12,7 @@ export function routeFor(sheets: number, envelopeSize: string, ref: ReferenceDat
 export function batchKey(m: Omit<Mailpiece, 'batchKey' | 'id'>): string {
   const canonical = [
     m.accountCode, m.brand ?? '', m.envelopeCode, m.postalService, m.postalFormat, m.paper,
-    m.insertCodes.map((i) => i.code).sort().join(','), m.batchingValue, m.route,
+    m.insertCodes.map((i) => `${i.code}x${i.quantity}`).sort().join(','), m.batchingValue, m.route,
   ].join('|');
   return createHash('sha256').update(canonical, 'utf8').digest('hex');
 }
@@ -31,7 +31,8 @@ export function buildBatches(mps: Mailpiece[], ref: ReferenceData): Batch[] {
     out.push({
       key, accountCode: f.accountCode, brand: f.brand, envelopeCode: f.envelopeCode, envelopeSize: f.envelopeSize,
       postalService: f.postalService, postalFormat: f.postalFormat, paper: f.paper,
-      insertCodes: f.insertCodes.map((i) => i.code).sort(), batchingValue: f.batchingValue,
+      insertCodes: f.insertCodes.map((i) => i.code).sort(), inserts: f.insertCodes, batchingValue: f.batchingValue,
+      postalServiceId: f.postalServiceId,
       route: f.route, enclosing, mailpieceIds: g.map((m) => m.id), sheetTotal: g.reduce((n, m) => n + m.sheets, 0),
     });
   }
