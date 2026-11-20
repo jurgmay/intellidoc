@@ -7,7 +7,7 @@ import { planFromDir, summarise } from './dryRun.js';
  * Reference-data import from the FileMaker exports.
  *   npm run import:ref -- <folder>            dry run: reads the four .mer files, prints what WOULD be loaded and every warning
  *   npm run import:ref -- <folder> --apply    loads it into INTELLIDOC_DB (one transaction; safe to re-run)
- * Expected files in <folder>: customers.mer, brands.mer, stock_items.mer, envelopes.mer (override with --customers=… etc.)
+ * Expected files in <folder>: customers.mer, brands.mer, stock_items.mer, envelopes.mer
  */
 const args = process.argv.slice(2);
 const dir = args.find((a) => !a.startsWith('--'));

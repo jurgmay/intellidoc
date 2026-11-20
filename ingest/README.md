@@ -91,8 +91,8 @@ customer envelope mappings from four FileMaker **Merge (.mer)** exports (UTF-8, 
 `customers.mer`, `brands.mer`, `stock_items.mer`, `envelopes.mer` in one folder.
 
 ```
-npm run import:ref -- C:\path\to\folder             # dry run: summary + import-warnings.txt, nothing written
-npm run import:ref:env -- C:\path\to\folder --apply # load into INTELLIDOC_DB (one transaction, safe to re-run)
+npm run import:ref -- C:\idoc-import             # dry run: summary + import-warnings.txt, nothing written
+npm run import:ref:env -- C:\idoc-import --apply # load into INTELLIDOC_DB (one transaction, safe to re-run)
 ```
 
 Rules baked in (confirmed with the business):
