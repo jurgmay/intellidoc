@@ -21,3 +21,16 @@ export class CliPdfInspector implements PdfInspector {
     return stdout;
   }
 }
+
+/** Pure-JS page counter (no external tools; works on Windows). Loads the whole PDF: ~140MB RAM for a 68MB file. */
+export class PdfLibInspector implements PdfInspector {
+  async pageCount(path: string): Promise<number> {
+    const { readFile } = await import('node:fs/promises');
+    const { PDFDocument } = await import('pdf-lib');
+    const doc = await PDFDocument.load(await readFile(path), { updateMetadata: false, ignoreEncryption: true, throwOnInvalidObject: false });
+    return doc.getPageCount();
+  }
+  async pageText(): Promise<string> {
+    throw new Error('Postcode-on-start-page check needs qpdf + pdftotext (PDF_ENGINE=qpdf)');
+  }
+}
