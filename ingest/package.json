@@ -7,10 +7,15 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "dry-run": "tsx src/cli.ts",
-    "test:db": "vitest run test/db"
+    "test:db": "vitest run test/db",
+    "watch": "tsx src/watch.ts",
+    "db:init": "tsx src/initDevDb.ts",
+    "watch:env": "tsx --env-file=.env src/watch.ts",
+    "db:init:env": "tsx --env-file=.env src/initDevDb.ts"
   },
   "dependencies": {
     "mssql": "^12.8.0",
+    "pdf-lib": "^1.17.1",
     "saxes": "^6.0.0"
   },
   "devDependencies": {

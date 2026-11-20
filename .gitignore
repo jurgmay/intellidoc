@@ -8,3 +8,9 @@ ingest/fixtures/
 *.fmp12
 IntelliDoc_fmp12.xml
 ddr/
+
+# Local settings and watcher working folders
+.env
+*.env
+!.env.example
+watch/
