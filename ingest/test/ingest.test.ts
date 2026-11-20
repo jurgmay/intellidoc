@@ -129,10 +129,32 @@ describe('batching and enclosing', () => {
     expect(r.mailpieces).toHaveLength(2);
     expect(r.mailpieces[0]!.envelopeCode).toBe('WH21518');
   });
+  it('a one-page letter sent in a C4 is downsized to a C5 letter, keeping the service', async () => {
+    const m = (await run([{ ...many(1)[0]!, pages: 1, envCode: 'C4-REMUS', envText: 'C4 Envelope ref: Remus', method: '1st Class' }])).mailpieces[0]!;
+    expect(m.postalFormat).toBe('Letter'); expect(m.envelopeSize).toBe('C5'); expect(m.postalService).toBe('1st Class');
+  });
+  it('16 sheets requested in a C4 still posts as a 98 g letter in a C5 (the C4 alone would push it over 100 g)', async () => {
+    const m = (await run([{ ...many(1)[0]!, pages: 32, envCode: 'C4-REMUS', envText: 'C4 Envelope ref: Remus' }])).mailpieces[0]!;
+    expect(m.sheets).toBe(16); expect(m.weightG).toBe(98); expect(m.postalFormat).toBe('Letter'); expect(m.envelopeSize).toBe('C5');
+  });
+  it('machine enclosing: C5 up to 12 sheets only; 13 to 16 sheets go to hand whatever the batch size', async () => {
+    expect((await run(many(26, { pages: 24 }))).batches[0]!.enclosing).toBe('MACHINE');
+    expect((await run(many(26, { pages: 26 }))).batches[0]!.enclosing).toBe('HAND');
+  });
+  it('the Brand passthrough (from the letter template) beats a brand typed in the envelope text', async () => {
+    const m = (await run([{ ...many(1)[0]!, passthrough: { Brand: 'Crabtree' }, envText: 'C5 Envelope ref: Crabtree (Remus)' }])).mailpieces[0]!;
+    expect(m.brand).toBe('Crabtree'); expect(m.envelopeCode).toBe('WH21519');
+  });
+  it('with no matching configuration the customer\'s own selection is used, with a warning', async () => {
+    const r = await run([{ ...many(1)[0]!, envText: 'C5 Envelope ref: Nowhere', envCode: 'WH21518' }]);
+    expect(r.persisted).toBe(true);
+    expect(r.mailpieces[0]!.envelopeCode).toBe('WH21518');
+    expect(r.issues.some((i) => i.severity === 'warning' && /selected envelope/.test(i.message))).toBe(true);
+  });
   it('linked stock children add weight', async () => {
     const light = (await run([{ ...many(1)[0]!, pages: 2, inserts: ['INSERT-PARENT'] }])).mailpieces[0]!;
-    // 1 sheet*5.625 + 5 + 4 + 3.5 = 18.125 -> 19
-    expect(light.weightG).toBe(19);
+    // 1 sheet*5.625 + 5 + 4 + 8 (C5) = 22.625 -> 23
+    expect(light.weightG).toBe(23);
   });
   it('page count alone forces a larger format (17+ sheets)', async () => {
     const m = (await run([{ ...many(1)[0]!, pages: 34 }])).mailpieces[0]!;
@@ -140,7 +162,7 @@ describe('batching and enclosing', () => {
   });
   it('merged packs add their sheets (8+8) into one weight', async () => {
     const m = (await run([person('A', 'B', { pages: 16 }), person('A', 'B', { pages: 16 })])).mailpieces[0]!;
-    expect(m.sheets).toBe(16); expect(m.postalFormat).toBe('Letter'); expect(m.weightG).toBe(94); // 16*5.625+3.5 = 93.5
+    expect(m.sheets).toBe(16); expect(m.postalFormat).toBe('Letter'); expect(m.weightG).toBe(98); // 16*5.625 + 8 (C5) = 98
   });
   it('simplex counts one sheet per page', async () => {
     expect((await run([{ ...many(1)[0]!, pages: 3, duplex: false }])).mailpieces[0]!.sheets).toBe(3);

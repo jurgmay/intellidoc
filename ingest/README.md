@@ -112,3 +112,16 @@ npx tsx --env-file=.env src/import/assignCodes.ts --apply    # assign unique 5-d
 ```
 Existing codes are never changed, and re-running the import keeps codes already assigned.
 Decisions applied by the import: stock with no owner and no WH code is dropped; envelopes whose stock is not in the export are dropped.
+
+### How the envelope is chosen
+1. Content weight = sheets x A4 sheet weight (5.625 g for 90gsm) + inserts. The envelope is NOT added yet.
+2. Formats are tried smallest first: Letter (1-100 g, max 5 mm, max 16 sheets), Large Letter (101-750 g), Small Parcel (to 2,000 g), Medium Parcel.
+   For each, the account's envelopes for the brand / reference / delivery band are tried from the lowest "up to" weight band; the pack weight
+   including THAT envelope's own weight (C5 8 g, C4 17 g) must fit the band and the format limits. The first fit wins, so a short letter asked for in a C4
+   is posted in a C5, and the postal service is kept.
+3. If nothing configured fits, the customer's own selection is used and a warning is recorded.
+4. Brand: the `Brand` passthrough (from the letter template) wins, then the bracketed brand in the envelope text. Reference: text after `ref: ` up to the end or ` (`
+   (a configured reference that itself contains brackets takes precedence).
+5. Machine enclosing: C5, at most 12 sheets, in a batch of MORE than 25 mailpieces. Everything else is hand enclosed. The limits live in `idoc.settings`.
+
+For an existing database the machine limit must be changed by hand:  `UPDATE idoc.settings SET machine_enclosing_max_sheets = 12;`

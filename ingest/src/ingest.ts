@@ -3,6 +3,7 @@ import { basename } from 'node:path';
 import { parseHpodV6 } from './parser.js';
 import { normaliseAddress } from './address.js';
 import { exclusionFor, groupPacks, matchKey } from './matching.js';
+import { parseEnvelopeText } from './envelopeText.js';
 import { choosePhysical, PhysicalError } from './physical.js';
 import { batchKey, buildBatches, routeFor } from './batching.js';
 import type { PdfInspector } from './pdf.js';
@@ -12,15 +13,12 @@ import type { IngestIssue, IngestPack, IngestResult, Mailpiece, ParsedPack } fro
 
 export interface IngestOptions { checkPostcodes?: boolean }
 
-function refText(envelopeValue: string): string {
-  const i = envelopeValue.indexOf('ref: ');
-  return i < 0 ? '' : envelopeValue.slice(i + 5).trim();
-}
-
-/** Brand: passthrough Brand, else the account's envelope config for the stock code, else brand name in envelope text. */
-function deriveBrand(p: ParsedPack, acct: AccountConfig, ref: string): string | null {
+/** Brand: the passthrough "Brand" (taken from the letter template, always right), else the brand in brackets in the envelope text,
+ *  else the account's envelope config for the stock code, else a brand name found in the text. */
+function deriveBrand(p: ParsedPack, acct: AccountConfig, textBrand: string | null, ref: string): string | null {
   const pt = p.passthrough['Brand'];
   if (pt) return pt;
+  if (textBrand) return acct.brands.find((b) => b.toLowerCase() === textBrand.toLowerCase()) ?? textBrand;
   const byCode = acct.envelopes.find((e) => e.stockCode === p.options.envelopeCode && e.brand);
   if (byCode) return byCode.brand;
   const t = p.options.envelopeValue.toUpperCase();
@@ -65,8 +63,9 @@ export async function ingest(
       issues.push({ severity: 'error', packGuid: p.guid, message: 'Pack has no addressee' }); continue;
     }
     const address = normaliseAddress(p);
-    const reference = refText(p.options.envelopeValue);
-    const brand = deriveBrand(p, acct, reference);
+    const text = parseEnvelopeText(p.options.envelopeValue, acct.envelopes.map((e) => e.reference), acct.brands);
+    const reference = text.reference;
+    const brand = deriveBrand(p, acct, text.brand, reference);
     const seqKey = acct.packSequence ? p.passthrough[acct.packSequence.key] : undefined;
     const ip: IngestPack = {
       parsed: p, address, accountCode: acct.code, customerCode: acct.customerCode, brand, brandReference: reference,
@@ -102,7 +101,8 @@ export async function ingest(
       }
       const insertCodes = [...q].map(([code, quantity]) => ({ code, quantity })).sort((a, b) => a.code.localeCompare(b.code));
       try {
-        const phys = choosePhysical(g, insertCodes, acct, first.brand, first.brandReference, first.parsed.options.envelopeCode, first.parsed.options.deliveryMethod, ref);
+        const phys = choosePhysical(g, insertCodes, acct, first.brand, first.brandReference, { code: first.parsed.options.envelopeCode, value: first.parsed.options.envelopeValue }, first.parsed.options.deliveryMethod, ref);
+        if (phys.fallback) for (const p of g) issues.push({ severity: 'warning', packGuid: p.parsed.guid, message: `No configured envelope fits; used the selected envelope ${phys.envelope.stockCode} (${phys.postalFormat}, ${phys.weightG}g)` });
         const base = {
           addressHash: first.address.hash, packs: g, accountCode: first.customerCode, brand: first.brand,
           sheets: phys.sheets, insertCodes, weightG: phys.weightG, thicknessMm: phys.thicknessMm,
