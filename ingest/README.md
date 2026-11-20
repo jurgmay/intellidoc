@@ -103,3 +103,12 @@ Rules baked in (confirmed with the business):
 - Stock-control quantities are never imported. `hpodAccount*` credentials are never read.
 - Rows are matched on the FileMaker id (`legacy_id`), so the import can be re-run as the exports are corrected.
 - `.mer` / `.csv` exports contain customer data: keep them out of the repo (ignored by `.gitignore`).
+
+### Stock codes
+Every stock item must end up with a unique code. After an import, items without one (blank, or the extra item of a duplicated code) are listed and numbered with:
+```
+npx tsx --env-file=.env src/import/assignCodes.ts            # list what would be assigned
+npx tsx --env-file=.env src/import/assignCodes.ts --apply    # assign unique 5-digit codes (from 10001; --start=N to change)
+```
+Existing codes are never changed, and re-running the import keeps codes already assigned.
+Decisions applied by the import: stock with no owner and no WH code is dropped; envelopes whose stock is not in the export are dropped.

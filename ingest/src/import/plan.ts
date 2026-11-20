@@ -33,6 +33,8 @@ export interface PlanEnvelope {
   isOversticker: boolean;
 }
 export interface Plan {
+  /** FileMaker ids of stock items that must NOT exist (business decision); apply deletes them if present and unreferenced. */
+  excludedStock: string[];
   accounts: PlanAccount[]; brands: PlanBrand[]; sizes: PlanSize[]; stock: PlanStock[]; rates: PlanRate[]; envelopes: PlanEnvelope[];
   warnings: string[]; skipped: Record<string, number>;
 }
@@ -140,8 +142,15 @@ export function buildPlan(x: Exports): Plan {
       isStockManaged: wh, isActive: flag(r['isActive']), maxSheets: num(r['maximumSheets']), capacityMm: num(r['capacity']),
     });
   }
+  // Business decision: stock with no resolvable owner and no warehouse (WH) code is junk and is dropped.
+  const excludedStock = stock.filter((s) => s.customerLegacyId === null && !(s.code && /^WH/i.test(s.code))).map((s) => s.legacyId);
+  if (excludedStock.length) {
+    const gone = new Set(excludedStock);
+    for (let i = stock.length - 1; i >= 0; i--) if (gone.has(stock[i]!.legacyId)) stock.splice(i, 1);
+    for (const s of stock) if (s.parentLegacyId && gone.has(s.parentLegacyId)) s.parentLegacyId = null;
+    skipped['stockDroppedNoOwner'] = excludedStock.length;
+  }
   const stockById = new Map(stock.map((s) => [s.legacyId, s]));
-  for (const s of stock) if (s.customerLegacyId === null && x.stock.find((r) => lc(r['id']) === s.legacyId)?.['id_customer']) skip('stockUnknownCustomer', 'Stock item owner not found');
 
   // ---- postal catalogue (bands from the account configuration, services from the live envelope rows) -------------
   const bands = new Map<string, number[]>();   // provider|format|service -> [min,max,min,max...]
@@ -172,7 +181,7 @@ export function buildPlan(x: Exports): Plan {
     if (flag(r['isDeleted'])) { skip('envelopesDeleted', ''); continue; }
     const cust = lc(r['id_customer']); const stockId = lc(r['id_stockItem']);
     if (!accountIds.has(cust)) { skip('envelopesUnknownCustomer', 'Envelope skipped (customer not in export)', id); continue; }
-    if (!stockById.has(stockId)) { skip('envelopesMissingStock', 'Envelope skipped (stock item not in the stock export)', `${r['customer']} / ${r['identifier']} / stock ${r['stockCode'] || stockId}`); continue; }
+    if (!stockById.has(stockId)) { skip('envelopesMissingStock', ''); continue; }   // confirmed: dropped
     const provider = (r['postalProvider'] ?? '').trim(); const format = (r['postalFormat'] ?? '').trim(); const service = (r['postalService'] ?? '').trim(); const maxG = num(r['maxWeight']);
     if (!provider || !format || !service || maxG === null) { skip('envelopesNoPostal', 'Envelope skipped (no provider/format/service/weight)', id); continue; }
     addRate(provider, format, service, (r['postalServiceCode'] ?? '').trim() || null, 0, maxG);
@@ -187,7 +196,7 @@ export function buildPlan(x: Exports): Plan {
       rate: { provider, format, service, maxG }, externalName: (r['externalName'] ?? '').trim() || null, reference, isOversticker: flag(r['isOverSticker']) });
   }
   if (fallbackBand) skipped['envelopesBandFromService'] = fallbackBand;
-  return { accounts, brands, sizes: [...sizes.values()], stock, rates: [...rates.values()], envelopes, warnings, skipped };
+  return { excludedStock, accounts, brands, sizes: [...sizes.values()], stock, rates: [...rates.values()], envelopes, warnings, skipped };
 }
 
 export function summarise(p: Plan): string[] {
