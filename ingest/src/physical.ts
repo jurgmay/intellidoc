@@ -1,3 +1,4 @@
+import { parseEnvelopeText } from './envelopeText.js';
 import type { IngestPack } from './types.js';
 import type { EnvelopeOption, ReferenceData, AccountConfig, StockItem } from './reference.js';
 
@@ -8,6 +9,8 @@ export interface Physical {
   postalFormat: string;
   envelope: EnvelopeOption;
   insertCodes: { code: string; quantity: number }[];
+  /** true when nothing configured fitted and the customer's own envelope selection was used instead */
+  fallback: boolean;
 }
 
 export class PhysicalError extends Error {}
@@ -29,9 +32,14 @@ function insertItems(codes: { code: string; quantity: number }[], ref: Reference
 }
 
 /**
- * Chooses postal format + outer envelope from the real physical make-up (sheets, inserts, envelope),
- * regardless of the envelope size the customer asked for. Formats are walked smallest first; because the
- * envelope's own weight depends on the envelope chosen, we iterate until stable (formats only move up).
+ * Chooses postal format + outer envelope from the real make-up of the mailpiece, whatever envelope the customer asked for.
+ *
+ *  1. Weight of the CONTENTS only: sheets x A4 sheet weight + inserts. The envelope is not added yet because its own weight
+ *     depends on which envelope is chosen (C5 8 g vs C4 17 g) and can change the postal format.
+ *  2. Formats are tried smallest first (Letter, Large Letter, Small Parcel, Medium Parcel). For each, the account's envelopes for this
+ *     brand / reference / delivery band are tried from the lowest weight band up; the pack weight INCLUDING that envelope must fit
+ *     the band and the format's weight, thickness and sheet limits. The first fit wins.
+ *  3. If nothing configured fits, fall back to the envelope the customer selected (same stock code, else same size) and flag it.
  */
 export function choosePhysical(
   packs: IngestPack[],
@@ -39,53 +47,56 @@ export function choosePhysical(
   account: AccountConfig,
   brand: string | null,
   reference: string,
-  requestedEnvelopeCode: string,
+  requested: { code: string; value: string },
   deliveryMethod: string,
   ref: ReferenceData,
 ): Physical {
   const s = ref.settings;
   const sheets = packs.reduce((n, p) => n + p.sheets, 0);
   const ins = insertItems(insertCodes, ref);
-  const insWeight = ins.reduce((n, i) => n + i.item.weightG * i.qty, 0);
-  const insThick = ins.reduce((n, i) => n + i.item.thicknessMm * i.qty, 0);
-  const thickness = sheets * s.a4SheetThicknessMm + insThick;
+  const contentWeight = sheets * s.a4SheetWeightG + ins.reduce((n, i) => n + i.item.weightG * i.qty, 0);
+  const thickness = sheets * s.a4SheetThicknessMm + ins.reduce((n, i) => n + i.item.thicknessMm * i.qty, 0);
   const formats = [...ref.postalFormats].sort((a, b) => a.rank - b.rank);
+  const stockWeight = (code: string): number => {
+    const item = ref.stock.get(code);
+    if (!item) throw new PhysicalError(`Unknown envelope stock code ${code}`);
+    return item.weightG;
+  };
+  const result = (fmt: string, opt: EnvelopeOption, weight: number, fallback: boolean): Physical =>
+    ({ sheets, weightG: weight, thicknessMm: Math.round(thickness * 1000) / 1000, postalFormat: fmt, envelope: opt, insertCodes, fallback });
 
-  // The envelope code in the XML is only a hint: customer systems send codes that differ from our stock codes.
-  // Unknown code -> start from 0 g; the envelope is derived from the account configuration and the weight re-checked.
-  let envWeight = ref.stock.get(requestedEnvelopeCode)?.weightG ?? 0;
-  let fmtIdx = 0;
-
-  for (let guard = 0; guard <= formats.length + 2; guard++) {
-    const weight = Math.ceil(sheets * s.a4SheetWeightG + insWeight + envWeight);
-    // smallest format at or above the current one that fits
-    let idx = fmtIdx;
-    while (idx < formats.length) {
-      const f = formats[idx]!;
-      const fits = weight <= f.maxWeightG
-        && (f.maxThicknessMm === null || thickness <= f.maxThicknessMm)
-        && (f.maxSheets === null || sheets <= f.maxSheets);
-      if (fits) break;
-      idx++;
+  for (const fmt of formats) {
+    if (contentWeight > fmt.maxWeightG) continue;
+    if (fmt.maxThicknessMm !== null && thickness > fmt.maxThicknessMm) continue;
+    if (fmt.maxSheets !== null && sheets > fmt.maxSheets) continue;
+    for (const opt of optionsFor(account, brand, reference, deliveryMethod).filter((e) => e.postalFormat === fmt.name)) {
+      const weight = Math.ceil(contentWeight + stockWeight(opt.stockCode));
+      if (weight <= fmt.maxWeightG && (opt.maxWeightG === undefined || weight <= opt.maxWeightG)) return result(fmt.name, opt, weight, false);
     }
-    if (idx >= formats.length) throw new PhysicalError(`No postal format fits ${sheets} sheets / ${weight}g / ${thickness.toFixed(2)}mm`);
-    fmtIdx = idx;
-    const fmt = formats[idx]!;
-    const opt = pickEnvelope(account, brand, reference, fmt.name, deliveryMethod, weight);
-    if (!opt) throw new PhysicalError(`Account ${account.code}: no envelope configured for brand=${brand ?? '-'} ref=${reference || '-'} format=${fmt.name}`);
-    const chosen = ref.stock.get(opt.stockCode);
-    if (!chosen) throw new PhysicalError(`Unknown envelope stock code ${opt.stockCode}`);
-    if (chosen.weightG === envWeight) {
-      return { sheets, weightG: weight, thicknessMm: Math.round(thickness * 1000) / 1000, postalFormat: fmt.name, envelope: opt, insertCodes };
-    }
-    envWeight = chosen.weightG; // recompute with the real envelope; format can only go up
   }
-  throw new PhysicalError('Envelope/format selection did not converge');
+
+  // Fallback: what the customer selected
+  const wanted = parseEnvelopeText(requested.value);
+  const sameBand = (e: EnvelopeOption): boolean => e.deliveryBand === undefined || e.deliveryBand.toUpperCase() === deliveryMethod.toUpperCase();
+  const sameBrand = (e: EnvelopeOption): boolean => (e.brand ?? null) === (brand ?? null);
+  const pool = account.envelopes.filter((e) => sameBand(e) && (e.stockCode === requested.code || (wanted.size !== null && e.size.toUpperCase() === wanted.size)));
+  // prefer the selected envelope for this brand and reference, then this brand, then anything the customer's selection points at
+  const tiers = [pool.filter((e) => sameBrand(e) && e.reference === reference), pool.filter(sameBrand), pool];
+  const selected = tiers.find((t) => t.length > 0) ?? [];
+  const byFormat = (e: EnvelopeOption): number => formats.find((f) => f.name === e.postalFormat)?.rank ?? 99;
+  for (const opt of [...selected].sort((a, b) => byFormat(a) - byFormat(b) || (a.maxWeightG ?? Infinity) - (b.maxWeightG ?? Infinity))) {
+    const weight = Math.ceil(contentWeight + stockWeight(opt.stockCode));
+    if (opt.maxWeightG === undefined || weight <= opt.maxWeightG) return result(opt.postalFormat, opt, weight, true);
+  }
+  const last = [...selected].sort((a, b) => byFormat(b) - byFormat(a) || (b.maxWeightG ?? Infinity) - (a.maxWeightG ?? Infinity))[0];
+  if (last) return result(last.postalFormat, last, Math.ceil(contentWeight + stockWeight(last.stockCode)), true);
+  throw new PhysicalError(`Account ${account.code}: no envelope configured for brand=${brand ?? '-'} ref=${reference || '-'} service=${deliveryMethod} that fits ${sheets} sheets / ${Math.ceil(contentWeight)}g, and none matches the selected envelope "${requested.value}"`);
 }
 
-function pickEnvelope(a: AccountConfig, brand: string | null, reference: string, format: string, deliveryMethod: string, weightG: number): EnvelopeOption | undefined {
-  const base = a.envelopes.filter((e) => e.postalFormat === format && (e.brand ?? null) === (brand ?? null)
-    && (e.deliveryBand === undefined || e.deliveryBand.toUpperCase() === deliveryMethod.toUpperCase())
-    && (e.minWeightG === undefined || weightG >= e.minWeightG) && (e.maxWeightG === undefined || weightG <= e.maxWeightG));
-  return base.find((e) => e.reference === reference) ?? base.find((e) => e.reference === '');
+/** Envelopes configured for this brand, reference (exact, else the customer-wide ones) and delivery band, lowest weight band first. */
+function optionsFor(a: AccountConfig, brand: string | null, reference: string, deliveryMethod: string): EnvelopeOption[] {
+  const base = a.envelopes.filter((e) => (e.brand ?? null) === (brand ?? null)
+    && (e.deliveryBand === undefined || e.deliveryBand.toUpperCase() === deliveryMethod.toUpperCase()));
+  const exact = base.filter((e) => e.reference === reference);
+  return (exact.length ? exact : base.filter((e) => e.reference === '')).sort((x, y) => (x.maxWeightG ?? Infinity) - (y.maxWeightG ?? Infinity));
 }

@@ -29,7 +29,7 @@ CREATE TABLE idoc.settings (
     a4_sheet_thickness_mm               DECIMAL(5, 3) NOT NULL CONSTRAINT df_settings_sheet_th DEFAULT (0.100),
     -- Machine enclosing (FileMaker: Settings::minimumMailpiecesMachineEnclosing / maxSheetsMachineEnclosing)
     machine_enclosing_min_mailpieces    INT           NOT NULL CONSTRAINT df_settings_mach_min DEFAULT (25),
-    machine_enclosing_max_sheets        INT           NOT NULL CONSTRAINT df_settings_mach_sheets DEFAULT (16),
+    machine_enclosing_max_sheets        INT           NOT NULL CONSTRAINT df_settings_mach_sheets DEFAULT (12),
     machine_enclosing_envelope_code     NVARCHAR(20)  NOT NULL CONSTRAINT df_settings_mach_env DEFAULT (N'C5'),
     hand_enclosing_max_sheets           INT           NOT NULL CONSTRAINT df_settings_hand_sheets DEFAULT (125),
     CONSTRAINT ck_settings_single_row CHECK (settings_id = 1)

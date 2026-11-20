@@ -8,8 +8,8 @@ import { DEFAULT_ANONYMOUS, type AccountConfig, type EnvelopeOption, type Refere
 export function fixtureReference(): ReferenceData {
   const stock = new Map<string, { code: string; weightG: number; thicknessMm: number; linked?: string[] }>();
   const add = (code: string, weightG: number, thicknessMm: number, linked?: string[]): void => { stock.set(code, { code, weightG, thicknessMm, linked }); };
-  for (const c of ['WH21518', 'WH21519', 'WH06113', 'WH20066']) add(c, 3.5, 0.2); // C5 envelopes
-  for (const c of ['C4-REMUS', 'C4-CRABTREE', 'C4-PEGASUS', 'C4-LAMBY']) add(c, 8, 0.3); // C4 envelopes (placeholder codes)
+  for (const c of ['WH21518', 'WH21519', 'WH06113', 'WH20066']) add(c, 8, 0.2); // C5 envelopes (8 g)
+  for (const c of ['C4-REMUS', 'C4-CRABTREE', 'C4-PEGASUS', 'C4-LAMBY']) add(c, 17, 0.3); // C4 envelopes (17 g, placeholder codes)
   add('WH22911', 6, 0.15); // National Grid insert
   add('INSERT-HEAVY', 120, 2); // test-only
   add('INSERT-PARENT', 5, 0.1, ['INSERT-CHILD']); add('INSERT-CHILD', 4, 0.1);
@@ -31,7 +31,7 @@ export function fixtureReference(): ReferenceData {
   return {
     settings: {
       a4SheetWeightG: 5.625, a4SheetThicknessMm: 0.1, machineEnclosingMinMailpieces: 25,
-      machineEnclosingMaxSheets: 16, machineEnclosingEnvelopeSize: 'C5', handEnclosingMaxSheets: 125,
+      machineEnclosingMaxSheets: 12, machineEnclosingEnvelopeSize: 'C5', handEnclosingMaxSheets: 125,
     },
     postalFormats: [
       { name: 'Letter', rank: 1, maxWeightG: 100, maxThicknessMm: 5, maxSheets: 16 },
