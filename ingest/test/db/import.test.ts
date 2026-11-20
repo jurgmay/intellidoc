@@ -25,7 +25,8 @@ describe.skipIf(!hasDb)('reference import', { timeout: 120_000 }, () => {
     await applyPlan(pool, plan);
     expect({ a: await count('account'), s: await count('stock_item'), e: await count('account_envelope'), r: await count('postal_rate'), b: await count('brand') }).toEqual(first);
     const r = (await pool.request().query(`SELECT ae.delivery_band, si.stock_code, si.is_warehouse_code, pr.max_weight_g FROM idoc.account_envelope ae
-      JOIN idoc.stock_item si ON si.stock_item_id = ae.outer_stock_item_id JOIN idoc.postal_rate pr ON pr.postal_rate_id = ae.postal_rate_id`)).recordset;
+      JOIN idoc.stock_item si ON si.stock_item_id = ae.outer_stock_item_id JOIN idoc.postal_rate pr ON pr.postal_rate_id = ae.postal_rate_id
+      WHERE si.stock_code = N'WHIMP1'`)).recordset;   // the test seed has its own envelopes; look at ours only
     expect(r).toEqual([{ delivery_band: '2nd Class', stock_code: 'WHIMP1', is_warehouse_code: true, max_weight_g: 100 }]);
   });
 });
