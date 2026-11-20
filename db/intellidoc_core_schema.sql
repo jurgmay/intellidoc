@@ -555,3 +555,33 @@ INSERT INTO idoc.postal_format (name, rank_order, max_weight_g, max_thickness_mm
 INSERT INTO idoc.anonymous_addressee (normalised_text) VALUES
     (N'THEOCCUPIER'), (N'THERESIDENT'), (N'THEOWNER'), (N'THEHOMEOWNER'), (N'THEHOUSEHOLDER'), (N'THETENANT');
 GO
+
+/* ===========================================================================
+   9. REQUESTED vs ACTUAL
+   The XML settings (service, delivery band, envelope text and code) are kept as received on idoc.option_set; the mailpiece
+   holds what was actually chosen from the real weight. This view lines them up and flags every difference.
+   =========================================================================== */
+GO
+CREATE VIEW idoc.v_pack_requested_vs_actual AS
+SELECT p.pack_id, p.pack_guid, p.job_id, p.mailpiece_id,
+       os.delivery_method                 AS requested_service,
+       os.delivery_band                   AS requested_band,
+       CASE WHEN CHARINDEX(N' (', os.delivery_band) > 0 THEN LEFT(os.delivery_band, CHARINDEX(N' (', os.delivery_band) - 1) ELSE os.delivery_band END AS requested_format,
+       os.envelope_value                  AS requested_envelope_text,
+       os.envelope_code                   AS requested_envelope_code,
+       pf.name                            AS actual_format,
+       si.stock_code                      AS actual_envelope_code,
+       es.code                            AS actual_envelope_size,
+       m.weight_g                         AS actual_weight_g,
+       m.enclosing_route                  AS actual_route,
+       CAST(CASE WHEN pf.name <> CASE WHEN CHARINDEX(N' (', os.delivery_band) > 0 THEN LEFT(os.delivery_band, CHARINDEX(N' (', os.delivery_band) - 1) ELSE os.delivery_band END
+                 THEN 1 ELSE 0 END AS BIT) AS format_changed,
+       CAST(CASE WHEN si.stock_code <> os.envelope_code THEN 1 ELSE 0 END AS BIT) AS envelope_changed
+FROM idoc.pack AS p
+INNER JOIN idoc.option_set AS os ON os.option_set_id = p.option_set_id
+LEFT JOIN idoc.mailpiece AS m ON m.mailpiece_id = p.mailpiece_id
+LEFT JOIN idoc.postal_format AS pf ON pf.postal_format_id = m.postal_format_id
+LEFT JOIN idoc.account_envelope AS ae ON ae.account_envelope_id = m.account_envelope_id
+LEFT JOIN idoc.stock_item AS si ON si.stock_item_id = ae.outer_stock_item_id
+LEFT JOIN idoc.envelope_size AS es ON es.envelope_size_id = si.envelope_size_id;
+GO
