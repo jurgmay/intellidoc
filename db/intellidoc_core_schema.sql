@@ -103,7 +103,7 @@ CREATE TABLE idoc.postal_rate (
     cost              DECIMAL(10, 4)     NULL,
     sell_price        DECIMAL(10, 4)     NULL,
     CONSTRAINT ck_postal_rate_band CHECK (max_weight_g >= min_weight_g),
-    CONSTRAINT uq_postal_rate UNIQUE (postal_service_id, min_weight_g, valid_from)
+    CONSTRAINT uq_postal_rate UNIQUE (postal_service_id, min_weight_g, max_weight_g, valid_from)
 );
 GO
 
