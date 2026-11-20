@@ -50,6 +50,8 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     const mp = (await pool.request().query(`SELECT m.weight_g, f.name AS format, m.sheet_count, m.pack_count FROM idoc.mailpiece m JOIN idoc.postal_format f ON f.postal_format_id = m.postal_format_id
                                             WHERE m.job_id = ${jobId} AND m.pack_count = 2`)).recordset[0];
     expect(mp).toMatchObject({ weight_g: 15, format: 'Letter', sheet_count: 2 });
+    // requested (XML) vs actual settings are both kept and can be compared
+    expect(await scalar(`SELECT COUNT(*) AS n FROM idoc.v_pack_requested_vs_actual WHERE job_id = ${jobId} AND requested_format = N'Letter' AND actual_format = N'Letter' AND format_changed = 0`)).toBe(3);
     expect(await scalar('SELECT COUNT(*) AS n FROM idoc.v_rule_violations')).toBe(0);
   });
 
