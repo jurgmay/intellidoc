@@ -149,8 +149,11 @@ CREATE TABLE idoc.account (
     pack_sequence_key_id       INT                NULL CONSTRAINT fk_account_seqkey REFERENCES idoc.passthrough_key (passthrough_key_id),
     batching_key_id            INT                NULL CONSTRAINT fk_account_batchkey REFERENCES idoc.passthrough_key (passthrough_key_id),
     created_at                 DATETIME2(0)       NOT NULL CONSTRAINT df_account_created DEFAULT (SYSUTCDATETIME()),
+    legacy_id                  UNIQUEIDENTIFIER   NULL,   -- FileMaker Customers.id (reference import only)
     CONSTRAINT uq_account_code UNIQUE (account_code)
 );
+GO
+CREATE UNIQUE INDEX ux_account_legacy ON idoc.account (legacy_id) WHERE legacy_id IS NOT NULL;
 GO
 
 CREATE TABLE idoc.account_notification_email (
@@ -164,8 +167,11 @@ CREATE TABLE idoc.brand (
     brand_id   INT IDENTITY(1, 1) NOT NULL CONSTRAINT pk_brand PRIMARY KEY,
     account_id INT                NOT NULL CONSTRAINT fk_brand_account REFERENCES idoc.account (account_id),
     name       NVARCHAR(200)      NOT NULL,
+    legacy_id  UNIQUEIDENTIFIER   NULL,
     CONSTRAINT uq_brand UNIQUE (account_id, name)
 );
+GO
+CREATE UNIQUE INDEX ux_brand_legacy ON idoc.brand (legacy_id) WHERE legacy_id IS NOT NULL;
 GO
 
 -- Address-matching rules (FileMaker 'Address Match Rules'; replaces addressMatchJSON).
@@ -203,7 +209,13 @@ CREATE TABLE idoc.stock_item (
     parent_stock_item_id INT                NULL CONSTRAINT fk_stock_parent REFERENCES idoc.stock_item (stock_item_id), -- linked items
     account_id           INT                NULL CONSTRAINT fk_stock_account REFERENCES idoc.account (account_id),
     brand_id             INT                NULL CONSTRAINT fk_stock_brand REFERENCES idoc.brand (brand_id),
-    stock_code           NVARCHAR(50)       NOT NULL,
+    stock_code           NVARCHAR(50)       NULL,   -- NULL until the warehouse code is assigned; unique when present
+    stock_type           NVARCHAR(50)       NULL,   -- 'Outer Envelope', 'Booklet', 'Leaflet', ...
+    reference            NVARCHAR(200)      NULL,
+    product_code         NVARCHAR(50)       NULL,
+    max_sheets           INT                NULL,   -- most A4 90gsm sheets the envelope takes
+    capacity_mm          DECIMAL(6, 2)      NULL,   -- envelope capacity (thickness) in mm
+    legacy_id            UNIQUEIDENTIFIER   NULL,
     description          NVARCHAR(300)      NOT NULL,
     is_envelope          BIT                NOT NULL CONSTRAINT df_stock_env DEFAULT (0),
     is_insert            BIT                NOT NULL CONSTRAINT df_stock_ins DEFAULT (0),
@@ -216,9 +228,12 @@ CREATE TABLE idoc.stock_item (
     window_height_mm     DECIMAL(7, 2)      NULL,
     is_stock_managed     BIT                NOT NULL CONSTRAINT df_stock_managed DEFAULT (0),
     is_active            BIT                NOT NULL CONSTRAINT df_stock_active DEFAULT (1),
-    CONSTRAINT uq_stock_code UNIQUE (stock_code),
-    CONSTRAINT ck_stock_envelope_has_size CHECK (is_envelope = 0 OR envelope_size_id IS NOT NULL)
+    -- 'WH' codes are warehouse-managed stock; other codes are provisional until stock management assigns one
+    is_warehouse_code    AS (CAST(CASE WHEN stock_code LIKE N'WH%' THEN 1 ELSE 0 END AS BIT)) PERSISTED
 );
+GO
+CREATE UNIQUE INDEX uq_stock_code ON idoc.stock_item (stock_code) WHERE stock_code IS NOT NULL;
+CREATE UNIQUE INDEX ux_stock_legacy ON idoc.stock_item (legacy_id) WHERE legacy_id IS NOT NULL;
 GO
 
 -- Customer envelope configuration (FileMaker 'Envelopes', replaces envelopesJSON).
@@ -233,11 +248,14 @@ CREATE TABLE idoc.account_envelope (
     external_name       NVARCHAR(200)      NULL,
     reference           NVARCHAR(100)      NULL,
     is_oversticker      BIT                NOT NULL CONSTRAINT df_ae_overs DEFAULT (0),
-    is_deleted          BIT                NOT NULL CONSTRAINT df_ae_deleted DEFAULT (0)
+    is_deleted          BIT                NOT NULL CONSTRAINT df_ae_deleted DEFAULT (0),
+    legacy_id           UNIQUEIDENTIFIER   NULL
 );
 GO
+CREATE UNIQUE INDEX ux_account_envelope_legacy ON idoc.account_envelope (legacy_id) WHERE legacy_id IS NOT NULL;
+GO
 CREATE UNIQUE INDEX ux_account_envelope_lookup
-    ON idoc.account_envelope (account_id, brand_id, delivery_band, postal_rate_id)
+    ON idoc.account_envelope (account_id, brand_id, delivery_band, postal_rate_id, reference)
     WHERE is_deleted = 0;
 GO
 

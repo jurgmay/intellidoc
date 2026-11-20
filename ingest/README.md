@@ -83,3 +83,23 @@ Stop with Ctrl+C: the current file is finished first.
 
 `db:init` loads **test** reference data (placeholder stock weights, accounts `FEXCO`, `NATIONAL_GRID_PSR`). Real
 accounts, stock, postal rates and envelopes must be loaded before real use; a file from an unknown account lands in `failed/`.
+
+## Reference-data import (FileMaker exports)
+
+Loads accounts, brands, address-match / pack-sequence rules, notification emails, the postal catalogue, stock and
+customer envelope mappings from four FileMaker **Merge (.mer)** exports (UTF-8, field names in the header row):
+`customers.mer`, `brands.mer`, `stock_items.mer`, `envelopes.mer` in one folder.
+
+```
+npm run import:ref -- C:\path\to\folder             # dry run: summary + import-warnings.txt, nothing written
+npm run import:ref:env -- C:\path\to\folder --apply # load into INTELLIDOC_DB (one transaction, safe to re-run)
+```
+
+Rules baked in (confirmed with the business):
+- Envelope rows not referenced by any account's `envelopesJSON` are stale and are not imported.
+- `isEnvelope` is derived from stock type (`Outer Envelope`); the flag in the export is wrong for booklets, postcards, certificates.
+- Stock codes must be unique. When a code is used twice, the active item keeps it and the other is imported with no code (warning).
+  Codes starting `WH` are warehouse-managed (`is_stock_managed`); other codes are provisional.
+- Stock-control quantities are never imported. `hpodAccount*` credentials are never read.
+- Rows are matched on the FileMaker id (`legacy_id`), so the import can be re-run as the exports are corrected.
+- `.mer` / `.csv` exports contain customer data: keep them out of the repo (ignored by `.gitignore`).
