@@ -69,3 +69,20 @@ describe('buildPlan', () => {
     expect(plan.rates).toContainEqual(expect.objectContaining({ provider: 'Royal Mail', format: 'Letter', service: '2nd Class', maxG: 100 }));
   });
 });
+
+import { allocateCodes } from '../../src/import/stockCodes.js';
+describe('allocateCodes', () => {
+  it('hands out unique 5-digit codes from the start, skipping codes in use', () => {
+    expect(allocateCodes(['10001', 'WH22000', '10003'], 3)).toEqual(['10002', '10004', '10005']);
+  });
+  it('is deterministic', () => { expect(allocateCodes([], 2, 20001)).toEqual(['20001', '20002']); });
+});
+describe('business decisions', () => {
+  it('drops ownerless stock without a WH code and silently drops envelopes whose stock is not in the export', () => {
+    const p = buildPlan({ customers, brands: [], envelopes,
+      stock: [...stock, stockRow({ id: 'cccccccc-0000-0000-0000-0000000000ff', id_customer: 'ffffffff-0000-0000-0000-000000000000', stockCode: '1126' })] });
+    expect(p.excludedStock).toEqual(['cccccccc-0000-0000-0000-0000000000ff']);
+    expect(p.stock.some((s) => s.code === '1126')).toBe(false);
+    expect(p.warnings.some((w) => /not in the stock export/.test(w))).toBe(false);
+  });
+});

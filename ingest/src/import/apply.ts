@@ -112,7 +112,7 @@ async function run(db: Db, plan: Plan): Promise<ApplyCounts> {
       ['w', sql.Decimal(8, 2), s.weightG], ['th', sql.Decimal(6, 2), s.thicknessMm], ['wd', sql.Decimal(7, 2), s.widthMm], ['ht', sql.Decimal(7, 2), s.heightMm],
       ['ww', sql.Decimal(7, 2), s.windowWidthMm], ['wh', sql.Decimal(7, 2), s.windowHeightMm], ['sm', sql.Bit, s.isStockManaged], ['ac', sql.Bit, s.isActive]];
     let id = await db.id('SELECT stock_item_id AS id FROM idoc.stock_item WHERE legacy_id = @l', i) ?? (s.code ? await db.id('SELECT stock_item_id AS id FROM idoc.stock_item WHERE stock_code = @c', i) : undefined);
-    if (id) await db.exec(`UPDATE idoc.stock_item SET legacy_id = @l, account_id = @a, brand_id = @b, stock_code = @c, stock_type = @t, reference = @r, product_code = @pc, max_sheets = @ms, capacity_mm = @cp,
+    if (id) await db.exec(`UPDATE idoc.stock_item SET legacy_id = @l, account_id = @a, brand_id = @b, stock_code = COALESCE(@c, stock_code), stock_type = @t, reference = @r, product_code = @pc, max_sheets = @ms, capacity_mm = @cp,
       description = @d, is_envelope = @ie, is_insert = @ii, envelope_size_id = @sz, weight_g = @w, thickness_mm = @th, width_mm = @wd, height_mm = @ht, window_width_mm = @ww, window_height_mm = @wh,
       is_stock_managed = @sm, is_active = @ac WHERE stock_item_id = ${id}`, i);
     else id = (await db.id(`INSERT INTO idoc.stock_item (legacy_id, account_id, brand_id, stock_code, stock_type, reference, product_code, max_sheets, capacity_mm, description, is_envelope, is_insert,
@@ -122,6 +122,15 @@ async function run(db: Db, plan: Plan): Promise<ApplyCounts> {
   }
   for (const s of plan.stock.filter((x) => x.parentLegacyId))
     await db.exec('UPDATE idoc.stock_item SET parent_stock_item_id = @p WHERE stock_item_id = @s', [['p', sql.Int, stock.get(s.parentLegacyId!)], ['s', sql.Int, stock.get(s.legacyId)]]);
+
+  // stock the business decided must not exist (only when nothing refers to it)
+  for (const legacy of plan.excludedStock)
+    await db.exec(`DELETE FROM idoc.stock_item WHERE legacy_id = @l
+      AND NOT EXISTS (SELECT 1 FROM idoc.account_envelope WHERE outer_stock_item_id = stock_item.stock_item_id)
+      AND NOT EXISTS (SELECT 1 FROM idoc.batch WHERE outer_stock_item_id = stock_item.stock_item_id)
+      AND NOT EXISTS (SELECT 1 FROM idoc.batch_insert WHERE stock_item_id = stock_item.stock_item_id)
+      AND NOT EXISTS (SELECT 1 FROM idoc.pack_insert WHERE stock_item_id = stock_item.stock_item_id)
+      AND NOT EXISTS (SELECT 1 FROM idoc.stock_item c WHERE c.parent_stock_item_id = stock_item.stock_item_id)`, [['l', GUID, legacy]]);
 
   // ---- envelopes -----------------------------------------------------------------------------------------------
   for (const e of plan.envelopes) {
