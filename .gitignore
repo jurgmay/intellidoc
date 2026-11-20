@@ -1,0 +1,10 @@
+node_modules/
+dist/
+# Real customer data must never be committed
+*.pdf
+fixtures/
+ingest/fixtures/
+**/*sample*.xml
+*.fmp12
+IntelliDoc_fmp12.xml
+ddr/
