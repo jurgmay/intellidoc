@@ -53,17 +53,17 @@ export class MssqlCustomerStore implements CustomerStore {
 
   async list(search: string, includeDeleted: boolean): Promise<CustomerRow[]> {
     const rows = (await this.pool.request().input('q', sql.NVarChar(200), `%${search.trim().replace(/[%_[]/g, '[$&]')}%`).input('d', sql.Bit, includeDeleted).query(`
-      SELECT a.account_id, a.account_code, a.name, a.mis_job_number, a.is_address_matching, a.is_testing, a.is_deleted, a.parent_account_id, par.account_code AS parent_code,
+      SELECT a.account_id, a.account_code, a.name, a.mis_job_number, a.pending_mis_job_number, a.is_address_matching, a.is_testing, a.is_deleted, a.parent_account_id, par.account_code AS parent_code,
         (SELECT COUNT(*) FROM idoc.account s WHERE s.grouping_account_id = a.account_id AND s.is_deleted = 0) AS accounts,
         (SELECT COUNT(*) FROM idoc.brand b WHERE b.account_id = a.account_id) AS brands,
         (SELECT COUNT(*) FROM idoc.account_envelope e WHERE e.account_id = a.account_id AND e.is_deleted = 0) AS envelopes
       FROM idoc.account a
       LEFT JOIN idoc.account par ON par.account_id = a.parent_account_id
       WHERE a.grouping_account_id IS NULL AND (@d = 1 OR a.is_deleted = 0)
-        AND (a.account_code LIKE @q ESCAPE '[' OR a.name LIKE @q ESCAPE '[' OR a.mis_job_number LIKE @q ESCAPE '[')
+        AND (a.account_code LIKE @q ESCAPE '[' OR a.name LIKE @q ESCAPE '[' OR a.mis_job_number LIKE @q ESCAPE '[' OR a.pending_mis_job_number LIKE @q ESCAPE '[')
       ORDER BY a.name`)).recordset as R[];
     return rows.map((r) => ({
-      id: r.account_id, code: r.account_code, name: r.name, misJobNumber: r.mis_job_number, parentId: r.parent_account_id ?? null, parentCode: r.parent_code ?? null, isAddressMatching: !!r.is_address_matching, isTesting: !!r.is_testing, isDeleted: !!r.is_deleted,
+      id: r.account_id, code: r.account_code, name: r.name, misJobNumber: r.mis_job_number, pendingJobNumber: r.pending_mis_job_number ?? null, parentId: r.parent_account_id ?? null, parentCode: r.parent_code ?? null, isAddressMatching: !!r.is_address_matching, isTesting: !!r.is_testing, isDeleted: !!r.is_deleted,
       accountCount: r.accounts, brandCount: r.brands, envelopeCount: r.envelopes,
     }));
   }
@@ -105,7 +105,8 @@ export class MssqlCustomerStore implements CustomerStore {
     const flags = {} as Record<FlagKey, boolean>;
     for (const f of FLAGS) flags[f] = !!a[FLAG_COLUMNS[f]];
     return {
-      id: a.account_id, code: a.account_code, name: a.name, misJobNumber: a.mis_job_number, returnAddress: a.return_address, colourMode: a.colour_mode ?? null, flags,
+      id: a.account_id, code: a.account_code, name: a.name, misJobNumber: a.mis_job_number, pendingJobNumber: a.pending_mis_job_number ?? null,
+      pendingFrom: a.pending_job_number_from ? (a.pending_job_number_from as Date).toISOString().slice(0, 10) : null, returnAddress: a.return_address, colourMode: a.colour_mode ?? null, flags,
       batchingKey: a.batching_key, packSequenceKey: a.pack_sequence_key,
       parent: a.p_id ? { id: a.p_id, code: a.p_code, name: a.p_name } : null,
       children: (kids.recordset as R[]).map((r) => ({ id: r.account_id, code: r.account_code, name: r.name, isDeleted: !!r.is_deleted })),
@@ -155,13 +156,17 @@ export class MssqlCustomerStore implements CustomerStore {
   async updateDetails(id: number, input: CustomerDetailsInput, by: string): Promise<void> {
     const old = await this.get(id);
     const parentCode = await this.checkParent(id, input.parentId);
-    const lines = describeDetailsChange(old, input, parentCode);
+    // A new pending number starts on the 1st of next month (London); an unchanged one keeps the date it already had.
+    const pendingFrom = input.pendingJobNumber === null ? null
+      : input.pendingJobNumber === old.pendingJobNumber ? old.pendingFrom
+        : (await this.pool.request().query(`SELECT CONVERT(CHAR(10), DATEADD(MONTH, 1, DATEFROMPARTS(YEAR(d), MONTH(d), 1)), 23) AS f FROM (SELECT CAST(SYSDATETIMEOFFSET() AT TIME ZONE 'GMT Standard Time' AS DATE) AS d) x`)).recordset[0].f as string;
+    const lines = describeDetailsChange(old, input, parentCode, pendingFrom);
     await this.tx(async (t) => {
       const req = this.req(t).input('id', sql.Int, id).input('par', sql.Int, input.parentId).input('code', sql.NVarChar(100), input.code).input('name', sql.NVarChar(200), input.name)
-        .input('mis', sql.NVarChar(50), input.misJobNumber).input('ret', sql.NVarChar(500), input.returnAddress)
+        .input('mis', sql.NVarChar(50), input.misJobNumber).input('pmis', sql.NVarChar(50), input.pendingJobNumber).input('pfrom', sql.NVarChar(10), pendingFrom).input('ret', sql.NVarChar(500), input.returnAddress)
         .input('bk', sql.Int, await this.keyId(t, input.batchingKey)).input('sk', sql.Int, await this.keyId(t, input.packSequenceKey));
       const sets = FLAGS.map((f) => { req.input(f, sql.Bit, input.flags[f]); return `${FLAG_COLUMNS[f]} = @${f}`; });
-      await req.query(`UPDATE idoc.account SET parent_account_id = @par, account_code = @code, name = @name, mis_job_number = @mis, return_address = @ret, batching_key_id = @bk, pack_sequence_key_id = @sk, ${sets.join(', ')} WHERE account_id = @id`);
+      await req.query(`UPDATE idoc.account SET parent_account_id = @par, account_code = @code, name = @name, mis_job_number = @mis, pending_mis_job_number = @pmis, pending_job_number_from = CAST(@pfrom AS DATE), return_address = @ret, batching_key_id = @bk, pack_sequence_key_id = @sk, ${sets.join(', ')} WHERE account_id = @id`);
       for (const l of lines) await this.audit(t, id, by, l);
     }, `Account code "${input.code}" is already in use`);
   }
@@ -343,6 +348,26 @@ export class MssqlCustomerStore implements CustomerStore {
       const now = emails.join(', ') || 'none';
       if (was !== now) await this.audit(t, customerId, by, `Notification e-mails: ${was} → ${now}`);
     });
+  }
+
+  /** Same statement as ingest/src/mssql/jobNumbers.ts, which the watcher and the run sheet command use. */
+  async applyDuePending(): Promise<number> {
+    const r = await this.pool.request().query(`
+      SET XACT_ABORT ON;
+      BEGIN TRAN;
+      DECLARE @moved TABLE (account_id INT, old_job NVARCHAR(50), new_job NVARCHAR(50));
+      UPDATE idoc.account
+         SET mis_job_number = pending_mis_job_number, pending_mis_job_number = NULL, pending_job_number_from = NULL
+      OUTPUT inserted.account_id, deleted.mis_job_number, inserted.mis_job_number INTO @moved (account_id, old_job, new_job)
+       WHERE pending_mis_job_number IS NOT NULL
+         AND pending_job_number_from <= CAST(SYSDATETIMEOFFSET() AT TIME ZONE 'GMT Standard Time' AS DATE);
+      INSERT INTO idoc.audit_log (changed_by, entity, entity_id, summary)
+      SELECT N'system', N'customer', account_id,
+             CONCAT(N'Job number: ', COALESCE(N'"' + old_job + N'"', N'(none)'), N' → "', new_job, N'" (the pending job number took effect)')
+        FROM @moved;
+      SELECT COUNT(*) AS moved FROM @moved;
+      COMMIT;`);
+    return Number(r.recordset[0].moved);
   }
 
   async history(customerId: number, limit: number): Promise<AuditEntry[]> {

@@ -10,12 +10,15 @@ export const FLAG_LABELS: Record<FlagKey, string> = {
 const show = (v: string | null): string => (v === null || v === '' ? '(none)' : `"${v}"`);
 
 /** One readable sentence per change to the customer record; empty when nothing changed. */
-export function describeDetailsChange(old: CustomerDetail, next: CustomerDetailsInput, newParentCode: string | null): string[] {
+export function describeDetailsChange(old: CustomerDetail, next: CustomerDetailsInput, newParentCode: string | null, newPendingFrom: string | null): string[] {
   const out: string[] = [];
   const text = (label: string, a: string | null, b: string | null): void => { if ((a ?? null) !== (b ?? null)) out.push(`${label}: ${show(a)} → ${show(b)}`); };
   text('Account code', old.code, next.code);
   text('Name', old.name, next.name);
-  text('MIS job number', old.misJobNumber, next.misJobNumber);
+  text('Job number', old.misJobNumber, next.misJobNumber);
+  if ((old.pendingJobNumber ?? null) !== (next.pendingJobNumber ?? null)) {
+    out.push(`Pending job number: ${show(old.pendingJobNumber)} → ${show(next.pendingJobNumber)}${next.pendingJobNumber && newPendingFrom ? ` (takes effect ${newPendingFrom})` : ''}`);
+  }
   text('Return address', old.returnAddress, next.returnAddress);
   text('Parent', old.parent?.code ?? null, newParentCode);
   text('Batching key', old.batchingKey, next.batchingKey);

@@ -5,7 +5,15 @@ import type {
 } from './types.js';
 import { FLAGS } from './types.js';
 
-interface Cust extends Omit<CustomerDetail, 'accounts' | 'brands' | 'envelopes' | 'parent' | 'children'> { parentId: number | null }
+interface Cust extends Omit<CustomerDetail, 'accounts' | 'brands' | 'envelopes' | 'parent' | 'children' | 'pendingJobNumber' | 'pendingFrom'> {
+  parentId: number | null; pendingJobNumber: string | null; pendingFrom: string | null;
+}
+
+/** The 1st of the month after the given YYYY-MM-DD. */
+export function firstOfNextMonth(day: string): string {
+  const [y, m] = day.split('-').map(Number) as [number, number];
+  return m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
+}
 interface Acct { id: number; customerId: number; code: string; name: string; isDeleted: boolean }
 interface Brand { id: number; customerId: number; name: string }
 interface Env extends EnvelopeInput { id: number; customerId: number; isDeleted: boolean }
@@ -34,13 +42,15 @@ export class MemoryCustomerStore implements CustomerStore {
     ],
   };
   customersLookup = (): Lookups['customers'] => [...this.customers.values()].filter((c) => !c.flags.isDeleted).sort((a, b) => a.name.localeCompare(b.name)).map(({ id, code, name }) => ({ id, code, name }));
+  /** Today's date in London as YYYY-MM-DD. Tests replace this. */
+  today = (): string => new Date().toLocaleDateString('en-CA', { timeZone: 'Europe/London' });
   now = (): string => new Date().toISOString();
   private seq = 100;
   private nextId = (): number => ++this.seq;
 
   seed(c: { code: string; name: string } & Partial<Cust>): number {
     const id = this.nextId();
-    this.customers.set(id, { id, parentId: null, misJobNumber: null, returnAddress: null, colourMode: null, flags: noFlags(), batchingKey: null, packSequenceKey: null, matchRules: [], sequenceRules: [], emails: [], ...c });
+    this.customers.set(id, { id, parentId: null, misJobNumber: null, pendingJobNumber: null, pendingFrom: null, returnAddress: null, colourMode: null, flags: noFlags(), batchingKey: null, packSequenceKey: null, matchRules: [], sequenceRules: [], emails: [], ...c });
     return id;
   }
 
@@ -59,10 +69,10 @@ export class MemoryCustomerStore implements CustomerStore {
   async list(search: string, includeDeleted: boolean): Promise<CustomerRow[]> {
     const q = search.trim().toLowerCase();
     return [...this.customers.values()]
-      .filter((c) => (includeDeleted || !c.flags.isDeleted) && (!q || c.code.toLowerCase().includes(q) || c.name.toLowerCase().includes(q) || (c.misJobNumber ?? '').toLowerCase().includes(q)))
+      .filter((c) => (includeDeleted || !c.flags.isDeleted) && (!q || c.code.toLowerCase().includes(q) || c.name.toLowerCase().includes(q) || (c.misJobNumber ?? '').toLowerCase().includes(q) || (c.pendingJobNumber ?? '').toLowerCase().includes(q)))
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((c) => ({
-        id: c.id, code: c.code, name: c.name, misJobNumber: c.misJobNumber, parentId: c.parentId, parentCode: c.parentId === null ? null : this.customers.get(c.parentId)?.code ?? null, isAddressMatching: c.flags.isAddressMatching, isTesting: c.flags.isTesting, isDeleted: c.flags.isDeleted,
+        id: c.id, code: c.code, name: c.name, misJobNumber: c.misJobNumber, pendingJobNumber: c.pendingJobNumber, parentId: c.parentId, parentCode: c.parentId === null ? null : this.customers.get(c.parentId)?.code ?? null, isAddressMatching: c.flags.isAddressMatching, isTesting: c.flags.isTesting, isDeleted: c.flags.isDeleted,
         accountCount: this.accounts.filter((a) => a.customerId === c.id && !a.isDeleted).length,
         brandCount: this.brands.filter((b) => b.customerId === c.id).length,
         envelopeCount: this.envelopes.filter((e) => e.customerId === c.id && !e.isDeleted).length,
@@ -101,8 +111,10 @@ export class MemoryCustomerStore implements CustomerStore {
     const old = await this.get(id);
     if (this.codeTaken(input.code, id)) throw new ConflictError(`Account code "${input.code}" is already in use`);
     this.checkParent(id, input.parentId);
-    const lines = describeDetailsChange(old, input, input.parentId === null ? null : this.cust(input.parentId).code);
-    Object.assign(this.cust(id), input);
+    // A new pending number starts on the 1st of next month; an unchanged one keeps the date it already had.
+    const pendingFrom = input.pendingJobNumber === null ? null : input.pendingJobNumber === old.pendingJobNumber ? old.pendingFrom : firstOfNextMonth(this.today());
+    const lines = describeDetailsChange(old, input, input.parentId === null ? null : this.cust(input.parentId).code, pendingFrom);
+    Object.assign(this.cust(id), input, { pendingFrom });
     for (const l of lines) this.log(id, by, l);
   }
 
@@ -213,6 +225,17 @@ export class MemoryCustomerStore implements CustomerStore {
     const was = c.emails.join(', ') || 'none', now = emails.join(', ') || 'none';
     c.emails = emails;
     if (was !== now) this.log(customerId, by, `Notification e-mails: ${was} → ${now}`);
+  }
+
+  async applyDuePending(): Promise<number> {
+    let moved = 0;
+    for (const c of this.customers.values()) {
+      if (c.pendingJobNumber === null || c.pendingFrom === null || c.pendingFrom > this.today()) continue;
+      const was = c.misJobNumber;
+      c.misJobNumber = c.pendingJobNumber; c.pendingJobNumber = null; c.pendingFrom = null; moved++;
+      this.log(c.id, 'system', `Job number: ${was === null ? '(none)' : `"${was}"`} → "${c.misJobNumber}" (the pending job number took effect)`);
+    }
+    return moved;
   }
 
   async history(customerId: number, limit: number): Promise<AuditEntry[]> {

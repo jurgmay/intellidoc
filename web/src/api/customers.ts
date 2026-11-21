@@ -4,7 +4,7 @@ export const FLAGS = ['isAddressMatching', 'isArchiveMailpieces', 'isCreateOutpu
 export type FlagKey = (typeof FLAGS)[number];
 
 export interface CustomerRow {
-  id: number; code: string; name: string; misJobNumber: string | null; isAddressMatching: boolean; isTesting: boolean; isDeleted: boolean;
+  id: number; code: string; name: string; misJobNumber: string | null; pendingJobNumber: string | null; isAddressMatching: boolean; isTesting: boolean; isDeleted: boolean;
   parentId: number | null; parentCode: string | null;
   accountCount: number; brandCount: number; envelopeCount: number;
 }
@@ -19,12 +19,12 @@ export interface EnvelopeView {
 export interface MatchRule { isInclude: boolean; key: string; value: string | null }
 export interface SequenceRule { value: string; number: number }
 export interface CustomerDetail {
-  id: number; code: string; name: string; misJobNumber: string | null; returnAddress: string | null; colourMode: number | null;
+  id: number; code: string; name: string; misJobNumber: string | null; pendingJobNumber: string | null; pendingFrom: string | null; returnAddress: string | null; colourMode: number | null;
   flags: Record<FlagKey, boolean>; batchingKey: string | null; packSequenceKey: string | null;
   parent: ParentView | null; children: ChildView[];
   accounts: AccountView[]; brands: BrandView[]; envelopes: EnvelopeView[]; matchRules: MatchRule[]; sequenceRules: SequenceRule[]; emails: string[];
 }
-export type DetailsInput = Pick<CustomerDetail, 'code' | 'name' | 'misJobNumber' | 'returnAddress' | 'flags' | 'batchingKey' | 'packSequenceKey'> & { parentId: number | null };
+export type DetailsInput = Pick<CustomerDetail, 'code' | 'name' | 'misJobNumber' | 'pendingJobNumber' | 'returnAddress' | 'flags' | 'batchingKey' | 'packSequenceKey'> & { parentId: number | null };
 export interface EnvelopeInput {
   brandId: number | null; deliveryBand: string; postalRateId: number; stockItemId: number; reference: string | null; externalName: string | null; isOversticker: boolean;
 }

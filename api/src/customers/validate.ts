@@ -42,7 +42,9 @@ export function parseDetails(body: Body): CustomerDetailsInput {
   const errs: Record<string, string> = {};
   const code = text(errs, body, 'code', 'Account code', 100, true);
   const name = text(errs, body, 'name', 'Name', 200, true);
-  const misJobNumber = text(errs, body, 'misJobNumber', 'MIS job number', 50, false);
+  const misJobNumber = text(errs, body, 'misJobNumber', 'Job number', 50, false);
+  if (body?.['pendingJobNumber'] === undefined) errs['pendingJobNumber'] = 'Pending job number must be given (use null for none)';
+  const pendingJobNumber = text(errs, body, 'pendingJobNumber', 'Pending job number', 50, false);
   const returnAddress = text(errs, body, 'returnAddress', 'Return address', 500, false);
   const batchingKey = text(errs, body, 'batchingKey', 'Batching key', 100, false);
   const packSequenceKey = text(errs, body, 'packSequenceKey', 'Pack sequence key', 100, false);
@@ -57,7 +59,7 @@ export function parseDetails(body: Body): CustomerDetailsInput {
     flags[f] = flagsRaw[f] === true;
   }
   done(errs);
-  return { code: code!, name: name!, misJobNumber, returnAddress, flags, batchingKey, packSequenceKey, parentId };
+  return { code: code!, name: name!, misJobNumber, pendingJobNumber, returnAddress, flags, batchingKey, packSequenceKey, parentId };
 }
 
 export function parseBrandName(body: Body): string {
