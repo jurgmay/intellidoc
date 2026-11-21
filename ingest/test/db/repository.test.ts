@@ -324,6 +324,24 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     expect(await repo.findAwaitingPdf('job-nopdf')).toBeNull();
   });
 
+  it('page colours: stored on the packs at ingest, and after the PDF arrives on the XML-first path', async () => {
+    const ref = await loadReferenceData(pool);
+    const rows = async (job: string) => (await pool.request().query(
+      `SELECT p.start_page, p.colour_pages, p.mono_pages, p.blank_pages FROM idoc.pack p JOIN idoc.job j ON j.job_id = p.job_id WHERE j.base_name = N'${job}' ORDER BY p.start_page`)).recordset;
+    // XML and PDF together
+    const a = buildXml([person('Ivy', 'Ink'), person('Jon', 'Ink')]);
+    await ingest(a.xml, 'job-ink-a.xml', 'job-ink-a.pdf', { ref, pdf: new FakePdf(a.pages, '', ['colour', 'mono', 'blank', 'blank']), repo });
+    expect(await rows('job-ink-a')).toMatchObject([{ colour_pages: 1, mono_pages: 1, blank_pages: 0 }, { colour_pages: 0, mono_pages: 0, blank_pages: 2 }]);
+    // XML first: no counts until the PDF is attached
+    const b = buildXml([person('Kay', 'Ink'), person('Lee', 'Ink')]);
+    await ingest(b.xml, 'job-ink-b.xml', null, { ref, pdf: new FakePdf(0), repo });
+    expect(await rows('job-ink-b')).toMatchObject([{ colour_pages: null, mono_pages: null, blank_pages: null }, { colour_pages: null }]);
+    const found = await repo.findAwaitingPdf('job-ink-b');
+    const ink = found!.packs.map((k, i) => ({ guid: k.guid, colour: i === 0 ? 2 : 0, mono: i === 0 ? 0 : 1, blank: i === 0 ? 0 : 1 }));
+    await repo.markPdfReceived(found!.jobId, b.pages, ink);
+    expect(await rows('job-ink-b')).toMatchObject([{ colour_pages: 2, mono_pages: 0, blank_pages: 0 }, { colour_pages: 0, mono_pages: 1, blank_pages: 1 }]);
+  });
+
   it('reads the alert settings, with their defaults, from idoc.settings', async () => {
     expect(await loadAlertSettings(pool)).toEqual({ xmlFirst: true, pdfWaitMinutes: 30, pdfReminderMinutes: 30, alertTo: [] });
     await pool.request().query(`UPDATE idoc.settings SET pdf_wait_minutes = 5, alert_recipients = N'a@x.com, b@x.com' WHERE settings_id = 1`);

@@ -1,3 +1,4 @@
+import type { PageInk } from '../src/pdfInk.js';
 import type { PdfInspector } from '../src/pdf.js';
 import { InMemoryRepository } from '../src/repository.js';
 import { ingest } from '../src/ingest.js';
@@ -29,7 +30,9 @@ ${s.inserts?.length ? `<Inserts>${s.inserts.map((c) => `<Insert Code="${c}" Name
   return { xml: `<Packs xmlns="http://www.h-pod.co.uk/export/6" Version="${version}">${parts.join('')}</Packs>`, pages: page - 1 };
 }
 export class FakePdf implements PdfInspector {
-  constructor(public pages: number, public text = '') {}
+  /** `ink` is the colour of each page; the default is every page mono. */
+  constructor(public pages: number, public text = '', public ink?: PageInk[]) {}
+  async pageInk(): Promise<PageInk[]> { return this.ink ?? Array<PageInk>(this.pages).fill('mono'); }
   async pageCount(): Promise<number> { return this.pages; }
   async pageText(): Promise<string> { return this.text; }
 }

@@ -48,6 +48,27 @@ describe('attaching the PDF later', () => {
     expect(o.kind).toBe('processed');
     expect(repo.tracked[0]!.status).toBe('Received');
   });
+  it('records the colour, mono and blank pages of each pack when the PDF arrives', async () => {
+    const repo = new InMemoryRepository();
+    const { xml, pages } = buildXml([person('A', 'B'), person('C', 'D')]);
+    await ingest(xml, 'Job-1.xml', null, { ref: fixtureReference(), pdf: new FakePdf(0), repo });
+    expect(repo.tracked[0]!.result.packs[0]!.ink).toBeUndefined();
+    const attach = makeAttachProcessor({ repo, pdf: new FakePdf(pages, '', ['colour', 'mono', 'blank', 'mono']), notify: async () => {} });
+    await attach('/in/job-1.pdf');
+    const packs = repo.tracked[0]!.result.packs;
+    expect(packs[0]!.ink).toEqual({ colour: 1, mono: 1, blank: 0 });
+    expect(packs[1]!.ink).toEqual({ colour: 0, mono: 1, blank: 1 });
+  });
+  it('a PDF whose colours cannot be read is still accepted, without counts', async () => {
+    const repo = new InMemoryRepository();
+    const { xml, pages } = buildXml([person('A', 'B'), person('C', 'D')]);
+    await ingest(xml, 'Job-1.xml', null, { ref: fixtureReference(), pdf: new FakePdf(0), repo });
+    const pdf = new FakePdf(pages); pdf.pageInk = async () => { throw new Error('unreadable'); };
+    const o = await makeAttachProcessor({ repo, pdf, notify: async () => {} })('/in/job-1.pdf');
+    expect(o.kind).toBe('processed');
+    expect(repo.tracked[0]!.status).toBe('Received');
+    expect(repo.tracked[0]!.result.packs[0]!.ink).toBeUndefined();
+  });
   it('a PDF with the wrong number of pages is rejected and the job is blocked', async () => {
     const { repo, attach, sent } = await setup(7);
     const o = await attach('/in/job-1.pdf');

@@ -43,8 +43,11 @@ export interface NormalisedAddress {
 export type EnclosingRoute = 'RECEPTION' | 'MACHINE_CANDIDATE' | 'HAND';
 export type EnclosingMethod = 'MACHINE' | 'HAND' | 'RECEPTION';
 
+import type { InkCounts } from './pdfInk.js';
 export interface IngestPack {
   parsed: ParsedPack;
+  /** Colour, mono and blank pages of this pack, read from the PDF. Absent while the PDF is awaited, or when it could not be read. */
+  ink?: InkCounts;
   address: NormalisedAddress;
   /** Submitting account (XML OwnerAccount). */
   accountCode: string;

@@ -3,7 +3,8 @@ import { basename, parse } from 'node:path';
 import { ingest } from '../ingest.js';
 import { summarise } from '../summary.js';
 import type { PdfInspector } from '../pdf.js';
-import type { PdfTracker, Repository } from '../repository.js';
+import type { PackInk, PdfTracker, Repository } from '../repository.js';
+import { inkPerRange } from '../pdfInk.js';
 import { validatePageRanges } from '../ingest.js';
 import type { Mailer } from '../mail.js';
 import type { ReferenceData } from '../reference.js';
@@ -77,7 +78,13 @@ export function makeAttachProcessor(d: AttachDeps): (pdfPath: string) => Promise
         await d.notify?.('ops', `IntelliDoc: PDF rejected for ${baseName}`, `${message}\n\nThe job stays blocked until a correct PDF is supplied.`);
         return { kind: 'failed', summary: { job: job.xmlName, pdfPages: pages }, message };
       }
-      const { alertCount } = await d.repo.markPdfReceived(job.jobId, pages);
+      // The colour of each page, for pricing. A PDF whose pages cannot be read this way is still accepted; its packs just have no counts.
+      let packInk: PackInk[] | undefined;
+      try {
+        const ink = await d.pdf.pageInk(pdfPath);
+        if (ink.length === pages) packInk = inkPerRange(ink, job.packs).map((c, i) => ({ guid: job.packs[i]!.guid, ...c }));
+      } catch { /* leave the counts empty */ }
+      const { alertCount } = await d.repo.markPdfReceived(job.jobId, pages, packInk);
       if (alertCount > 0) await d.notify?.('ops', `IntelliDoc: PDF received for ${baseName}`, `The PDF for ${job.xmlName} has now arrived (${pages} pages) and matches the data.`);
       return { kind: 'processed', summary: { job: job.xmlName, pdfPages: pages, attached: true } };
     } catch (e) {
