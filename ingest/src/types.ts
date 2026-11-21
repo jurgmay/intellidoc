@@ -117,7 +117,10 @@ export interface IngestIssue {
 export interface IngestResult {
   xmlName: string;
   pdfName: string;
+  /** Pages in the PDF; when the PDF has not arrived yet, the page count the packs expect. */
   pdfPages: number;
+  /** false = saved from the XML alone, status 'Awaiting PDF'. */
+  pdfReceived: boolean;
   packs: IngestPack[];
   mailpieces: Mailpiece[];
   batches: Batch[];

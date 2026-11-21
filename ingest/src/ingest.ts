@@ -25,7 +25,7 @@ function deriveBrand(p: ParsedPack, acct: AccountConfig, textBrand: string | nul
   return acct.brands.find((b) => t.includes(b.toUpperCase())) ?? (ref || null);
 }
 
-export function validatePageRanges(packs: ParsedPack[], pdfPages: number): IngestIssue[] {
+export function validatePageRanges(packs: Pick<ParsedPack, 'guid' | 'pageCount' | 'startPage' | 'endPage'>[], pdfPages: number): IngestIssue[] {
   const issues: IngestIssue[] = [];
   const err = (packGuid: string | undefined, message: string): void => { issues.push({ severity: 'error', packGuid, message }); };
   const sorted = [...packs].sort((a, b) => a.startPage - b.startPage);
@@ -43,14 +43,16 @@ export function validatePageRanges(packs: ParsedPack[], pdfPages: number): Inges
 }
 
 export async function ingest(
-  xml: string, xmlName: string, pdfPath: string,
+  xml: string, xmlName: string, pdfPath: string | null,
   deps: { ref: ReferenceData; pdf: PdfInspector; repo: Repository },
   opts: IngestOptions = {},
 ): Promise<IngestResult> {
   const { ref, pdf, repo } = deps;
   const issues: IngestIssue[] = [];
   const parsed = parseHpodV6(xml);
-  const pdfPages = await pdf.pageCount(pdfPath);
+  // XML-first: with no PDF yet the job is saved from the XML alone. The ranges are still checked for gaps and overlaps against
+  // themselves; they are checked against the real PDF when it arrives (attachPdf).
+  const pdfPages = pdfPath === null ? parsed.reduce((m, p) => Math.max(m, p.endPage), 0) : await pdf.pageCount(pdfPath);
   issues.push(...validatePageRanges(parsed, pdfPages));
 
   const duplicates: string[] = [];
@@ -77,7 +79,7 @@ export async function ingest(
     };
     ip.matchKey = createHash('sha256').update(matchKey(ip, acct), 'utf8').digest('hex');
     packs.push(ip);
-    if (opts.checkPostcodes) {
+    if (opts.checkPostcodes && pdfPath !== null) {
       const text = (await pdf.pageText(pdfPath, p.startPage)).replace(/\s+/g, '').toUpperCase();
       if (!text.includes(address.postcode.replace(/\s+/g, ''))) {
         issues.push({ severity: 'warning', packGuid: p.guid, message: `Postcode ${address.postcode} not found on start page ${p.startPage}` });
@@ -123,7 +125,7 @@ export async function ingest(
 
   const batches = buildBatches(mailpieces, ref);
   const failed = issues.some((i) => i.severity === 'error');
-  const result: IngestResult = { xmlName, pdfName: basename(pdfPath), pdfPages, packs, mailpieces, batches, duplicates, issues, persisted: false };
+  const result: IngestResult = { xmlName, pdfName: pdfPath === null ? `${basename(xmlName).replace(/\.xml$/i, '')}.pdf` : basename(pdfPath), pdfPages, pdfReceived: pdfPath !== null, packs, mailpieces, batches, duplicates, issues, persisted: false };
   if (!failed && packs.length > 0) { await repo.saveJob(result); result.persisted = true; }
   return result;
 }

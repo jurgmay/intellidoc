@@ -54,7 +54,21 @@ Watches a folder for `<name>.xml` + `<name>.pdf` pairs and runs the ingest into 
 
 Nothing is ever deleted. A pair is picked up only when both files have stopped changing for `STABLE_SECONDS`
 (copy finished) and can be renamed (not held open by another program). Database outages are retried
-every `RETRY_SECONDS`; problems with a file are not. A lone XML or PDF just waits (and is logged after 5 minutes).
+every `RETRY_SECONDS`; problems with a file are not.
+
+### XML first, PDF later (default)
+
+The data must not be held up by a missing PDF, so an XML is imported as soon as it has settled, even with no PDF beside it.
+
+1. The XML is imported and the job is saved with status **Awaiting PDF** (page ranges are checked against each other; run sheets can be made).
+2. When `<same name>.pdf` turns up, its page count is checked against the pack page ranges. If they agree the job becomes **Received**;
+   if not it becomes **PDF Rejected**, the PDF goes to `failed/` and an e-mail is sent. The PDF is filed in `processed/` next to the XML.
+3. If the PDF has not arrived after `PDF_WAIT_MINUTES` (30) an e-mail goes to `ALERT_TO`, then a reminder every `PDF_REMINDER_MINUTES` until it arrives.
+   When it arrives after an alert, a "PDF received" e-mail says so.
+
+A PDF that arrives before its XML waits in the inbox and is handled together with the XML as before. If the alert e-mail cannot be sent
+it is tried again at the next check (once a minute). Without `SMTP_HOST` the alerts are only written to the log (with a warning at start-up).
+`XML_FIRST=0` restores the old behaviour (wait for both files). Existing databases need the new `idoc.job` columns: `initDevDb.ts --reset`.
 
 ### Settings (environment variables)
 
@@ -66,6 +80,10 @@ every `RETRY_SECONDS`; problems with a file are not. A lone XML or PDF just wait
 | `PDF_ENGINE` | `auto` (qpdf if installed, else built-in pdf-lib), `qpdf`, `pdflib` |
 | `CHECK_POSTCODES` | `1` warns when a pack's postcode is not on its first PDF page (needs qpdf + pdftotext) |
 | `LOG_FILE` | also append the log to this file |
+| `XML_FIRST` | `1` (default) imports an XML without waiting for its PDF; `0` waits for the pair |
+| `PDF_WAIT_MINUTES` / `PDF_REMINDER_MINUTES` | 30 / same as the wait: when to alert, and how often to repeat |
+| `ALERT_TO` | who is e-mailed, comma separated |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | mail server (port 587 + `SMTP_SECURE=0` = STARTTLS; 465 + `1` = TLS). `SMTP_FROM` defaults to `SMTP_USER` |
 
 Flags: `--dry-run` (read and validate against the database, save nothing, leave files in the inbox) and
 `--once` (handle what is in the inbox, then exit).

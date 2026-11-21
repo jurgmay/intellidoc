@@ -272,8 +272,17 @@ CREATE TABLE idoc.job (
     status        NVARCHAR(30)          NOT NULL CONSTRAINT df_job_status DEFAULT (N'Received'),
     pack_count    INT                   NULL,
     page_count    INT                   NULL,
-    CONSTRAINT uq_job_base UNIQUE (account_id, base_name)
+    -- XML-first import: the job is saved from the XML alone with status 'Awaiting PDF'. When the PDF arrives it is checked against the
+    -- pack page ranges and the status becomes 'Received' (or 'PDF Rejected' with pdf_error). An overdue PDF triggers an e-mail alert.
+    pdf_received_at   DATETIME2(0)  NULL,
+    pdf_last_alert_at DATETIME2(0)  NULL,
+    pdf_alert_count   INT           NOT NULL CONSTRAINT df_job_alerts DEFAULT (0),
+    pdf_error         NVARCHAR(2000) NULL,
+    CONSTRAINT uq_job_base UNIQUE (account_id, base_name),
+    CONSTRAINT ck_job_status CHECK (status IN (N'Received', N'Awaiting PDF', N'PDF Rejected'))
 );
+GO
+CREATE INDEX ix_job_awaiting_pdf ON idoc.job (status) WHERE status = N'Awaiting PDF';
 GO
 
 CREATE TABLE idoc.source (

@@ -3,7 +3,9 @@ import { execFileSync } from 'node:child_process';
 import sql from 'mssql';
 import { FolderWatcher } from './watcher/folderWatcher.js';
 import { loadConfig, ConfigError } from './watcher/config.js';
-import { makeProcessor } from './watcher/processor.js';
+import { makeProcessor, makeAttachProcessor } from './watcher/processor.js';
+import { PdfWatchdog } from './watcher/pdfWatchdog.js';
+import { LogMailer, SmtpMailer, type Mailer } from './mail.js';
 import { MssqlRepository } from './mssql/repository.js';
 import { loadReferenceData } from './mssql/reference.js';
 import { CliPdfInspector, PdfLibInspector, type PdfInspector } from './pdf.js';
@@ -44,16 +46,32 @@ log('info', `Connected to database "${dbName}"${cfg.dryRun ? ' (DRY RUN: nothing
 
 const real = new MssqlRepository(pool);
 const repo: Repository = cfg.dryRun ? { packExists: (g) => real.packExists(g), saveJob: async () => { /* dry run */ } } : real;
+const mailer: Mailer = cfg.smtp ? new SmtpMailer(cfg.smtp) : new LogMailer(log);
+if (!cfg.smtp) log('warn', 'SMTP_HOST is not set: "PDF missing" alerts will only be written to the log');
+if (cfg.smtp && cfg.alertTo.length === 0) log('warn', 'ALERT_TO is not set: there is nobody to send "PDF missing" alerts to');
+const process1 = makeProcessor({ loadReference: () => loadReferenceData(pool), repo, pdf, checkPostcodes: cfg.checkPostcodes });
+const attach = makeAttachProcessor({ repo: real, pdf, notify: async (_to, subject, text) => { try { await mailer.send(cfg.alertTo, subject, text); } catch (e) { log('error', `Could not send "${subject}": ${(e as Error).message}`); } } });
 const watcher = new FolderWatcher(cfg.dirs, {
-  process: makeProcessor({ loadReference: () => loadReferenceData(pool), repo, pdf, checkPostcodes: cfg.checkPostcodes }),
+  process: process1,
+  ...(cfg.xmlFirst ? { processXmlOnly: (x: string) => process1(x, null), attachPdf: attach } : {}),
   log, now: () => Date.now(),
 }, { stableMs: cfg.stableMs, retryMs: cfg.retryMs, orphanWarnMs: 5 * 60_000, dryRun: cfg.dryRun });
 
+const abort = new AbortController();
+function abortSignalCleanup(t: NodeJS.Timeout): void { abort.signal.addEventListener('abort', () => clearInterval(t), { once: true }); }
+for (const s of ['SIGINT', 'SIGTERM'] as const) process.on(s, () => { log('info', `${s}: finishing the current file, then stopping`); abort.abort(); });
+
 await watcher.init();
+if (cfg.xmlFirst && !cfg.dryRun && !cfg.once) {
+  const dog = new PdfWatchdog(real, mailer, { waitMinutes: cfg.pdfWaitMinutes, reminderMinutes: cfg.pdfReminderMinutes, to: cfg.alertTo, inbox: cfg.dirs.inbox }, log);
+  const tick = (): void => { dog.check().catch((e) => log('error', `PDF check failed: ${(e as Error).message}`)); };
+  const timer = setInterval(tick, 60_000);
+  abortSignalCleanup(timer);
+  tick();
+  log('info', `XML-first import: alert after ${cfg.pdfWaitMinutes} min without a PDF, then every ${cfg.pdfReminderMinutes} min`);
+}
 log('info', `Watching ${cfg.dirs.inbox}`);
 
-const abort = new AbortController();
-for (const s of ['SIGINT', 'SIGTERM'] as const) process.on(s, () => { log('info', `${s}: finishing the current file, then stopping`); abort.abort(); });
 
 if (cfg.once) {
   // handle what is there (waiting for files to settle), then exit
