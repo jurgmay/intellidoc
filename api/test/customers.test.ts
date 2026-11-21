@@ -22,7 +22,7 @@ beforeEach(async () => {
 const call = (method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, payload?: unknown) => app.inject({ method, url, payload: payload as object });
 
 describe('list and search', () => {
-  it('lists customers by name and searches code, name and MIS job number', async () => {
+  it('lists customers by name and searches code, name and job number', async () => {
     expect((await call('GET', '/api/customers')).json().rows.map((r: { code: string }) => r.code)).toEqual(['ACME', 'NWB']);
     expect((await call('GET', '/api/customers?search=24102')).json().rows).toHaveLength(1);
     expect((await call('GET', '/api/customers?search=acme')).json().rows[0].code).toBe('ACME');
