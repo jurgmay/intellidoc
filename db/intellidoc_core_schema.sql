@@ -174,6 +174,8 @@ CREATE TABLE idoc.account (
     matching_mode              NVARCHAR(10)       NOT NULL CONSTRAINT df_account_matchmode DEFAULT (N'OWN'),
     sequence_mode              NVARCHAR(10)       NOT NULL CONSTRAINT df_account_seqmode DEFAULT (N'OWN'),
     emails_mode                NVARCHAR(10)       NOT NULL CONSTRAINT df_account_emailsmode DEFAULT (N'OWN'),
+    -- Which costing model prices this account's mail: its own (OWN) or the nearest ancestor's (INHERIT). No EXTEND: a price list is not merged.
+    costing_mode               NVARCHAR(10)       NOT NULL CONSTRAINT df_account_costingmode DEFAULT (N'OWN'),
     -- The account that is invoiced for this account's mail and whose job number is printed on the run sheet. Must be this account or an
     -- ancestor (checked by the API and the import). NULL = the account that holds the settings. See idoc.v_account_invoicing.
     invoicing_account_id       INT                NULL CONSTRAINT fk_account_invoicing REFERENCES idoc.account (account_id),
@@ -204,6 +206,7 @@ CREATE TABLE idoc.account (
     CONSTRAINT ck_account_envmode CHECK (envelopes_mode IN (N'OWN', N'INHERIT', N'EXTEND') AND (envelopes_mode = N'OWN' OR parent_account_id IS NOT NULL)),
     CONSTRAINT ck_account_modes CHECK (brands_mode IN (N'OWN', N'INHERIT', N'EXTEND') AND matching_mode IN (N'OWN', N'INHERIT', N'EXTEND') AND sequence_mode IN (N'OWN', N'INHERIT', N'EXTEND') AND emails_mode IN (N'OWN', N'INHERIT', N'EXTEND')
         AND (parent_account_id IS NOT NULL OR (brands_mode = N'OWN' AND matching_mode = N'OWN' AND sequence_mode = N'OWN' AND emails_mode = N'OWN'))),
+    CONSTRAINT ck_account_costing CHECK (costing_mode IN (N'OWN', N'INHERIT') AND (costing_mode = N'OWN' OR parent_account_id IS NOT NULL)),
     CONSTRAINT ck_account_rollday CHECK (job_number_rollover_day BETWEEN 1 AND 28),
     CONSTRAINT ck_account_pending CHECK ((pending_mis_job_number IS NULL AND pending_job_number_from IS NULL) OR (pending_mis_job_number IS NOT NULL AND pending_job_number_from IS NOT NULL))
 );
@@ -222,7 +225,7 @@ WITH up AS (
 SELECT account_id, node_id AS owner_account_id FROM up WHERE inherits = 0;
 GO
 
--- For every account and settings group (envelopes, brands, matching, sequence, emails), the accounts whose rows make up its effective settings, nearest first
+-- For every account and settings group (envelopes, brands, matching, sequence, emails, costing), the accounts whose rows make up its effective settings, nearest first
 -- (depth 0 = the account itself). An inheriting account passes straight through to its parent. Otherwise OWN stops here, INHERIT contributes nothing and
 -- goes up, EXTEND contributes and goes up. The single values of a group (address matching, the keys) come from the nearest source.
 CREATE VIEW idoc.v_account_setting_source AS
@@ -231,9 +234,9 @@ WITH node AS (
            CASE WHEN a.inherits_settings = 0 AND m.setting_mode <> N'INHERIT' THEN 1 ELSE 0 END AS adds_self,
            CASE WHEN a.inherits_settings = 1 OR m.setting_mode <> N'OWN' THEN 1 ELSE 0 END AS goes_up
     FROM idoc.account AS a
-    CROSS JOIN (VALUES (N'envelopes'), (N'brands'), (N'matching'), (N'sequence'), (N'emails')) AS g(setting)
+    CROSS JOIN (VALUES (N'envelopes'), (N'brands'), (N'matching'), (N'sequence'), (N'emails'), (N'costing')) AS g(setting)
     CROSS APPLY (SELECT CASE g.setting WHEN N'envelopes' THEN a.envelopes_mode WHEN N'brands' THEN a.brands_mode WHEN N'matching' THEN a.matching_mode
-                                       WHEN N'sequence' THEN a.sequence_mode ELSE a.emails_mode END AS setting_mode) AS m),
+                                       WHEN N'sequence' THEN a.sequence_mode WHEN N'costing' THEN a.costing_mode ELSE a.emails_mode END AS setting_mode) AS m),
 walk AS (
     SELECT account_id AS origin, account_id AS node_id, parent_account_id AS next_id, setting, 0 AS depth, adds_self, goes_up FROM node
     UNION ALL
@@ -750,4 +753,61 @@ WHERE m.is_cancelled = 0 AND COALESCE(b.current_status, N'') <> N'Cancelled'
 GROUP BY m.invoicing_account_id, m.invoicing_account_code, m.invoicing_account_name, COALESCE(m.brand_name, N'(no brand)'),
          CAST(m.created_at AT TIME ZONE N'UTC' AT TIME ZONE N'GMT Standard Time' AS DATE),
          COALESCE(pf.name, N'Unknown'), COALESCE(sv.name, m.delivery_band, N'Unknown');
+GO
+
+/* ===========================================================================
+   12. COSTING MODELS
+   A costing model is a named price list that belongs to a customer (the account that holds the settings) and applies between two
+   dates. A customer can have several over time; the one in force on the production date prices the mailpiece. A sub-account that
+   inherits (costing_mode INHERIT, or inherits_settings = 1) uses the nearest ancestor's model (idoc.v_account_setting_source,
+   setting 'costing'). Every charge has a cost (what it costs Latcham), a sell price (what the customer pays) and an adjustment
+   (a per-customer change added to the sell price). Postage rates and their suggested sell price live on idoc.postal_rate.
+   =========================================================================== */
+CREATE TABLE idoc.costing_model (
+    costing_model_id INT IDENTITY(1, 1) NOT NULL CONSTRAINT pk_costing_model PRIMARY KEY,
+    account_id       INT                NOT NULL CONSTRAINT fk_costing_model_account REFERENCES idoc.account (account_id),
+    name             NVARCHAR(200)      NOT NULL,
+    valid_from       DATE               NOT NULL,
+    valid_to         DATE               NULL,       -- NULL = until replaced
+    is_active        BIT                NOT NULL CONSTRAINT df_costing_model_active DEFAULT (1),
+    copied_from_id   INT                NULL CONSTRAINT fk_costing_model_copy REFERENCES idoc.costing_model (costing_model_id),
+    comments         NVARCHAR(1000)     NULL,
+    created_at       DATETIME2(0)       NOT NULL CONSTRAINT df_costing_model_created DEFAULT (SYSUTCDATETIME()),
+    CONSTRAINT uq_costing_model_start UNIQUE (account_id, valid_from),
+    CONSTRAINT ck_costing_model_dates CHECK (valid_to IS NULL OR valid_to >= valid_from)
+);
+GO
+
+CREATE TABLE idoc.costing_model_rate (
+    costing_model_id INT           NOT NULL CONSTRAINT fk_cmr_model REFERENCES idoc.costing_model (costing_model_id),
+    charge_code      NVARCHAR(40)  NOT NULL,
+    cost             DECIMAL(12, 4) NOT NULL CONSTRAINT df_cmr_cost DEFAULT (0),
+    sell_price       DECIMAL(12, 4) NOT NULL CONSTRAINT df_cmr_sell DEFAULT (0),
+    adjustment       DECIMAL(12, 4) NOT NULL CONSTRAINT df_cmr_adj DEFAULT (0),
+    CONSTRAINT pk_costing_model_rate PRIMARY KEY (costing_model_id, charge_code),
+    CONSTRAINT ck_cmr_code CHECK (charge_code IN (
+        N'HPOD', N'PROCESSING', N'ADDRESS_MATCHING', N'PAPER_SHEET', N'COLOUR_PAGE', N'MONO_PAGE', N'BLANK_PAGE', N'INSERT',
+        N'MACHINE_ENCLOSING_SETUP', N'MACHINE_ENCLOSING_SHEET', N'HAND_ENCLOSING_SETUP', N'HAND_ENCLOSING_SHEET', N'BAGGING', N'OVERSTICKERING',
+        N'ADJUSTMENT', N'HAND_SMALL_BATCH_ADJUSTMENT', N'HAND_LETTER_ADJUSTMENT', N'HAND_LARGE_LETTER_ADJUSTMENT'))
+);
+GO
+
+-- Price of each outer envelope for this model (the sell price can be adjusted per customer)
+CREATE TABLE idoc.costing_model_envelope (
+    costing_model_id INT            NOT NULL CONSTRAINT fk_cme_model REFERENCES idoc.costing_model (costing_model_id),
+    stock_item_id    INT            NOT NULL CONSTRAINT fk_cme_stock REFERENCES idoc.stock_item (stock_item_id),
+    cost             DECIMAL(12, 4) NOT NULL CONSTRAINT df_cme_cost DEFAULT (0),
+    sell_price       DECIMAL(12, 4) NOT NULL CONSTRAINT df_cme_sell DEFAULT (0),
+    adjustment       DECIMAL(12, 4) NOT NULL CONSTRAINT df_cme_adj DEFAULT (0),
+    CONSTRAINT pk_costing_model_envelope PRIMARY KEY (costing_model_id, stock_item_id)
+);
+GO
+
+-- Per-customer adjustment to a postage rate's suggested sell price
+CREATE TABLE idoc.costing_model_postage (
+    costing_model_id INT            NOT NULL CONSTRAINT fk_cmp_model REFERENCES idoc.costing_model (costing_model_id),
+    postal_rate_id   INT            NOT NULL CONSTRAINT fk_cmp_rate REFERENCES idoc.postal_rate (postal_rate_id),
+    adjustment       DECIMAL(12, 4) NOT NULL CONSTRAINT df_cmp_adj DEFAULT (0),
+    CONSTRAINT pk_costing_model_postage PRIMARY KEY (costing_model_id, postal_rate_id)
+);
 GO

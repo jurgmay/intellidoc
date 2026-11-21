@@ -196,3 +196,7 @@ Each mailpiece records, as at production, its sub-account (id, code, name and pa
 ## Batch event log
 
 Every batch gets a `Created` row in `idoc.batch_event` when it is made. `MssqlRepository.recordBatchEvent(batchId, 'Printed' | 'Enclosed' | 'Despatched' | 'Cancelled', { by, note, at })` adds a later event and sets `batch.current_status` to it in one transaction; `batchEvents(batchId)` reads them oldest first. Nothing is ever updated or deleted, and a cancelled batch takes no more events.
+
+## Costing models
+
+`idoc.costing_model` (named price list, per customer, between two dates) with its rates, envelope prices and postage adjustments. `findCostingModel(pool, accountId, day)` (src/mssql/costing.ts) returns the model in force for an account, following the account's `costing_mode` (OWN or INHERIT). `priceMailpiece(model, input)` (src/costing) returns the price line by line. Nothing prices mailpieces at production yet. Rebuild the scratch DB after pulling this (`npm run db:rebuild <folder>`).
