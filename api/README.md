@@ -41,6 +41,7 @@ Accounts form one tree through `parent_account_id`. A customer is an account tha
 | `GET /api/customers/lookups` | passthrough keys, delivery bands, postal rates, envelope stock, flag labels |
 | `GET /api/customers/:id/history` | the change history |
 | `POST /api/customers/:id/accounts`, `PUT /api/accounts/:id` | sub-accounts (removing one is a soft delete) |
+| `POST /api/customers/:id/make-sub-account`, `POST /api/accounts/:id/make-customer` | a customer with a parent takes all its settings from it (refused while customers are placed under it); the reverse gives an account its own settings again. Both write History |
 | `POST /api/customers/:id/brands`, `PUT` / `DELETE /api/brands/:id` | brands; one in use cannot be deleted |
 | `POST /api/customers/:id/envelopes`, `PUT` / `DELETE /api/envelopes/:id` | envelope settings (delete is soft) |
 | `PUT /api/customers/:id/match-rules`, `/sequence-rules`, `/emails` | each replaces the whole list |

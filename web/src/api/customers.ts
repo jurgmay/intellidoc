@@ -49,6 +49,8 @@ export const getHistory = (id: number): Promise<{ rows: HistoryRow[] }> => api(`
 
 export const addAccount = (id: number, code: string, name: string) => api(`/api/customers/${id}/accounts`, { method: 'POST', body: { code, name } });
 export const updateAccount = (id: number, code: string, name: string, isDeleted: boolean) => api(`/api/accounts/${id}`, { method: 'PUT', body: { code, name, isDeleted } });
+export const makeSubAccount = (id: number) => api(`/api/customers/${id}/make-sub-account`, { method: 'POST' });
+export const makeCustomer = (accountId: number) => api(`/api/accounts/${accountId}/make-customer`, { method: 'POST' });
 export const addBrand = (id: number, name: string) => api(`/api/customers/${id}/brands`, { method: 'POST', body: { name } });
 export const renameBrand = (id: number, name: string) => api(`/api/brands/${id}`, { method: 'PUT', body: { name } });
 export const deleteBrand = (id: number) => api(`/api/brands/${id}`, { method: 'DELETE' });

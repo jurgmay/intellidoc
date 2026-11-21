@@ -80,6 +80,10 @@ export interface CustomerStore {
   updateEnvelope(envelopeId: number, input: EnvelopeInput, by: string): Promise<void>;
   deleteEnvelope(envelopeId: number, by: string): Promise<void>;
   setEnvelopesMode(customerId: number, mode: EnvelopesMode, by: string): Promise<void>;
+  /** The customer stops holding its own settings and takes everything from its parent, like any other sub-account. Its own settings are kept, but not used. */
+  makeSubAccount(customerId: number, by: string): Promise<void>;
+  /** The reverse: a sub-account holds its own settings again, as a customer. */
+  makeCustomer(accountId: number, by: string): Promise<void>;
   setMatchRules(customerId: number, rules: MatchRule[], by: string): Promise<void>;
   setSequenceRules(customerId: number, rules: SequenceRule[], by: string): Promise<void>;
   setEmails(customerId: number, emails: string[], by: string): Promise<void>;

@@ -92,6 +92,43 @@ describe.skipIf(!cs)('MssqlCustomerStore', { timeout: 120_000 }, () => {
     await expect(pool.request().query(`INSERT INTO idoc.account (account_code, name, inherits_settings) VALUES (N'NO-PARENT', N'No parent', 1)`)).rejects.toThrow(/ck_account_inherits/);
   });
 
+  it('a customer becomes a sub-account of its parent and back, keeping its own settings and taking its accounts along', async () => {
+    const top = await store.create({ code: 'SA-TOP', name: 'Sub top' }, 'tester');
+    const kid = await store.create({ code: 'SA-KID', name: 'Sub kid' }, 'tester');
+    await expect(store.makeSubAccount(kid, 'tester')).rejects.toBeInstanceOf(ValidationError); // no parent yet
+    const kidSub = await store.addAccount(kid, { code: 'SA-KID-1', name: 'Kid account' }, 'tester');
+    await store.addBrand(kid, 'Kid brand', 'tester');
+    const flags = (await store.get(kid)).flags;
+    await store.updateDetails(kid, { code: 'SA-KID', name: 'Sub kid', misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, returnAddress: null, batchingKey: null, packSequenceKey: null, parentId: top, flags }, 'tester');
+    const grand = await store.create({ code: 'SA-GRAND', name: 'Sub grand' }, 'tester');
+    await store.updateDetails(grand, { code: 'SA-GRAND', name: 'Sub grand', misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, returnAddress: null, batchingKey: null, packSequenceKey: null, parentId: kid, flags }, 'tester');
+    await expect(store.makeSubAccount(kid, 'tester')).rejects.toThrow(/1 customer is placed under this one \(Sub grand\)/); // a customer is placed under it
+    await store.updateDetails(grand, { code: 'SA-GRAND', name: 'Sub grand', misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, returnAddress: null, batchingKey: null, packSequenceKey: null, parentId: null, flags }, 'tester');
+
+    await store.makeSubAccount(kid, 'tester');
+    await expect(store.get(kid)).rejects.toBeInstanceOf(NotFoundError);                              // no longer a customer
+    expect((await store.list('SA-', false)).map((r) => r.code)).toEqual(expect.not.arrayContaining(['SA-KID']));
+    expect((await store.get(top)).accounts.map((a) => a.code)).toEqual(['SA-KID', 'SA-KID-1']);       // its accounts moved up with it
+    const owners = (await pool.request().query(`SELECT a.account_code AS code, o.account_code AS owner FROM idoc.v_account_owner v JOIN idoc.account a ON a.account_id = v.account_id JOIN idoc.account o ON o.account_id = v.owner_account_id WHERE a.account_code LIKE N'SA-KID%' ORDER BY a.account_code`)).recordset;
+    expect(owners).toEqual([{ code: 'SA-KID', owner: 'SA-TOP' }, { code: 'SA-KID-1', owner: 'SA-TOP' }]);
+    const inv = (await pool.request().input('a', kid).query('SELECT invoicing_account_id AS i FROM idoc.v_account_invoicing WHERE account_id = @a')).recordset[0];
+    expect(inv.i).toBe(top);                                                                         // invoiced with the parent unless set otherwise
+    expect((await store.history(kid, 1))[0]!.summary).toBe('Became a sub-account of SA-TOP: settings now come from SA-TOP');
+    expect((await store.history(top, 1))[0]!.summary).toBe('Account SA-KID "Sub kid" became a sub-account of this customer');
+
+    await expect(store.makeCustomer(top, 'tester')).rejects.toBeInstanceOf(NotFoundError);            // a customer is not an account
+    await store.makeCustomer(kid, 'tester');
+    const back = await store.get(kid);
+    expect(back.brands.map((b) => b.name)).toEqual(['Kid brand']);                                    // its own settings were kept
+    expect(back.accounts.map((a) => a.id)).toEqual([kidSub]);                                         // and its own account came back
+    expect((await store.get(top)).accounts).toEqual([]);
+    expect((await store.history(kid, 1))[0]!.summary).toBe('Account SA-KID "Sub kid" now holds its own settings, as a customer');
+    // a sub-account that was never a customer can be given its own settings too
+    await store.makeCustomer(kidSub, 'tester');
+    expect((await store.get(kidSub)).parent).toMatchObject({ id: kid });
+    await expect(store.makeCustomer(99999999, 'tester')).rejects.toBeInstanceOf(NotFoundError);
+  });
+
   it('brands: unique per customer, cannot be deleted while an envelope setting uses them', async () => {
     const id = await store.create({ code: 'BR', name: 'Brands' }, 'tester');
     const b = await store.addBrand(id, 'Home', 'tester');

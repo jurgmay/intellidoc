@@ -367,3 +367,55 @@ describe('envelope inheritance', () => {
     expect((await call('GET', `/api/customers/${child}/history`)).json().rows[0].summary).toBe("Envelopes: the parent's list → its own list");
   });
 });
+
+describe('customer to sub-account and back', () => {
+  let child: number;
+  beforeEach(async () => {
+    child = store.seed({ code: 'CHILD', name: 'Child Co', parentId: acme });
+    await call('POST', `/api/customers/${child}/brands`, { name: 'Own brand' });
+    await call('POST', `/api/customers/${child}/accounts`, { code: 'CH-1', name: 'Child account' });
+  });
+  const detail = async (id: number) => (await call('GET', `/api/customers/${id}`)).json();
+
+  it('needs a parent', async () => {
+    const r = await call('POST', `/api/customers/${acme}/make-sub-account`);
+    expect(r.statusCode).toBe(422);
+    expect(r.json().errors.parentId).toMatch(/parent customer/);
+    expect((await call('POST', '/api/customers/99999/make-sub-account')).statusCode).toBe(404);
+  });
+  it('is refused while customers are placed under it', async () => {
+    store.seed({ code: 'KID1', name: 'Kid One', parentId: child });
+    const r = await call('POST', `/api/customers/${child}/make-sub-account`);
+    expect(r.statusCode).toBe(422);
+    expect(r.json().errors.parentId).toMatch(/1 customer is placed under this one \(Kid One\)/);
+    expect((await detail(child)).code).toBe('CHILD'); // still a customer
+  });
+  it('makes the customer one of the parent’s accounts and takes its own accounts along', async () => {
+    expect((await call('POST', `/api/customers/${child}/make-sub-account`)).statusCode).toBe(204);
+    expect((await call('GET', `/api/customers/${child}`)).statusCode).toBe(404); // no longer a customer of its own
+    expect((await call('GET', '/api/customers')).json().rows.map((r: { code: string }) => r.code)).not.toContain('CHILD');
+    expect((await detail(acme)).accounts.map((a: { code: string }) => a.code).sort()).toEqual(['CH-1', 'CHILD']);
+  });
+  it('says so in the history of both', async () => {
+    await call('POST', `/api/customers/${child}/make-sub-account`);
+    expect((await call('GET', `/api/customers/${child}/history`)).json().rows[0].summary).toBe('Became a sub-account of ACME: settings now come from ACME');
+    expect((await call('GET', `/api/customers/${acme}/history`)).json().rows[0].summary).toBe('Account CHILD "Child Co" became a sub-account of this customer');
+  });
+  it('can be undone: the customer comes back with its own settings and its own accounts', async () => {
+    await call('POST', `/api/customers/${child}/make-sub-account`);
+    expect((await call('POST', `/api/accounts/${child}/make-customer`)).statusCode).toBe(204);
+    const d = await detail(child);
+    expect(d.parent).toMatchObject({ id: acme });
+    expect(d.brands.map((b: { name: string }) => b.name)).toEqual(['Own brand']);
+    expect(d.accounts.map((a: { code: string }) => a.code)).toEqual(['CH-1']);
+    expect((await detail(acme)).accounts).toEqual([]);
+    expect((await call('GET', `/api/customers/${child}/history`)).json().rows[0].summary).toBe('Account CHILD "Child Co" now holds its own settings, as a customer');
+  });
+  it('an account that was always a sub-account can be given its own settings', async () => {
+    const a = (await call('POST', `/api/customers/${acme}/accounts`, { code: 'AC-1', name: 'Acme one' })).json().id;
+    expect((await call('POST', `/api/accounts/${a}/make-customer`)).statusCode).toBe(204);
+    expect(await detail(a)).toMatchObject({ code: 'AC-1', name: 'Acme one', parent: { id: acme }, brands: [] });
+    expect((await call('POST', '/api/accounts/99999/make-customer')).statusCode).toBe(404);
+    expect((await call('POST', `/api/accounts/${acme}/make-customer`)).statusCode).toBe(404); // a customer is not an account
+  });
+});

@@ -51,6 +51,16 @@ export function customerRoutes(app: FastifyInstance, store: CustomerStore): void
     return reply.code(204).send();
   });
 
+  // Between customer and sub-account: a customer takes everything from its parent, or a sub-account holds its own settings again
+  app.post<{ Params: IdParams }>('/api/customers/:id/make-sub-account', async (req, reply) => {
+    await store.makeSubAccount(idOf(req.params.id), userOf(req));
+    return reply.code(204).send();
+  });
+  app.post<{ Params: IdParams }>('/api/accounts/:id/make-customer', async (req, reply) => {
+    await store.makeCustomer(idOf(req.params.id), userOf(req));
+    return reply.code(204).send();
+  });
+
   // Brands
   app.post<{ Params: IdParams }>('/api/customers/:id/brands', async (req, reply) => {
     const id = idOf(req.params.id);

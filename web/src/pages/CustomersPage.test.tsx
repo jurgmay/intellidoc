@@ -342,3 +342,64 @@ describe('Customer page', () => {
     expect(await screen.findByText('Address matching: off → on')).toBeInTheDocument();
   });
 });
+
+describe('Sub-account', () => {
+  const odevo = { id: 5, code: 'ODEVO', name: 'Odevo' };
+  const withParent = (over: Record<string, unknown> = {}) => {
+    respond = ((prev) => (url, method, body) => {
+      if (url === '/api/customers/7' && method === 'GET') return { status: 200, json: { ...detail(), parent: odevo, children: [], ...over } };
+      if (url === '/api/customers/5' && method === 'GET') return { status: 200, json: { ...detail(), id: 5, code: 'ODEVO', name: 'Odevo', accounts: [{ id: 7, code: 'ACME', name: 'Acme Energy Ltd', isDeleted: false }] } };
+      return prev(url, method, body);
+    })(respond);
+  };
+  const open = async () => {
+    wrap('/customers/7');
+    await userEvent.click(await screen.findByRole('button', { name: /Make this a sub-account of Odevo/ }));
+    return screen.findByRole('dialog');
+  };
+
+  it('is not offered to a customer without a parent', async () => {
+    wrap('/customers/7');
+    await screen.findByLabelText('Account code');
+    expect(screen.queryByRole('button', { name: /Make this a sub-account/ })).not.toBeInTheDocument();
+  });
+
+  it('lists what stops being used, then makes it a sub-account and opens the parent', async () => {
+    withParent();
+    const dialog = await open();
+    expect(within(dialog).getByText('2 brands (Home, Business)')).toBeInTheDocument();
+    expect(within(dialog).getByText('1 envelope setting')).toBeInTheDocument();
+    expect(within(dialog).getByText(/its job number \(24518\)/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Its 1 sub-account becomes a sub-account of Odevo too/)).toBeInTheDocument();
+    expect(calls.some((c) => c.url.includes('make-sub-account'))).toBe(false); // nothing happens until it is confirmed
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Make sub-account' }));
+    await waitFor(() => expect(calls.some((c) => c.url === '/api/customers/7/make-sub-account' && c.method === 'POST')).toBe(true));
+    expect(await screen.findByRole('heading', { name: 'Odevo' })).toBeInTheDocument();
+  });
+
+  it('will not go ahead while customers are placed under it', async () => {
+    withParent({ children: [{ id: 9, code: 'ACME-HL', name: 'Highline Solicitors', isDeleted: false }] });
+    const dialog = await open();
+    expect(within(dialog).getByText(/Highline Solicitors/)).toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Make sub-account' })).toBeDisabled();
+  });
+
+  it('keeps the box open and shows the server’s reason when it is refused', async () => {
+    withParent();
+    respond = ((prev) => (url, method, body) => (url === '/api/customers/7/make-sub-account' ? { status: 422, json: { errors: { parentId: '1 customer is placed under this one (Kid One).' } } } : prev(url, method, body)))(respond);
+    const dialog = await open();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Make sub-account' }));
+    expect(await within(dialog).findByText(/1 customer is placed under this one/)).toBeInTheDocument();
+  });
+
+  it('an account can be given its own settings again from the parent’s Accounts tab', async () => {
+    respond = ((prev) => (url, method, body) => (url === '/api/customers/8' && method === 'GET' ? { status: 200, json: { ...detail(), id: 8, code: 'ACME-SC', name: 'Acme Scotland', parent: { id: 7, code: 'ACME', name: 'Acme Energy Ltd' } } } : prev(url, method, body)))(respond);
+    wrap('/customers/7');
+    await userEvent.click(await screen.findByRole('tab', { name: /Accounts/ }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Give it its own settings' }));
+    await waitFor(() => expect(calls.some((c) => c.url === '/api/accounts/8/make-customer' && c.method === 'POST')).toBe(true));
+    expect(await screen.findByRole('heading', { name: 'Acme Scotland' })).toBeInTheDocument();
+  });
+});
