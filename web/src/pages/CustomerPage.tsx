@@ -5,6 +5,7 @@ import { IconAlertCircle, IconArrowLeft } from '@tabler/icons-react';
 import { getCustomer, getLookups, saveDetails, type CustomerDetail, type DetailsInput, type Lookups } from '../api/customers';
 import { AccountsTab } from './customer/AccountsTab';
 import { BrandsTab } from './customer/BrandsTab';
+import { CostingTab } from './customer/CostingTab';
 import { DetailsTab } from './customer/DetailsTab';
 import { EnvelopesTab } from './customer/EnvelopesTab';
 import { HistoryTab } from './customer/HistoryTab';
@@ -60,6 +61,7 @@ export function CustomerPage() {
           <Tabs.Tab value="brands">Brands ({detail.brands.length})</Tabs.Tab>
           <Tabs.Tab value="envelopes">Envelopes ({detail.envelopes.length})</Tabs.Tab>
           <Tabs.Tab value="matching">Matching &amp; batching</Tabs.Tab>
+          <Tabs.Tab value="costing">Costing</Tabs.Tab>
           <Tabs.Tab value="notifications">Notifications</Tabs.Tab>
           <Tabs.Tab value="history">History</Tabs.Tab>
         </Tabs.List>
@@ -68,6 +70,7 @@ export function CustomerPage() {
         <Tabs.Panel value="brands" pt="lg"><BrandsTab {...props} /></Tabs.Panel>
         <Tabs.Panel value="envelopes" pt="lg"><EnvelopesTab {...props} /></Tabs.Panel>
         <Tabs.Panel value="matching" pt="lg"><MatchingTab key={version} {...props} /></Tabs.Panel>
+        <Tabs.Panel value="costing" pt="lg"><CostingTab key={version} {...props} /></Tabs.Panel>
         <Tabs.Panel value="notifications" pt="lg"><NotificationsTab key={version} {...props} /></Tabs.Panel>
         <Tabs.Panel value="history" pt="lg"><HistoryTab key={version} customerId={id} /></Tabs.Panel>
       </Tabs>

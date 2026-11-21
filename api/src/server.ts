@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import sql from 'mssql';
 import { buildApp } from './app.js';
+import { MssqlCostingStore } from './costing/mssqlStore.js';
 import { MssqlCustomerStore } from './customers/mssqlStore.js';
 import { MssqlRecipientStore } from './recipients/mssqlStore.js';
 import { MssqlReportStore } from './reports/mssqlStore.js';
@@ -13,7 +14,7 @@ const customers = new MssqlCustomerStore(pool);
 const rollJobNumbers = (): void => { customers.applyDuePending().then((n) => { if (n > 0) console.log(`${n} pending job number(s) took effect`); }).catch((e: Error) => console.error('Pending job numbers:', e.message)); };
 rollJobNumbers();
 setInterval(rollJobNumbers, 10 * 60_000).unref();
-const app = await buildApp({ settings: new MssqlSettingsStore(pool), customers, recipients: new MssqlRecipientStore(pool), reports: new MssqlReportStore(pool), webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
+const app = await buildApp({ settings: new MssqlSettingsStore(pool), customers, costing: new MssqlCostingStore(pool), recipients: new MssqlRecipientStore(pool), reports: new MssqlReportStore(pool), webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
 const port = Number(process.env['API_PORT'] ?? 3001);
 const host = process.env['API_HOST'] ?? '127.0.0.1';
 await app.listen({ port, host });
