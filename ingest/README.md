@@ -203,7 +203,7 @@ Every batch gets a `Created` row in `idoc.batch_event` when it is made. `MssqlRe
 
 ## Page colour analysis
 
-Each PDF page is classed as blank, mono or colour (`src/pdfInk.ts`) and the counts are stored per pack in `colour_pages`, `mono_pages` and `blank_pages`. Colour means any marking that is not pure black (RGB 0,0,0 or CMYK 0,0,0,100); white is not ink; blank means no marks at all. See docs/account-structure.md for the full rules. No schema change; run `npm run test:db` to check the stored counts.
+Each PDF page is classed as blank, mono or colour (`src/pdfInk.ts`) and the counts are stored per pack in `colour_pages`, `mono_pages` and `blank_pages`. Colour means any marking with colour in it (unequal RGB values, or any cyan, magenta or yellow ink); black and greys are mono; white is not ink; blank means no marks at all. See docs/account-structure.md for the full rules. No schema change; run `npm run test:db` to check the stored counts.
 
 ## Production gate
 

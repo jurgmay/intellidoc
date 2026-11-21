@@ -38,16 +38,23 @@ describe('analysePageInk', () => {
     )).toEqual(Array(6).fill('mono'));
   });
 
-  it('colour: anything that is not pure black, including greys, rich black and a single coloured word', async () => {
+  it('mono: greys (equal RGB, black-only CMYK, grey levels) are mono', async () => {
+    expect(await kinds(
+      async (p, d) => { p.drawText('Grey', { x: 50, y: 700, font: await d.embedFont(StandardFonts.Helvetica), color: grayscale(0.5) }); },
+      async (p, d) => { p.drawText('Grey', { x: 50, y: 700, font: await d.embedFont(StandardFonts.Helvetica), color: rgb(79 / 255, 79 / 255, 79 / 255) }); },
+      async (p, d) => { p.drawText('Soft black', { x: 50, y: 700, font: await d.embedFont(StandardFonts.Helvetica), color: rgb(0.05, 0.05, 0.05) }); },
+      async (p, d) => { p.drawText('Black ink only', { x: 50, y: 700, font: await d.embedFont(StandardFonts.Helvetica), color: cmyk(0, 0, 0, 0.99) }); },
+    )).toEqual(Array(4).fill('mono'));
+  });
+
+  it('colour: anything with colour in it, including rich black and a single coloured word', async () => {
     expect(await kinds(
       async (p, d) => { p.drawText('Red', { x: 50, y: 700, font: await d.embedFont(StandardFonts.Helvetica), color: rgb(1, 0, 0) }); },
-      async (p, d) => { p.drawText('Grey', { x: 50, y: 700, font: await d.embedFont(StandardFonts.Helvetica), color: grayscale(0.5) }); },
-      async (p, d) => { p.drawText('Soft black', { x: 50, y: 700, font: await d.embedFont(StandardFonts.Helvetica), color: rgb(0.05, 0.05, 0.05) }); },
+      async (p, d) => { p.drawText('Almost grey', { x: 50, y: 700, font: await d.embedFont(StandardFonts.Helvetica), color: rgb(0.31, 0.31, 0.32) }); },
       async (p, d) => { p.drawText('Rich black', { x: 50, y: 700, font: await d.embedFont(StandardFonts.Helvetica), color: cmyk(0.6, 0.4, 0.4, 1) }); },
-      async (p, d) => { p.drawText('Four colour black', { x: 50, y: 700, font: await d.embedFont(StandardFonts.Helvetica), color: cmyk(0, 0, 0, 0.99) }); },
       async (p, d) => { const f = await d.embedFont(StandardFonts.Helvetica); p.drawText('Black', { x: 50, y: 700, font: f }); p.drawText('but a blue word', { x: 50, y: 650, font: f, color: rgb(0, 0, 1) }); },
       (p) => p.drawRectangle({ x: 10, y: 10, width: 100, height: 20, borderColor: rgb(0, 0.6, 0), borderWidth: 1 }),
-    )).toEqual(Array(7).fill('colour'));
+    )).toEqual(Array(5).fill('colour'));
   });
 
   it('colour wins over mono on the same page, and the colour is judged per object, not per page', async () => {
@@ -76,7 +83,8 @@ describe('analysePageInk', () => {
     expect(await page('/DeviceRGB cs 0 0 0 sc (x) Tj')).toBe('mono');
     expect(await page('/DeviceRGB cs 0 0 0.5 sc (x) Tj')).toBe('colour');
     expect(await page('/DeviceCMYK cs 0 0 0 1 scn (x) Tj')).toBe('mono');
-    expect(await page('/DeviceCMYK cs 0 0 0 0.2 scn (x) Tj')).toBe('colour');
+    expect(await page('/DeviceCMYK cs 0 0 0 0.2 scn (x) Tj')).toBe('mono'); // black ink only is a grey
+    expect(await page('/DeviceCMYK cs 0 0.1 0 1 scn (x) Tj')).toBe('colour');
     expect(await page('/Pattern cs /P1 scn 0 0 5 5 re f')).toBe('colour');
     expect(await page('0 0 50 50 re f % 1 0 0 rg is only a comment')).toBe('mono');
     expect(await page('[(a) -20 (b)] TJ')).toBe('mono');
