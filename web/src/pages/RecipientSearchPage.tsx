@@ -76,7 +76,7 @@ export function RecipientSearchPage() {
               <Table.Tbody>
                 {result.rows.map((r) => (
                   <Table.Tr key={r.packId}>
-                    <Table.Td>{r.addressLines.map((l, i) => <div key={i} style={i === 0 ? { fontWeight: 600 } : undefined}>{l}</div>)}</Table.Td>
+                    <Table.Td>{r.addressLines.map((l, i) => <div key={i} style={i === 0 ? { fontWeight: 600 } : undefined}>{l}</div>)}{r.postcode && !r.addressLines.includes(r.postcode) && <div>{r.postcode}</div>}</Table.Td>
                     <Table.Td><div>{r.accountPath}</div>{r.brand && <Text size="xs" c="dimmed">{r.brand}</Text>}</Table.Td>
                     <Table.Td>{r.invoicingName ?? '–'}</Table.Td>
                     <Table.Td>{day(r.releaseDate)}<Text size="xs" c="dimmed">{r.job}</Text></Table.Td>
