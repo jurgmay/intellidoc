@@ -9,14 +9,19 @@ import { RecipientSearchPage } from './RecipientSearchPage';
 const scopes = [{ id: 1, label: 'Odevo', isCustomer: true }, { id: 2, label: 'Odevo > Highline Solicitors', isCustomer: false }];
 const hit = {
   packId: 9, mailpieceId: 5, batchCode: 7001, batchStatus: 'Printed', job: 'job-9', releaseDate: '2026-11-18T09:30:00', addressLines: ['Mrs A Patel', '12 Mill Lane', 'Leeds'], postcode: 'LS1 4AB',
-  accountCode: 'ODEVO_HIGHLINE', accountName: 'Highline Solicitors', accountPath: 'Odevo > Highline Solicitors', invoicingCode: 'ODEVO', invoicingName: 'Odevo', brand: 'Home', references: { 'Tenant Reference': 'T-1001' },
+  accountCode: 'ODEVO_HIGHLINE', accountName: 'Highline Solicitors', accountPath: 'Odevo > Highline Solicitors', invoicingCode: 'ODEVO', invoicingName: 'Odevo', brand: 'Home', priceSell: 1.05 as number | null, references: { 'Tenant Reference': 'T-1001' },
+};
+const price = {
+  mailpieceId: 5, batchCode: 7001, priced: true, reason: null as string | null, pricedAt: '2026-11-18T09:31:00', model: { id: 2, name: '2026 prices' }, packs: 1, colourPages: 1, monoPages: 3, blankPages: 0,
+  lines: [{ code: 'HPOD', label: 'H-POD processing', quantity: 1, unitCost: 0.04, unitSell: 0.09, cost: 0.04, sell: 0.09 }, { code: 'MONO_PAGE', label: 'Mono page', quantity: 3, unitCost: 0.012, unitSell: 0.032, cost: 0.036, sell: 0.096 }],
+  productionCost: 0.076, productionSell: 0.186, postageCost: 0.61, postageSell: 0.64, totalCost: 0.686, totalSell: 0.826, warnings: null as string | null,
 };
 let urls: string[];
 let respond: (url: string) => { status: number; json: unknown };
 
 beforeEach(() => {
   urls = [];
-  respond = (url) => url.startsWith('/api/recipients/scopes') ? { status: 200, json: { rows: scopes } } : { status: 200, json: { scope: { id: 1, label: 'Odevo' }, rows: [hit], truncated: false } };
+  respond = (url) => url.startsWith('/api/recipients/scopes') ? { status: 200, json: { rows: scopes } } : url.startsWith('/api/mailpieces/') ? { status: 200, json: price } : { status: 200, json: { scope: { id: 1, label: 'Odevo' }, rows: [hit], truncated: false } };
   vi.stubGlobal('fetch', vi.fn(async (url: string) => { urls.push(url); const r = respond(url); return new Response(JSON.stringify(r.json), { status: r.status }); }));
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -62,5 +67,47 @@ describe('RecipientSearchPage', () => {
     await userEvent.type(screen.getByLabelText('Name'), 'patel');
     await userEvent.click(screen.getByRole('button', { name: 'Search' }));
     expect(await screen.findByText(/Narrow the search/)).toBeInTheDocument();
+  });
+
+  const searchFor = async () => {
+    show();
+    await waitFor(() => expect(urls).toContain('/api/recipients/scopes'));
+    await userEvent.click(screen.getByRole('combobox', { name: /Search in/ }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Odevo', hidden: true }));
+    await userEvent.type(screen.getByLabelText('Name'), 'patel');
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await screen.findByText('Mrs A Patel');
+  };
+
+  it('shows what the customer pays on each hit and opens the breakdown', async () => {
+    await searchFor();
+    await userEvent.click(screen.getByRole('button', { name: /price of the mailpiece to Mrs A Patel/i }));
+    const dialog = await screen.findByRole('dialog');
+    expect(urls).toContain('/api/mailpieces/5/price');
+    expect(await within(dialog).findByText('H-POD processing')).toBeInTheDocument();
+    expect(within(dialog).getByText('Mono page')).toBeInTheDocument();
+    expect(within(dialog).getByText('£0.83')).toBeInTheDocument(); // what the customer pays
+    expect(within(dialog).getByText('£0.69')).toBeInTheDocument(); // what it costs
+    expect(within(dialog).getByText('2026 prices')).toBeInTheDocument();
+    expect(within(dialog).getByText(/1 colour, 3 mono and 0 blank pages/)).toBeInTheDocument();
+  });
+
+  it('says so when the price is incomplete', async () => {
+    price.warnings = 'No price for the outer envelope in this costing model.';
+    await searchFor();
+    await userEvent.click(screen.getByRole('button', { name: /price of the mailpiece/i }));
+    expect(await screen.findByText(/price is incomplete/i)).toBeInTheDocument();
+    expect(screen.getByText(/No price for the outer envelope/)).toBeInTheDocument();
+    price.warnings = null;
+  });
+
+  it('says why a mailpiece has no price', async () => {
+    hit.priceSell = null; price.priced = false; price.reason = 'No costing model was in force for this customer on 2026-11-18.';
+    await searchFor();
+    const btn = screen.getByRole('button', { name: /price of the mailpiece/i });
+    expect(btn).toHaveTextContent('Not priced');
+    await userEvent.click(btn);
+    expect(await screen.findByText(/No costing model was in force/)).toBeInTheDocument();
+    hit.priceSell = 1.05; price.priced = true; price.reason = null;
   });
 });

@@ -1,5 +1,5 @@
 import { NotFoundError } from '../errors.js';
-import type { RecipientQuery, RecipientResult, RecipientRow, RecipientStore, SearchScope } from './types.js';
+import type { MailpiecePrice, RecipientQuery, RecipientResult, RecipientRow, RecipientStore, SearchScope } from './types.js';
 
 export interface MemoryRecipient extends RecipientRow {
   /** The submitting account and every account above it. A search in any of these accounts finds the row. */
@@ -10,6 +10,7 @@ export interface MemoryRecipient extends RecipientRow {
 export class MemoryRecipientStore implements RecipientStore {
   scopeList: SearchScope[] = [];
   recipients: MemoryRecipient[] = [];
+  prices = new Map<number, MailpiecePrice>();
 
   async scopes(): Promise<SearchScope[]> { return this.scopeList; }
 
@@ -32,5 +33,11 @@ export class MemoryRecipientStore implements RecipientStore {
       .sort((a, b) => b.releaseDate.localeCompare(a.releaseDate) || b.packId - a.packId);
     const rows = hits.slice(0, q.limit).map(({ ancestors: _a, ...row }) => row);
     return { scope: { id: scope.id, label: scope.label }, rows, truncated: hits.length > q.limit };
+  }
+
+  async price(mailpieceId: number): Promise<MailpiecePrice> {
+    const p = this.prices.get(mailpieceId);
+    if (!p) throw new NotFoundError('Mailpiece not found');
+    return p;
   }
 }

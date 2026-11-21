@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import { NotFoundError } from '../errors.js';
-import type { RecipientQuery, RecipientResult, RecipientRow, RecipientStore, SearchScope } from './types.js';
+import type { MailpiecePrice, RecipientQuery, RecipientResult, RecipientRow, RecipientStore, SearchScope } from './types.js';
 import { containsPattern, referencePattern } from './validate.js';
 
 const TREE = `
@@ -58,7 +58,8 @@ export class MssqlRecipientStore implements RecipientStore {
              COALESCE(m.submitting_account_code, sa.account_code) AS account_code,
              COALESCE(m.submitting_account_name, sa.name) AS account_name,
              COALESCE(m.submitting_account_path, sa.name) AS account_path,
-             m.invoicing_account_code, m.invoicing_account_name, COALESCE(m.brand_name, br.name) AS brand
+             m.invoicing_account_code, m.invoicing_account_name, COALESCE(m.brand_name, br.name) AS brand,
+             CASE WHEN m.priced_at IS NULL THEN NULL ELSE m.production_sell + m.postage_sell END AS price_sell
       FROM idoc.pack p
       JOIN tree ON tree.account_id = p.submitting_account_id
       JOIN idoc.account sa ON sa.account_id = p.submitting_account_id
@@ -96,8 +97,51 @@ export class MssqlRecipientStore implements RecipientStore {
       job: r['job'], releaseDate: r['release_date'], addressLines: lines.get(Number(r['pack_id'])) ?? [], postcode: r['postcode'],
       accountCode: r['account_code'], accountName: r['account_name'], accountPath: r['account_path'],
       invoicingCode: r['invoicing_account_code'] ?? null, invoicingName: r['invoicing_account_name'] ?? null, brand: r['brand'] ?? null,
-      references: refs.get(Number(r['pack_id'])) ?? {},
+      references: refs.get(Number(r['pack_id'])) ?? {}, priceSell: r['price_sell'] == null ? null : Number(r['price_sell']),
     }));
     return { scope: { id: q.accountId, label }, rows, truncated };
+  }
+
+  async price(mailpieceId: number): Promise<MailpiecePrice> {
+    const m = (await this.pool.request().input('m', sql.BigInt, mailpieceId).query(`
+      SELECT m.mailpiece_id, m.account_id, m.is_cancelled, m.pack_count, m.priced_at, m.costing_model_id, cm.name AS model_name,
+             m.production_cost, m.production_sell, m.postage_cost, m.postage_sell, m.price_warnings, b.batch_code,
+             CONVERT(CHAR(10), CAST(m.created_at AT TIME ZONE N'UTC' AT TIME ZONE N'GMT Standard Time' AS DATE), 23) AS usage_day,
+             CONVERT(NVARCHAR(19), m.priced_at, 126) AS priced_text,
+             pk.unknown_packs, pk.colour, pk.mono, pk.blank,
+             (SELECT TOP 1 1 FROM idoc.v_account_setting_source AS s
+                INNER JOIN idoc.costing_model AS x ON x.account_id = s.source_account_id
+                WHERE s.account_id = m.account_id AND s.setting = N'costing' AND x.is_active = 1
+                  AND x.valid_from <= CAST(m.created_at AT TIME ZONE N'UTC' AT TIME ZONE N'GMT Standard Time' AS DATE)
+                  AND (x.valid_to IS NULL OR x.valid_to >= CAST(m.created_at AT TIME ZONE N'UTC' AT TIME ZONE N'GMT Standard Time' AS DATE))) AS has_model
+      FROM idoc.mailpiece AS m
+      LEFT JOIN idoc.batch AS b ON b.batch_id = m.batch_id
+      LEFT JOIN idoc.costing_model AS cm ON cm.costing_model_id = m.costing_model_id
+      CROSS APPLY (SELECT SUM(CASE WHEN p.colour_pages IS NULL OR p.mono_pages IS NULL OR p.blank_pages IS NULL THEN 1 ELSE 0 END) AS unknown_packs,
+                          SUM(COALESCE(p.colour_pages, 0)) AS colour, SUM(COALESCE(p.mono_pages, 0)) AS mono, SUM(COALESCE(p.blank_pages, 0)) AS blank
+                   FROM idoc.pack AS p WHERE p.mailpiece_id = m.mailpiece_id) AS pk
+      WHERE m.mailpiece_id = @m`)).recordset[0] as Record<string, any> | undefined; // eslint-disable-line @typescript-eslint/no-explicit-any
+    if (!m) throw new NotFoundError('Mailpiece not found');
+    const lines = (await this.pool.request().input('m', sql.BigInt, mailpieceId).query(
+      `SELECT charge_code, label, quantity, unit_cost, unit_sell, cost, sell FROM idoc.mailpiece_price_line WHERE mailpiece_id = @m ORDER BY line_no`)).recordset as Record<string, any>[]; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const priced = m['priced_at'] != null;
+    let reason: string | null = null;
+    if (!priced) {
+      if (m['is_cancelled']) reason = 'This mailpiece was cancelled.';
+      else if (Number(m['unknown_packs']) > 0) reason = 'The colours of some of its pages are not known yet. The PDF has not been read, or could not be read.';
+      else if (!m['has_model']) reason = `No costing model was in force for this customer on ${m['usage_day']}.`;
+      else reason = 'It has not been priced yet.';
+    }
+    const n = (v: unknown): number => (v == null ? 0 : Number(v));
+    const productionCost = n(m['production_cost']); const productionSell = n(m['production_sell']); const postageCost = n(m['postage_cost']); const postageSell = n(m['postage_sell']);
+    const r4 = (x: number): number => Math.round(x * 1e4) / 1e4;
+    return {
+      mailpieceId, batchCode: m['batch_code'] == null ? null : Number(m['batch_code']), priced, reason, pricedAt: priced ? m['priced_text'] : null,
+      model: m['costing_model_id'] == null ? null : { id: Number(m['costing_model_id']), name: m['model_name'] },
+      packs: Number(m['pack_count']), colourPages: n(m['colour']), monoPages: n(m['mono']), blankPages: n(m['blank']),
+      lines: lines.map((l) => ({ code: l['charge_code'], label: l['label'], quantity: Number(l['quantity']), unitCost: Number(l['unit_cost']), unitSell: Number(l['unit_sell']), cost: Number(l['cost']), sell: Number(l['sell']) })),
+      productionCost, productionSell, postageCost, postageSell, totalCost: r4(productionCost + postageCost), totalSell: r4(productionSell + postageSell),
+      warnings: m['price_warnings'] ?? null,
+    };
   }
 }
