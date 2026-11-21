@@ -37,10 +37,13 @@ Behaviour worth knowing:
 They run against a REAL scratch database and DROP/recreate the `idoc` schema, then load `db/test_seed.sql`.
 The database name must contain `test`, `scratch` or `tmp`; anything else is refused.
 
-    export INTELLIDOC_TEST_DB="Server=host,1433;Database=idoc_test;User Id=...;Password=...;Encrypt=true;TrustServerCertificate=true"
+Copy `.env.test.example` to `.env.test` and put the test database's connection string in it (`INTELLIDOC_TEST_DB`), then:
+
     npm run test:db
 
-Without the variable the database tests are skipped, so `npm test` still runs everywhere.
+`.env.test` is separate from `.env`, which holds the scratch database used by the watcher. A variable already set in your shell
+wins over the file. `npm test` skips the database tests when the variable is absent, so it still runs everywhere; `npm run test:db`
+stops with "`.env.test`: not found" if the file is missing, rather than skipping silently.
 
 ## Folder watcher (service)
 
