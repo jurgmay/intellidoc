@@ -3,6 +3,7 @@ import type sql from 'mssql';
 import { connect, hasDb, resetAndSeed } from './setup.js';
 import { MssqlRepository, DuplicatePackError, ProductionGateError, ReferenceError_ } from '../../src/mssql/repository.js';
 import { loadReferenceData } from '../../src/mssql/reference.js';
+import { findCostingModel } from '../../src/mssql/costing.js';
 import { ingest } from '../../src/ingest.js';
 import { loadAlertSettings, parseRecipients } from '../../src/mssql/alertSettings.js';
 import { loadRunSheetInputs } from '../../src/runsheet/query.js';
@@ -183,6 +184,55 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     await repo.recordBatchEvent(batchId, 'Cancelled', { note: 'customer withdrew' });
     await expect(repo.recordBatchEvent(batchId, 'Despatched')).rejects.toThrow(/cancelled/);
     expect((await repo.batchEvents(batchId)).map((e) => e.type)).toEqual(['Created', 'Printed', 'Enclosed', 'Cancelled']);
+  });
+
+  it('costing models: the one in force on the day, inherited by sub-accounts, with its rates', async () => {
+    const acct = async (code: string, parent: string | null, extra = ''): Promise<number> => scalar(`
+      INSERT INTO idoc.account (account_code, name, parent_account_id${extra ? ', ' + extra.split('=')[0] : ''}) OUTPUT INSERTED.account_id AS n
+      VALUES (N'${code}', N'${code}', ${parent ? `(SELECT account_id FROM idoc.account WHERE account_code = N'${parent}')` : 'NULL'}${extra ? ', ' + extra.split('=')[1] : ''})`);
+    const root = await acct('COST_ROOT', null);
+    const kid = await acct('COST_KID', 'COST_ROOT', `costing_mode=N'INHERIT'`); // holds its own settings but takes the price list from the parent
+    const sub = await acct('COST_SUB', 'COST_ROOT', 'inherits_settings=1'); // takes everything from the parent
+    const own = await acct('COST_OWN', 'COST_ROOT'); // OWN, with no model of its own
+    const model = async (account: number, name: string, from: string, to: string | null, active = 1): Promise<number> => scalar(`
+      INSERT INTO idoc.costing_model (account_id, name, valid_from, valid_to, is_active) OUTPUT INSERTED.costing_model_id AS n VALUES (${account}, N'${name}', '${from}', ${to ? `'${to}'` : 'NULL'}, ${active})`);
+    const m1 = await model(root, 'First', '2026-01-01', '2026-06-30');
+    const m2 = await model(root, 'Second', '2026-07-01', null);
+    await model(root, 'Switched off', '2026-09-01', null, 0);
+    const ownModel = await model(kid, 'Kid own', '2026-01-01', null);
+    const id = async (m: Awaited<ReturnType<typeof findCostingModel>>) => m?.id ?? null;
+
+    expect(await id(await findCostingModel(pool, root, '2026-03-01'))).toBe(m1);
+    expect(await id(await findCostingModel(pool, root, '2026-06-30'))).toBe(m1); // the last day counts
+    expect(await id(await findCostingModel(pool, root, new Date('2026-07-01T09:00:00Z')))).toBe(m2);
+    expect(await id(await findCostingModel(pool, root, '2026-12-01'))).toBe(m2); // the later model is switched off
+    expect(await findCostingModel(pool, root, '2025-12-31')).toBeNull();
+    // INHERIT passes to the parent even though the kid has a model of its own; a sub-account takes the parent's; OWN does not look up
+    expect(await id(await findCostingModel(pool, kid, '2026-03-01'))).toBe(m1);
+    expect(await id(await findCostingModel(pool, sub, '2026-08-01'))).toBe(m2);
+    expect(await findCostingModel(pool, own, '2026-08-01')).toBeNull();
+    await pool.request().query(`UPDATE idoc.account SET costing_mode = N'OWN' WHERE account_id = ${kid}`);
+    expect(await id(await findCostingModel(pool, kid, '2026-03-01'))).toBe(ownModel);
+
+    const stock = await scalar(`SELECT TOP 1 stock_item_id AS n FROM idoc.stock_item WHERE is_envelope = 1`);
+    const rate = await scalar(`SELECT TOP 1 postal_rate_id AS n FROM idoc.postal_rate`);
+    await pool.request().query(`
+      INSERT INTO idoc.costing_model_rate (costing_model_id, charge_code, cost, sell_price, adjustment) VALUES (${m2}, N'MONO_PAGE', 0.0212, 0.0431, 0.005), (${m2}, N'HPOD', 0.1, 0.2, 0);
+      INSERT INTO idoc.costing_model_envelope (costing_model_id, stock_item_id, cost, sell_price, adjustment) VALUES (${m2}, ${stock}, 0.04, 0.08, 0.01);
+      INSERT INTO idoc.costing_model_postage (costing_model_id, postal_rate_id, adjustment) VALUES (${m2}, ${rate}, 0.05);`);
+    const loaded = (await findCostingModel(pool, sub, '2026-08-01'))!;
+    expect(loaded).toMatchObject({ id: m2, name: 'Second' });
+    expect(loaded.rates.get('MONO_PAGE')).toEqual({ cost: 0.0212, sellPrice: 0.0431, adjustment: 0.005 });
+    expect(loaded.rates.size).toBe(2);
+    expect(loaded.envelopes.get(stock)).toEqual({ cost: 0.04, sellPrice: 0.08, adjustment: 0.01 });
+    expect(loaded.postageAdjustments.get(rate)).toBe(0.05);
+
+    // the database refuses what makes no sense
+    await expect(pool.request().query(`INSERT INTO idoc.account (account_code, name, costing_mode) VALUES (N'COST_BAD', N'x', N'INHERIT')`)).rejects.toThrow(/ck_account_costing/); // no parent to inherit from
+    await expect(pool.request().query(`UPDATE idoc.account SET costing_mode = N'EXTEND' WHERE account_id = ${kid}`)).rejects.toThrow(/ck_account_costing/);
+    await expect(pool.request().query(`INSERT INTO idoc.costing_model_rate (costing_model_id, charge_code) VALUES (${m2}, N'GEO')`)).rejects.toThrow(/ck_cmr_code/);
+    await expect(model(root, 'Same start', '2026-07-01', null)).rejects.toThrow(/uq_costing_model_start/);
+    await expect(model(root, 'Backwards', '2027-01-01', '2026-01-01')).rejects.toThrow(/ck_costing_model_dates/);
   });
 
   it('production gate: nothing is printed, enclosed or despatched until the job PDF has arrived', async () => {

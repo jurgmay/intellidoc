@@ -24,7 +24,7 @@ Each account has a mode for each setting group.
 | Brands | own, inherit, inherit + extras |
 | Address-matching and pack-sequence rules | own, inherit |
 | Notification emails | own, inherit, inherit + extras |
-| Costing model (later) | own, inherit |
+| Costing model | own, inherit |
 
 - **Own**: only this account's values.
 - **Inherit**: the parent's effective values (resolved up to the nearest ancestor that has its own).
@@ -94,7 +94,7 @@ The user decides which envelopes an account may use (its effective list). The im
 
 1. Audit the schema (this document, section 7). **Done.**
 2. Tree and migration; retire grouping. **Done.**
-3. Inheritance modes: schema, resolver, importer, UI. **Done** for envelopes, brands, matching, pack sequence and notification e-mails; costing to follow.
+3. Inheritance modes: schema, resolver, importer, UI. **Done** for envelopes, brands, matching, pack sequence and notification e-mails; costing models and the price calculation **done** (part 1, see section 6); pricing at production, maintenance screens and the FileMaker import to follow.
 4. Invoicing account link and validation. **Done** (see section 5), apart from editing job numbers on sub-accounts, which is not needed for B-hive. The opt-in merge setting (3a) will not be built.
 5. Snapshot fields, batch event log and recipient search (all **done**).
 6. Reporting. **Daily usage done** (see section 6, "Built (step 6)"). Costing and other reports still to come.
