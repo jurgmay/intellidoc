@@ -5,7 +5,7 @@ import { assertScratchDatabase, dropSchema, runScript, schemaExists } from './ms
  * Creates the idoc schema plus the TEST reference data (db/test_seed.sql) in a scratch database so the folder
  * watcher can be tried out. Uses INTELLIDOC_DB. The database name must contain test, scratch, tmp or dev.
  *   npm run db:init           create (refuses if idoc already exists)
- *   npm run db:init -- --reset  drop the idoc schema and rebuild it (DESTROYS everything in it)
+ *   npm run db:reset          (reads .env) drop the idoc schema and rebuild it (DESTROYS everything in it)
  */
 const cs = process.env['INTELLIDOC_DB'];
 if (!cs) { console.error('Set INTELLIDOC_DB first'); process.exit(2); }
