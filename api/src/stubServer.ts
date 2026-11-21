@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { buildApp } from './app.js';
+import { MemoryRecipientStore } from './recipients/memoryStore.js';
 import { MemoryCustomerStore } from './customers/memoryStore.js';
 import { MemorySettingsStore } from './settings/store.js';
 
@@ -20,6 +21,19 @@ customers.seed({ code: 'NWB', name: 'Northwest Bank plc', misJobNumber: '24102' 
 const odevo = customers.seed({ code: 'ODEVO', name: 'Odevo', misJobNumber: '23990' });
 customers.seed({ code: 'ODEVO_HIGHLINE', name: 'Highline Solicitors', parentId: odevo });
 customers.seed({ code: 'ODEVO_R_AND_R', name: 'Rendall & Rittner' });
-const app = await buildApp({ settings: store, customers, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
+const recipients = new MemoryRecipientStore();
+recipients.scopeList = [
+  { id: 101, label: 'Acme Energy Ltd', isCustomer: true }, { id: 105, label: 'Northwest Bank plc', isCustomer: true },
+  { id: 106, label: 'Odevo', isCustomer: true }, { id: 107, label: 'Odevo > Highline Solicitors', isCustomer: false }, { id: 108, label: 'Rendall & Rittner', isCustomer: true },
+];
+const rec = (packId: number, ancestors: number[], over: Record<string, unknown>) => recipients.recipients.push({
+  packId, mailpieceId: packId + 500, batchCode: 7000 + Math.floor(packId / 2), batchStatus: 'Printed', job: `job-${packId}`, releaseDate: '2026-11-18T09:30:00',
+  addressLines: [], postcode: '', accountCode: '', accountName: '', accountPath: '', invoicingCode: null, invoicingName: null, brand: null, references: {}, ancestors, ...over,
+} as never);
+rec(1, [101], { addressLines: ['Mrs A Patel', '12 Mill Lane', 'Leeds'], postcode: 'LS1 4AB', accountCode: 'ACME', accountName: 'Acme Energy Ltd', accountPath: 'Acme Energy Ltd', invoicingCode: 'ACME', invoicingName: 'Acme Energy Ltd', brand: 'Acme Home', references: { 'Tenant Reference': 'T-1001', 'Document Type': 'Statement' } });
+rec(2, [101], { releaseDate: '2026-11-19T10:00:00', addressLines: ['Mr J Patel', '3 High Street', 'York'], postcode: 'YO1 7HH', accountCode: 'ACME', accountName: 'Acme Energy Ltd', accountPath: 'Acme Energy Ltd', invoicingCode: 'ACME', invoicingName: 'Acme Energy Ltd', brand: 'Acme Home', references: { 'Tenant Reference': 'T-2040' } });
+rec(3, [106, 107], { releaseDate: '2026-11-20T08:15:00', batchStatus: 'Created', addressLines: ['Ms R Okafor', 'Flat 4, Quay House', 'London'], postcode: 'E14 5AB', accountCode: 'ODEVO_HIGHLINE', accountName: 'Highline Solicitors', accountPath: 'Odevo > Highline Solicitors', invoicingCode: 'ODEVO', invoicingName: 'Odevo', references: { 'Property Reference': 'P-77-A', 'Document Type': 'Notice' } });
+rec(4, [106, 108], { addressLines: ['Mr T Brown', '9 Park Road', 'Bristol'], postcode: 'BS1 2CD', accountCode: 'ODEVO_R_AND_R', accountName: 'Rendall & Rittner', accountPath: 'Rendall & Rittner', invoicingCode: 'ODEVO', invoicingName: 'Odevo', references: { 'Property Reference': 'P-90-B' } });
+const app = await buildApp({ settings: store, customers, recipients, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
 await app.listen({ port: Number(process.env['API_PORT'] ?? 3001), host: '127.0.0.1' });
 console.log('Stub API (no database) on http://127.0.0.1:3001');
