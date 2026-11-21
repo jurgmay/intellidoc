@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
@@ -8,9 +8,9 @@ import { theme } from '../theme';
 import { CustomerPage } from './CustomerPage';
 import { CustomersPage } from './CustomersPage';
 
-const flags = { isAddressMatching: true, isArchiveMailpieces: false, isCreateOutputFiles: false, isCreateSeparateBatches: false, isNhs: false, isSso: false, isSameDayService: false, isUseMrdf: false, isTesting: false, isDeleted: false };
+const flags = { isAddressMatching: true, isArchiveMailpieces: false, isCreateOutputFiles: false, isSso: false, isSameDayService: false, isUseMrdf: false, isTesting: false, isDeleted: false };
 const detail = () => ({
-  id: 7, code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', pendingJobNumber: '24601', pendingFrom: '2026-12-01', returnAddress: 'PO Box 1', colourMode: null, flags, batchingKey: 'Department', packSequenceKey: null,
+  id: 7, code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', pendingJobNumber: '24601', pendingFrom: '2026-12-01', jobNumberRolloverDay: 1, returnAddress: 'PO Box 1', colourMode: null, flags, batchingKey: 'Department', packSequenceKey: null,
   parent: null, children: [{ id: 9, code: 'ACME-HL', name: 'Highline Solicitors', isDeleted: false }],
   accounts: [{ id: 8, code: 'ACME-SC', name: 'Acme Scotland', isDeleted: false }],
   brands: [{ id: 21, name: 'Home', usage: 1 }, { id: 22, name: 'Business', usage: 0 }],
@@ -92,8 +92,9 @@ describe('Job numbers', () => {
     expect(headers).toEqual(['Name', 'Account code', 'Job number', 'Pending job number', 'Accounts', 'Brands', 'Envelopes', 'Flags']);
     const cells = within(screen.getAllByRole('row')[1]!).getAllByRole('cell').map((c) => c.textContent);
     expect(cells.slice(2, 7)).toEqual(['24518', '24601', '1', '2', '1']);
+    const heads = screen.getAllByRole('columnheader');
     for (const name of ['Job number', 'Pending job number', 'Accounts', 'Brands', 'Envelopes']) {
-      expect(screen.getByRole('columnheader', { name })).toHaveStyle({ textAlign: 'center' });
+      expect(heads.find((h) => h.textContent === name)).toHaveStyle({ textAlign: 'center' });
     }
   });
   it('says on the Details tab when the pending number takes over, and saves a changed one', async () => {
@@ -101,15 +102,61 @@ describe('Job numbers', () => {
     expect(await screen.findByText(/Becomes the job number on 1 December 2026/)).toBeInTheDocument();
     const field = screen.getByLabelText('Pending job number');
     await userEvent.clear(field); await userEvent.type(field, '24777');
-    expect(screen.getByText(/Becomes the job number on the 1st of next month/)).toBeInTheDocument();
+    expect(screen.getByText(/Becomes the job number on the 1st of the month/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(calls.find((c) => c.method === 'PUT')?.body).toMatchObject({ misJobNumber: '24518', pendingJobNumber: '24777' }));
+  });
+  it('uses the rollover day in the note and saves a changed day', async () => {
+    wrap('/customers/7');
+    const day = await screen.findByLabelText('Job number rollover day');
+    await userEvent.clear(day); await userEvent.type(day, '21');
+    expect(screen.getByText(/Becomes the job number on the 21st of the month/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.find((c) => c.method === 'PUT')?.body).toMatchObject({ jobNumberRolloverDay: 21 }));
   });
   it('sends null to clear the pending number', async () => {
     wrap('/customers/7');
     await userEvent.clear(await screen.findByLabelText('Pending job number'));
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(calls.find((c) => c.method === 'PUT')?.body).toMatchObject({ pendingJobNumber: null }));
+  });
+});
+
+describe('Customers table columns', () => {
+  const width = (i: number) => Number((document.querySelectorAll('colgroup col')[i] as HTMLElement).style.width.replace('px', ''));
+  beforeEach(() => localStorage.clear());
+  it('keeps each cell on one line', async () => {
+    wrap('/customers');
+    await screen.findByText('Acme Energy Ltd');
+    expect(screen.getByText('Acme Energy Ltd').closest('td')).toHaveStyle({ whiteSpace: 'nowrap' });
+  });
+  it('resizes a column by dragging its edge, and remembers it', async () => {
+    wrap('/customers');
+    await screen.findByText('Acme Energy Ltd');
+    const before = width(0);
+    fireEvent.mouseDown(screen.getByRole('separator', { name: 'Resize Name column' }), { clientX: 100 });
+    fireEvent.mouseMove(window, { clientX: 260 });
+    fireEvent.mouseUp(window);
+    expect(width(0)).toBe(before + 160);
+    expect(localStorage.getItem('intellidoc.customers.columns')).toContain(String(before + 160));
+  });
+  it('stops a column being dragged to nothing', async () => {
+    wrap('/customers');
+    await screen.findByText('Acme Energy Ltd');
+    fireEvent.mouseDown(screen.getByRole('separator', { name: 'Resize Name column' }), { clientX: 500 });
+    fireEvent.mouseMove(window, { clientX: -2000 });
+    fireEvent.mouseUp(window);
+    expect(width(0)).toBe(40);
+  });
+  it('double-click fits the column back to its content', async () => {
+    wrap('/customers');
+    await screen.findByText('Acme Energy Ltd');
+    const before = width(0);
+    const handle = screen.getByRole('separator', { name: 'Resize Name column' });
+    fireEvent.mouseDown(handle, { clientX: 100 }); fireEvent.mouseMove(window, { clientX: 300 }); fireEvent.mouseUp(window);
+    expect(width(0)).not.toBe(before);
+    fireEvent.doubleClick(handle);
+    expect(width(0)).toBe(before);
   });
 });
 

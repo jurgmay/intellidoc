@@ -3,7 +3,7 @@ import { FLAGS, type CustomerDetail, type CustomerDetailsInput, type EnvelopeInp
 /** Plain-English names for the account flags, shared by the audit log and (via the API) the screen. */
 export const FLAG_LABELS: Record<FlagKey, string> = {
   isAddressMatching: 'Address matching', isArchiveMailpieces: 'Archive mailpieces', isCreateOutputFiles: 'Create output files',
-  isCreateSeparateBatches: 'Create separate batches', isNhs: 'NHS', isSso: 'SSO', isSameDayService: 'Same-day service',
+  isSso: 'SSO', isSameDayService: 'Same-day service',
   isUseMrdf: 'Use MRDF', isTesting: 'Testing', isDeleted: 'Deleted',
 };
 
@@ -16,6 +16,7 @@ export function describeDetailsChange(old: CustomerDetail, next: CustomerDetails
   text('Account code', old.code, next.code);
   text('Name', old.name, next.name);
   text('Job number', old.misJobNumber, next.misJobNumber);
+  if (old.jobNumberRolloverDay !== next.jobNumberRolloverDay) out.push(`Job number rollover day: ${old.jobNumberRolloverDay} → ${next.jobNumberRolloverDay}`);
   if ((old.pendingJobNumber ?? null) !== (next.pendingJobNumber ?? null)) {
     out.push(`Pending job number: ${show(old.pendingJobNumber)} → ${show(next.pendingJobNumber)}${next.pendingJobNumber && newPendingFrom ? ` (takes effect ${newPendingFrom})` : ''}`);
   }

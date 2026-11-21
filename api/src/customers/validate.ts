@@ -44,6 +44,8 @@ export function parseDetails(body: Body): CustomerDetailsInput {
   const name = text(errs, body, 'name', 'Name', 200, true);
   const misJobNumber = text(errs, body, 'misJobNumber', 'Job number', 50, false);
   if (body?.['pendingJobNumber'] === undefined) errs['pendingJobNumber'] = 'Pending job number must be given (use null for none)';
+  const day = body?.['jobNumberRolloverDay'];
+  if (typeof day !== 'number' || !Number.isInteger(day) || day < 1 || day > 28) errs['jobNumberRolloverDay'] = 'The rollover day must be a whole number from 1 to 28';
   const pendingJobNumber = text(errs, body, 'pendingJobNumber', 'Pending job number', 50, false);
   const returnAddress = text(errs, body, 'returnAddress', 'Return address', 500, false);
   const batchingKey = text(errs, body, 'batchingKey', 'Batching key', 100, false);
@@ -59,7 +61,7 @@ export function parseDetails(body: Body): CustomerDetailsInput {
     flags[f] = flagsRaw[f] === true;
   }
   done(errs);
-  return { code: code!, name: name!, misJobNumber, pendingJobNumber, returnAddress, flags, batchingKey, packSequenceKey, parentId };
+  return { code: code!, name: name!, misJobNumber, pendingJobNumber, jobNumberRolloverDay: day as number, returnAddress, flags, batchingKey, packSequenceKey, parentId };
 }
 
 export function parseBrandName(body: Body): string {

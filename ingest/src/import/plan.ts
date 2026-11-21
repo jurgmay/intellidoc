@@ -9,8 +9,8 @@ import { type Row, flag, json, lc, num } from './mer.js';
  */
 export interface PlanAccount {
   legacyId: string; code: string; name: string; parentLegacyId: string | null; groupingLegacyId: string | null;
-  isAddressMatching: boolean; isArchiveMailpieces: boolean; isCreateOutputFiles: boolean; isCreateSeparateBatches: boolean;
-  isNhs: boolean; isSso: boolean; isSameDayService: boolean; isUseMrdf: boolean; isTesting: boolean; isDeleted: boolean;
+  isAddressMatching: boolean; isArchiveMailpieces: boolean; isCreateOutputFiles: boolean;
+  isSso: boolean; isSameDayService: boolean; isUseMrdf: boolean; isTesting: boolean; isDeleted: boolean;
   colourMode: number | null; misJobNumber: string | null; returnAddress: string | null;
   packSequenceKey: string | null; batchingKey: string | null;
   emails: string[];
@@ -86,8 +86,8 @@ export function buildPlan(x: Exports): Plan {
       legacyId, code, name: (r['accountName'] ?? '').trim() || code,
       parentLegacyId: parent && byId.has(parent) && parent !== legacyId ? parent : null, groupingLegacyId: grouping,
       isAddressMatching: flag(r['isAddressMatching']), isArchiveMailpieces: flag(r['isArchiveMailpieces']),
-      isCreateOutputFiles: flag(r['isCreateOutputFiles']), isCreateSeparateBatches: flag(r['isCreateSeparateBatches']),
-      isNhs: flag(r['isNHS']), isSso: flag(r['isSSO']), isSameDayService: flag(r['isSameDayService']), isUseMrdf: flag(r['isUseMRDF']),
+      isCreateOutputFiles: flag(r['isCreateOutputFiles']),
+      isSso: flag(r['isSSO']), isSameDayService: flag(r['isSameDayService']), isUseMrdf: flag(r['isUseMRDF']),
       isTesting: flag(r['isTesting']), isDeleted: flag(r['isDeleted']),
       colourMode: num(r['colourMode']), misJobNumber: (r['misJobNumber'] ?? '').trim() || null, returnAddress: (r['returnAddress'] ?? '').trim() || null,
       packSequenceKey: (r['packSequencePassthroughKey'] ?? '').trim() || ps?.passthroughKey || null, batchingKey,

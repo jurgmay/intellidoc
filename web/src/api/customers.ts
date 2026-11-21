@@ -1,6 +1,6 @@
 import { api } from './client';
 
-export const FLAGS = ['isAddressMatching', 'isArchiveMailpieces', 'isCreateOutputFiles', 'isCreateSeparateBatches', 'isNhs', 'isSso', 'isSameDayService', 'isUseMrdf', 'isTesting', 'isDeleted'] as const;
+export const FLAGS = ['isAddressMatching', 'isArchiveMailpieces', 'isCreateOutputFiles', 'isSso', 'isSameDayService', 'isUseMrdf', 'isTesting', 'isDeleted'] as const;
 export type FlagKey = (typeof FLAGS)[number];
 
 export interface CustomerRow {
@@ -19,12 +19,12 @@ export interface EnvelopeView {
 export interface MatchRule { isInclude: boolean; key: string; value: string | null }
 export interface SequenceRule { value: string; number: number }
 export interface CustomerDetail {
-  id: number; code: string; name: string; misJobNumber: string | null; pendingJobNumber: string | null; pendingFrom: string | null; returnAddress: string | null; colourMode: number | null;
+  id: number; code: string; name: string; misJobNumber: string | null; pendingJobNumber: string | null; pendingFrom: string | null; jobNumberRolloverDay: number; returnAddress: string | null; colourMode: number | null;
   flags: Record<FlagKey, boolean>; batchingKey: string | null; packSequenceKey: string | null;
   parent: ParentView | null; children: ChildView[];
   accounts: AccountView[]; brands: BrandView[]; envelopes: EnvelopeView[]; matchRules: MatchRule[]; sequenceRules: SequenceRule[]; emails: string[];
 }
-export type DetailsInput = Pick<CustomerDetail, 'code' | 'name' | 'misJobNumber' | 'pendingJobNumber' | 'returnAddress' | 'flags' | 'batchingKey' | 'packSequenceKey'> & { parentId: number | null };
+export type DetailsInput = Pick<CustomerDetail, 'code' | 'name' | 'misJobNumber' | 'pendingJobNumber' | 'jobNumberRolloverDay' | 'returnAddress' | 'flags' | 'batchingKey' | 'packSequenceKey'> & { parentId: number | null };
 export interface EnvelopeInput {
   brandId: number | null; deliveryBand: string; postalRateId: number; stockItemId: number; reference: string | null; externalName: string | null; isOversticker: boolean;
 }
