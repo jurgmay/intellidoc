@@ -93,7 +93,7 @@ export async function renderRunSheet(data: RunSheetData, logoPng?: Uint8Array): 
   let logoH = 0;
   {
     const img = await doc.embedPng(logoPng ?? new Uint8Array(await readFile(DEFAULT_LOGO)));
-    logoH = 10 * MM;
+    logoH = 13 * MM;
     page.drawImage(img, { x: LEFT, y: y - logoH, width: (img.width / img.height) * logoH, height: logoH });
   }
   const dm = await doc.embedPng(await dataMatrix(data.batchCode));
