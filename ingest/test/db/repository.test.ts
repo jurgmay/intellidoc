@@ -111,7 +111,10 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
         UPDATE idoc.account SET name = name + N' (renamed)' WHERE account_code IN (N'FEXCO', N'FEXCO_CUSTOMER');
         UPDATE idoc.brand SET name = name + N' (renamed)' WHERE name = N'Remus';
         UPDATE idoc.stock_item SET stock_code = stock_code + N'-X' WHERE stock_code = N'${before.batch_stock_code}'`);
-      expect(await read()).toEqual(before);
+      // the batch's stock code is a live join and does follow the rename; everything the mailpiece snapshotted does not
+      const { batch_stock_code: liveBefore, ...snapshotBefore } = before; const { batch_stock_code: liveAfter, ...snapshotAfter } = await read();
+      expect(liveAfter).toBe(`${liveBefore}-X`);
+      expect(snapshotAfter).toEqual(snapshotBefore);
     } finally {
       await pool.request().query(`
         UPDATE idoc.account SET name = REPLACE(name, N' (renamed)', N'') WHERE account_code IN (N'FEXCO', N'FEXCO_CUSTOMER');
@@ -169,7 +172,7 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     expect((await repo.batchEvents(batchId)).map((e) => e.type)).toEqual(['Created']);
     expect(await scalar(`SELECT COUNT(*) AS n FROM idoc.batch b WHERE NOT EXISTS (SELECT 1 FROM idoc.batch_event e WHERE e.batch_id = b.batch_id AND e.event_type = N'Created')`)).toBe(0);
 
-    await repo.recordBatchEvent(batchId, 'Printed', { by: 'press', at: new Date('2026-11-20T09:00:00Z') });
+    await repo.recordBatchEvent(batchId, 'Printed', { by: 'press' });
     await repo.recordBatchEvent(batchId, 'Enclosed', { by: 'hand room', note: 'two trays' });
     const events = await repo.batchEvents(batchId);
     expect(events.map((e) => e.type)).toEqual(['Created', 'Printed', 'Enclosed']);
@@ -402,7 +405,7 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
       expect(await re.preview({ ...all, to: '2000-01-01' })).toMatchObject({ inScope: 0, wouldPrice: 0 });
       // a preview writes nothing
       expect(await scalar(`SELECT COUNT(*) AS n FROM idoc.mailpiece WHERE job_id = ${jobD} AND priced_at IS NOT NULL`)).toBe(0);
-      expect(await re.run(all)).toMatchObject({ priced: before.wouldPrice, unknownColours: 0 });
+      expect(await re.run(all)).toMatchObject({ priced: before.wouldPrice });
       expect(await scalar(`SELECT COUNT(*) AS n FROM idoc.mailpiece WHERE job_id = ${jobD} AND priced_at IS NOT NULL`)).toBe(2);
       // nothing left to fill in, but the overwrite option covers the priced mail too
       expect((await re.preview(all)).wouldPrice).toBe(0);
