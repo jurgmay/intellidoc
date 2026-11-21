@@ -93,4 +93,36 @@ describe.skipIf(!cs)('MssqlRecipientStore', { timeout: 120_000 }, () => {
     expect(r.rows).toHaveLength(1);
     expect(r.truncated).toBe(true);
   });
+
+  it('the price of a mailpiece: its lines and totals once priced, and the reason when it has none', async () => {
+    const mp = async (first: string): Promise<number> => (await pool.request().query(`
+      SELECT p.mailpiece_id AS n FROM idoc.pack p JOIN idoc.address_line l ON l.address_id = p.address_id AND l.line_no = 1 WHERE l.text = N'${first}'`)).recordset[0].n;
+    // before any costing model exists, the mailpiece from the first job has no price, and the reason says so
+    const early = await mp('Ann Patel');
+    expect(await store.price(early)).toMatchObject({ mailpieceId: early, priced: false, reason: expect.stringMatching(/No costing model was in force for this customer on \d{4}-\d{2}-\d{2}/), lines: [] });
+    expect((await store.search(q({ name: 'ann' }))).rows[0]!.priceSell).toBeNull();
+
+    const model = (await pool.request().query(`INSERT INTO idoc.costing_model (account_id, name, valid_from) OUTPUT INSERTED.costing_model_id AS n VALUES (${customer}, N'Search prices', '2000-01-01')`)).recordset[0].n as number;
+    await pool.request().query(`INSERT INTO idoc.costing_model_rate (costing_model_id, charge_code, cost, sell_price, adjustment) VALUES (${model}, N'HPOD', 0.1, 0.2, 0), (${model}, N'MONO_PAGE', 0.02, 0.04, 0.01)`);
+    expect((await store.price(early)).reason).toBe('It has not been priced yet.'); // a model exists now, but this mailpiece was not priced with it
+
+    const repo = new MssqlRepository(ipool); const ref = await loadReferenceData(ipool);
+    const priced = buildXml([person('Pia', 'Priced')]);
+    await ingest(priced.xml, 'job-priced.xml', 'job-priced.pdf', { ref, pdf: new FakePdf(priced.pages), repo });
+    const id1 = await mp('Pia Priced');
+    const p = await store.price(id1);
+    expect(p).toMatchObject({ mailpieceId: id1, priced: true, reason: null, model: { id: model, name: 'Search prices' }, packs: 1, colourPages: 0, monoPages: 2, blankPages: 0 });
+    expect(p.lines.find((l) => l.code === 'HPOD')).toMatchObject({ quantity: 1, unitSell: 0.2, sell: 0.2 });
+    expect(p.lines.find((l) => l.code === 'MONO_PAGE')).toMatchObject({ quantity: 2, unitSell: 0.05, sell: 0.1 });
+    expect(p.lines.reduce((t, l) => t + l.sell, 0)).toBeCloseTo(p.productionSell, 4);
+    expect(p.totalSell).toBeCloseTo(p.productionSell + p.postageSell, 4);
+    expect(p.pricedAt).not.toBeNull();
+    expect((await store.search(q({ name: 'pia' }))).rows[0]!.priceSell).toBeCloseTo(p.totalSell, 4);
+
+    // XML first: the colours are not known until the PDF arrives
+    const waiting = buildXml([person('Wes', 'Waiting')]);
+    await ingest(waiting.xml, 'job-waiting.xml', null, { ref, pdf: new FakePdf(0), repo });
+    expect(await store.price(await mp('Wes Waiting'))).toMatchObject({ priced: false, reason: expect.stringMatching(/colours of some of its pages are not known/) });
+    await expect(store.price(999999)).rejects.toBeInstanceOf(NotFoundError);
+  });
 });

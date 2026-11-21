@@ -14,7 +14,7 @@ let store: MemoryRecipientStore;
 const row = (packId: number, ancestors: number[], over: Partial<MemoryRecipient>): MemoryRecipient => ({
   packId, mailpieceId: packId, batchCode: 9000 + packId, batchStatus: 'Printed', job: `job-${packId}`, releaseDate: '2026-11-18T09:00:00',
   addressLines: ['Ann Lee', '1 High Street', 'Town'], postcode: 'AB1 2CD', accountCode: 'X', accountName: 'X', accountPath: 'X', invoicingCode: 'X', invoicingName: 'X', brand: null,
-  references: {}, ancestors, ...over,
+  references: {}, priceSell: null, ancestors, ...over,
 });
 
 beforeEach(async () => {
@@ -102,5 +102,25 @@ describe('LIKE patterns', () => {
     expect(containsPattern('50%_[x]\\')).toBe('%50\\%\\_\\[x]\\\\%');
     expect(referencePattern('AB_1')).toBe('AB\\_1');
     expect(referencePattern('AB%*')).toBe('AB\\%%');
+  });
+});
+
+describe('mailpiece price', () => {
+  const price = { mailpieceId: 7, batchCode: 9007, priced: true, reason: null, pricedAt: '2026-11-18T09:01:00', model: { id: 1, name: '2026 prices' }, packs: 2, colourPages: 1, monoPages: 3, blankPages: 0,
+    lines: [{ code: 'HPOD', label: 'H-POD processing', quantity: 1, unitCost: 0.1, unitSell: 0.2, cost: 0.1, sell: 0.2 }],
+    productionCost: 0.1, productionSell: 0.2, postageCost: 0.6, postageSell: 0.65, totalCost: 0.7, totalSell: 0.85, warnings: null };
+  it('returns the lines and totals of a mailpiece', async () => {
+    store.prices.set(7, price);
+    const r = await app.inject({ method: 'GET', url: '/api/mailpieces/7/price' });
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toMatchObject({ mailpieceId: 7, priced: true, totalSell: 0.85, lines: [{ code: 'HPOD', sell: 0.2 }] });
+  });
+  it('says why a mailpiece has no price', async () => {
+    store.prices.set(8, { ...price, mailpieceId: 8, priced: false, reason: 'No costing model was in force for this customer on 2026-11-18.', pricedAt: null, model: null, lines: [], productionSell: 0, productionCost: 0, postageCost: 0, postageSell: 0, totalCost: 0, totalSell: 0 });
+    expect((await app.inject({ method: 'GET', url: '/api/mailpieces/8/price' })).json()).toMatchObject({ priced: false, reason: expect.stringMatching(/No costing model/) });
+  });
+  it('404 for a mailpiece that does not exist or an id that is not a number', async () => {
+    expect((await app.inject({ method: 'GET', url: '/api/mailpieces/99/price' })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'GET', url: '/api/mailpieces/abc/price' })).statusCode).toBe(404);
   });
 });

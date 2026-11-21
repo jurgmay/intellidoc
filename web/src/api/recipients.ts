@@ -4,7 +4,7 @@ export interface SearchScope { id: number; label: string; isCustomer: boolean }
 export interface RecipientRow {
   packId: number; mailpieceId: number | null; batchCode: number | null; batchStatus: string | null; job: string; releaseDate: string;
   addressLines: string[]; postcode: string; accountCode: string; accountName: string; accountPath: string;
-  invoicingCode: string | null; invoicingName: string | null; brand: string | null; references: Record<string, string>;
+  invoicingCode: string | null; invoicingName: string | null; brand: string | null; references: Record<string, string>; priceSell: number | null;
 }
 export interface RecipientResult { scope: { id: number; label: string }; rows: RecipientRow[]; truncated: boolean }
 export interface RecipientQuery { accountId: number; name: string; address: string; reference: string; referenceKey: string; from: string; to: string }
@@ -16,3 +16,11 @@ export function searchRecipients(q: RecipientQuery): Promise<RecipientResult> {
   for (const k of ['name', 'address', 'reference', 'referenceKey', 'from', 'to'] as const) if (q[k].trim()) p.set(k, q[k].trim());
   return api(`/api/recipients/search?${p.toString()}`);
 }
+
+export interface PriceLineView { code: string; label: string; quantity: number; unitCost: number; unitSell: number; cost: number; sell: number }
+export interface MailpiecePrice {
+  mailpieceId: number; batchCode: number | null; priced: boolean; reason: string | null; pricedAt: string | null; model: { id: number; name: string } | null;
+  packs: number; colourPages: number; monoPages: number; blankPages: number; lines: PriceLineView[];
+  productionCost: number; productionSell: number; postageCost: number; postageSell: number; totalCost: number; totalSell: number; warnings: string | null;
+}
+export const getMailpiecePrice = (id: number): Promise<MailpiecePrice> => api(`/api/mailpieces/${id}/price`);

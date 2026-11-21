@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Badge, Button, Group, Loader, Paper, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { IconAlertCircle, IconSearch } from '@tabler/icons-react';
 import { ApiError } from '../api/client';
+import { MailpiecePriceModal } from './MailpiecePriceModal';
 import { listScopes, searchRecipients, type RecipientResult, type SearchScope } from '../api/recipients';
 
 const EMPTY = { name: '', address: '', reference: '', referenceKey: '', from: '', to: '' };
@@ -16,6 +17,7 @@ export function RecipientSearchPage() {
   const [result, setResult] = useState<RecipientResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [priceOf, setPriceOf] = useState<number | null>(null);
 
   useEffect(() => { listScopes().then((r) => setScopes(r.rows)).catch((e: Error) => setError(e.message)); }, []);
   const set = (k: keyof typeof EMPTY) => (e: { currentTarget: { value: string } }) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, [k]: v })); };
@@ -71,7 +73,7 @@ export function RecipientSearchPage() {
           {result.rows.length > 0 && (
             <Table striped withTableBorder>
               <Table.Thead>
-                <Table.Tr><Table.Th>Recipient</Table.Th><Table.Th>Sent from</Table.Th><Table.Th>Invoiced to</Table.Th><Table.Th>Released</Table.Th><Table.Th>Batch</Table.Th><Table.Th>References</Table.Th></Table.Tr>
+                <Table.Tr><Table.Th>Recipient</Table.Th><Table.Th>Sent from</Table.Th><Table.Th>Invoiced to</Table.Th><Table.Th>Released</Table.Th><Table.Th>Batch</Table.Th><Table.Th>References</Table.Th><Table.Th ta="right">Price</Table.Th></Table.Tr>
               </Table.Thead>
               <Table.Tbody>
                 {result.rows.map((r) => (
@@ -82,6 +84,8 @@ export function RecipientSearchPage() {
                     <Table.Td>{day(r.releaseDate)}<Text size="xs" c="dimmed">{r.job}</Text></Table.Td>
                     <Table.Td>{r.batchCode !== null ? <><div>{r.batchCode}</div><Badge size="xs" variant="light">{r.batchStatus}</Badge></> : <Text size="xs" c="dimmed">Not in a batch</Text>}</Table.Td>
                     <Table.Td>{Object.entries(r.references).map(([k, v]) => <div key={k}><Text span size="xs" c="dimmed">{k}: </Text>{v}</div>)}</Table.Td>
+                    <Table.Td ta="right">{r.mailpieceId === null ? <Text size="xs" c="dimmed">–</Text>
+                      : <Button size="compact-sm" variant="subtle" aria-label={`Price of the mailpiece to ${r.addressLines[0] ?? 'this recipient'}`} onClick={() => setPriceOf(r.mailpieceId)}>{r.priceSell == null ? 'Not priced' : `£${r.priceSell.toFixed(2)}`}</Button>}</Table.Td>
                   </Table.Tr>
                 ))}
               </Table.Tbody>
@@ -89,6 +93,7 @@ export function RecipientSearchPage() {
           )}
         </Stack>
       )}
+      <MailpiecePriceModal mailpieceId={priceOf} onClose={() => setPriceOf(null)} />
     </Stack>
   );
 }

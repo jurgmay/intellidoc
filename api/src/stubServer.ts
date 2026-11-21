@@ -49,12 +49,23 @@ recipients.scopeList = [
 ];
 const rec = (packId: number, ancestors: number[], over: Record<string, unknown>) => recipients.recipients.push({
   packId, mailpieceId: packId + 500, batchCode: 7000 + Math.floor(packId / 2), batchStatus: 'Printed', job: `job-${packId}`, releaseDate: '2026-11-18T09:30:00',
-  addressLines: [], postcode: '', accountCode: '', accountName: '', accountPath: '', invoicingCode: null, invoicingName: null, brand: null, references: {}, ancestors, ...over,
+  addressLines: [], postcode: '', accountCode: '', accountName: '', accountPath: '', invoicingCode: null, invoicingName: null, brand: null, references: {}, priceSell: null, ancestors, ...over,
 } as never);
 rec(1, [101], { addressLines: ['Mrs A Patel', '12 Mill Lane', 'Leeds'], postcode: 'LS1 4AB', accountCode: 'ACME', accountName: 'Acme Energy Ltd', accountPath: 'Acme Energy Ltd', invoicingCode: 'ACME', invoicingName: 'Acme Energy Ltd', brand: 'Acme Home', references: { 'Tenant Reference': 'T-1001', 'Document Type': 'Statement' } });
 rec(2, [101], { releaseDate: '2026-11-19T10:00:00', addressLines: ['Mr J Patel', '3 High Street', 'York'], postcode: 'YO1 7HH', accountCode: 'ACME', accountName: 'Acme Energy Ltd', accountPath: 'Acme Energy Ltd', invoicingCode: 'ACME', invoicingName: 'Acme Energy Ltd', brand: 'Acme Home', references: { 'Tenant Reference': 'T-2040' } });
 rec(3, [106, 107], { releaseDate: '2026-11-20T08:15:00', batchStatus: 'Created', addressLines: ['Ms R Okafor', 'Flat 4, Quay House', 'London'], postcode: 'E14 5AB', accountCode: 'ODEVO_HIGHLINE', accountName: 'Highline Solicitors', accountPath: 'Odevo > Highline Solicitors', invoicingCode: 'ODEVO', invoicingName: 'Odevo', references: { 'Property Reference': 'P-77-A', 'Document Type': 'Notice' } });
 rec(4, [106, 108], { addressLines: ['Mr T Brown', '9 Park Road', 'Bristol'], postcode: 'BS1 2CD', accountCode: 'ODEVO_R_AND_R', accountName: 'Rendall & Rittner', accountPath: 'Rendall & Rittner', invoicingCode: 'ODEVO', invoicingName: 'Odevo', references: { 'Property Reference': 'P-90-B' } });
+const line = (code: string, label: string, quantity: number, unitCost: number, unitSell: number) => ({ code, label, quantity, unitCost, unitSell, cost: Math.round(unitCost * quantity * 1e4) / 1e4, sell: Math.round(unitSell * quantity * 1e4) / 1e4 });
+recipients.prices.set(501, {
+  mailpieceId: 501, batchCode: 7000, priced: true, reason: null, pricedAt: '2026-11-18T09:31:00', model: { id: 2, name: '2026 prices' }, packs: 1, colourPages: 1, monoPages: 3, blankPages: 0,
+  lines: [line('HPOD', 'H-POD processing', 1, 0.04, 0.09), line('PROCESSING', 'Processing', 1, 0.02, 0.05), line('PAPER_SHEET', 'Paper (per sheet)', 2, 0.008, 0.015), line('COLOUR_PAGE', 'Colour page', 1, 0.045, 0.085),
+    line('MONO_PAGE', 'Mono page', 3, 0.012, 0.032), line('ENVELOPE', 'Outer envelope', 1, 0.018, 0.035), line('MACHINE_ENCLOSING_SETUP', 'Machine enclosing: setup', 1, 0.02, 0.05), line('MACHINE_ENCLOSING_SHEET', 'Machine enclosing: each extra sheet', 1, 0, 0)],
+  productionCost: 0.2, productionSell: 0.41, postageCost: 0.61, postageSell: 0.64, totalCost: 0.81, totalSell: 1.05, warnings: null,
+});
+recipients.prices.set(502, { ...recipients.prices.get(501)!, mailpieceId: 502, batchCode: 7001, warnings: 'No price for the outer envelope in this costing model.' });
+recipients.prices.set(503, { mailpieceId: 503, batchCode: 7001, priced: false, reason: 'No costing model was in force for this customer on 2026-11-20.', pricedAt: null, model: null, packs: 1, colourPages: 0, monoPages: 2, blankPages: 0, lines: [],
+  productionCost: 0, productionSell: 0, postageCost: 0, postageSell: 0, totalCost: 0, totalSell: 0, warnings: null });
+for (const r of recipients.recipients) { const p = recipients.prices.get(r.mailpieceId ?? 0); if (p?.priced) r.priceSell = p.totalSell; }
 const reports = new MemoryReportStore();
 reports.accounts = [{ id: 101, code: 'ACME', name: 'Acme Energy Ltd' }, { id: 106, code: 'ODEVO', name: 'Odevo' }];
 const usageDays = Array.from({ length: 21 }, (_, i) => new Date(Date.UTC(2026, 10, 1 + i)).toISOString().slice(0, 10)).filter((d) => ![6, 7, 13, 14, 20, 21].includes(Number(d.slice(8))));
