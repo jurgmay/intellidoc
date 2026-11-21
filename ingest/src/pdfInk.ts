@@ -3,8 +3,9 @@ import { decodePDFRawStream, PDFArray, PDFBool, PDFContext, PDFDict, PDFDocument
 /**
  * What a printed page carries, for the print and price calculations:
  *  - blank: nothing is printed on it at all
- *  - mono: everything on it is pure black (RGB 0,0,0 or CMYK 0,0,0,100, or plain black grey)
- *  - colour: anything on it is any other colour, grey included
+ *  - mono: everything on it is black or a grey: RGB with equal red, green and blue (0,0,0, 79,79,79 ...), CMYK with only black ink
+ *    (0,0,0,K), or a plain grey level, including greyscale images
+ *  - colour: anything on it has any colour in it (RGB values that differ, any cyan, magenta or yellow ink)
  * White ink is not ink: a white box or white text on the white page is not counted as a mark.
  */
 export type PageInk = 'blank' | 'mono' | 'colour';
@@ -24,12 +25,12 @@ const initial = (): State => ({ fill: 'black', stroke: 'black', fillSpace: GRAY,
 function classify(space: Space, v: number[]): Ink {
   const allZero = v.every((x) => x === 0);
   switch (space.kind) {
-    case 'gray': return v[0] === 0 ? 'black' : v[0] === 1 ? 'white' : 'other';
-    case 'rgb': return allZero ? 'black' : v.every((x) => x === 1) ? 'white' : 'other';
-    case 'cmyk': return v[0] === 0 && v[1] === 0 && v[2] === 0 ? (v[3] === 1 ? 'black' : v[3] === 0 ? 'white' : 'other') : 'other';
+    case 'gray': return v[0] === 1 ? 'white' : 'black'; // any grey level is mono
+    case 'rgb': return v.every((x) => x === v[0]) ? (v[0] === 1 ? 'white' : 'black') : 'other'; // equal R, G and B is a grey
+    case 'cmyk': return v[0] === 0 && v[1] === 0 && v[2] === 0 ? (v[3] === 0 ? 'white' : 'black') : 'other'; // black ink only
     case 'separation':
       if (v[0] === 0 || space.name === 'None') return 'white'; // no ink
-      return space.name === 'Black' && v[0] === 1 ? 'black' : 'other';
+      return space.name === 'Black' ? 'black' : 'other';
     case 'other': return space.n > 0 && allZero ? 'white' : 'other';
     default: return 'other'; // patterns
   }
@@ -211,7 +212,7 @@ class PageScan {
           lx.skipInlineData();
           const mask = dict['IM'] === 1 || dict['ImageMask'] === 1;
           const cs = String(dict['CS'] ?? dict['ColorSpace'] ?? ''); const bpc = Number(dict['BPC'] ?? dict['BitsPerComponent'] ?? 8);
-          if (mask) this.mark(s.fill); else this.mark((cs === 'G' || cs === 'DeviceGray') && bpc === 1 ? 'black' : 'other');
+          if (mask) this.mark(s.fill); else this.mark(cs === 'G' || cs === 'DeviceGray' ? 'black' : 'other');
           break;
         }
         case 'Do': this.xobject(String(ops[0]), res, s, depth); break;
@@ -244,7 +245,7 @@ class PageScan {
       const cs = obj.dict.get(PDFName.of('ColorSpace'));
       const csObj = cs ? this.ctx.lookup(cs) : undefined;
       const sp = csObj ? this.spaceOf(csObj) : OTHER;
-      this.mark(sp.kind === 'gray' && bpc === 1 ? 'black' : 'other'); // a 1-bit grey image is black and white only
+      this.mark(sp.kind === 'gray' ? 'black' : 'other'); // a greyscale image is mono; any other image may carry colour
     } else if (subtype === 'Form' && depth < 8 && !this.visited.has(obj)) {
       this.visited.add(obj);
       try { this.run(this.streamBytes(obj), this.lookup(obj.dict.get(PDFName.of('Resources')), PDFDict) ?? res, { ...s }, depth + 1); } finally { this.visited.delete(obj); }
