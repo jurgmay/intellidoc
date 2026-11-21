@@ -63,6 +63,8 @@ The user decides which envelopes an account may use (its effective list). The im
 
 - Each mailpiece keeps its own record, with links to its child packs where address matching was used.
 - Anything reporting needs is a **snapshot taken at production time** (account, account path, invoicing account, brand name, envelope), so later restructuring never changes past reports.
+
+**Built (step 5, snapshot fields):** each mailpiece stores, as at production, its sub-account (`submitting_account_id`, which is live, plus `submitting_account_code`, `submitting_account_name` and `submitting_account_path`, the account names from the top of the tree separated by ` > `), the invoicing account (`invoicing_account_id`, `invoicing_account_code`, `invoicing_account_name`), `brand_name` and `outer_stock_code`. All packs of a mailpiece share one sub-account because packs from different sub-accounts are never merged. Renaming or moving an account, renaming a brand or recoding an envelope afterwards does not change them. The batch event log and recipient search are still to come.
 - Production timestamps are kept for reporting and auditing.
 - "Everything sent to this recipient" (debt collection) must be fast and exact. Two searches are needed: by printed name and address, and by passthrough metadata (Tenant Reference, Property Reference, Document Type and so on). Reference values are matched exactly or by prefix; whether name and address also need partial (contains) matching is still to be decided.
 
@@ -86,7 +88,7 @@ The user decides which envelopes an account may use (its effective list). The im
 2. Tree and migration; retire grouping. **Done.**
 3. Inheritance modes: schema, resolver, importer, UI. **Envelopes done**; brands, matching and pack-sequence rules, notification emails and costing to follow.
 4. Invoicing account link and validation. **Done** (see section 5), apart from editing job numbers on sub-accounts, which is not needed for B-hive. The opt-in merge setting (3a) will not be built.
-5. Snapshot fields, batch event log and recipient search.
+5. Snapshot fields (**done**), batch event log and recipient search.
 6. Reporting.
 
 ## 9. Decisions on the open questions

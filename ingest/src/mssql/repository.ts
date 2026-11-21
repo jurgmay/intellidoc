@@ -226,19 +226,39 @@ export class MssqlRepository implements Repository, PdfTracker {
     const batchDbId = new Map<string, number>(); // batch key -> batch_id
     for (const b of r.batches) batchDbId.set(b.key, await this.insertBatch(db, jobId, customerId, b, { accountId, brandId, stockId, formatId, serviceId, paperId }));
 
+    // ---- what is true about an account today (code, name and the path from the top of the tree): kept on each mailpiece as at production
+    const snaps = new Map<string, { id: number; code: string; name: string; path: string }>();
+    const accountSnapshot = async (code: string) => {
+      const hit = snaps.get(code); if (hit) return hit;
+      const up = await db.rows<{ account_id: number; account_code: string; name: string; depth: number }>(`
+        WITH up AS (
+          SELECT account_id, account_code, name, parent_account_id, 0 AS depth FROM idoc.account WHERE account_code = @c
+          UNION ALL
+          SELECT a.account_id, a.account_code, a.name, a.parent_account_id, up.depth + 1 FROM idoc.account a JOIN up ON a.account_id = up.parent_account_id)
+        SELECT account_id, account_code, name, depth FROM up ORDER BY depth DESC OPTION (MAXRECURSION 100)`, [['c', sql.NVarChar(100), code]]);
+      const self = up[up.length - 1];
+      if (!self) throw new ReferenceError_(`Unknown account ${code}`);
+      const v = { id: self.account_id, code: self.account_code, name: self.name, path: up.map((x) => x.name).join(' > ') };
+      snaps.set(code, v); return v;
+    };
+
     // ---- mailpieces (before packs: packs reference them through the same-recipient FK)
     const mpDbId = new Map<number, number>();
     for (const m of r.mailpieces) {
       const first = m.packs[0]!;
       const batch = r.batches.find((b) => b.key === m.batchKey)!;
+      const sub = await accountSnapshot(first.accountCode); const inv = await accountSnapshot(m.invoicingCode);
       const row = (await db.one<{ id: number }>(`
         INSERT INTO idoc.mailpiece (job_id, account_id, invoicing_account_id, address_id, batch_id, brand_id, account_envelope_id, postal_format_id, postal_rate_id,
+                                    submitting_account_id, submitting_account_code, submitting_account_name, submitting_account_path, invoicing_account_code, invoicing_account_name, brand_name, outer_stock_code,
                                     delivery_band, pack_count, page_count, sheet_count, weight_g, thickness_mm, enclosing_route, match_key)
         OUTPUT INSERTED.mailpiece_id AS id
-        VALUES (@job, @acct, @inv, @addr, @batch, @brand, @ae, @fmt, @rate, @band, @pc, @pg, @sh, @w, @t, @route, @mk)`, [
+        VALUES (@job, @acct, @inv, @addr, @batch, @brand, @ae, @fmt, @rate, @sub, @subc, @subn, @subp, @invc, @invn, @bn, @osc, @band, @pc, @pg, @sh, @w, @t, @route, @mk)`, [
         ['job', sql.BigInt, jobId], ['acct', sql.Int, customerId], ['inv', sql.Int, await accountId(m.invoicingCode)], ['addr', sql.BigInt, await addressId(first)], ['batch', sql.BigInt, batchDbId.get(batch.key)],
         ['brand', sql.Int, await brandId(m.brand)], ['ae', sql.Int, m.accountEnvelopeId ?? null], ['fmt', sql.Int, await formatId(m.postalFormat)],
         ['rate', sql.Int, m.postalRateId ?? null], ['band', sql.NVarChar(50), m.postalService],
+        ['sub', sql.Int, sub.id], ['subc', sql.NVarChar(100), sub.code], ['subn', sql.NVarChar(200), sub.name], ['subp', sql.NVarChar(1000), sub.path],
+        ['invc', sql.NVarChar(100), inv.code], ['invn', sql.NVarChar(200), inv.name], ['bn', sql.NVarChar(200), m.brand], ['osc', sql.NVarChar(50), m.envelopeCode || null],
         ['pc', sql.Int, m.packs.length], ['pg', sql.Int, m.packs.reduce((n, p) => n + p.parsed.pageCount, 0)], ['sh', sql.Int, m.sheets],
         ['w', sql.Int, m.weightG], ['t', sql.Decimal(6, 2), m.thicknessMm], ['route', sql.NVarChar(20), m.route], ['mk', sql.Char(64), sha(m.packs.map((p) => p.matchKey).join('|'))]]))!;
       mpDbId.set(m.id, row.id);
