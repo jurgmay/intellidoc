@@ -1,12 +1,23 @@
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import { createRequire } from 'node:module';
+import { readFile } from 'node:fs/promises';
+import { PDFDocument, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
 import bwipjs from 'bwip-js';
 import type { RunSheetData } from './data.js';
 
 const MM = 72 / 25.4;
 const LEFT = 20 * MM;
 const WIDTH = 170 * MM;
-const HEADER = rgb(52 / 255, 103 / 255, 177 / 255);
+const BLUE = rgb(52 / 255, 103 / 255, 177 / 255);
+const LABEL = rgb(65 / 255, 176 / 255, 214 / 255);
+const RULE = rgb(0.86, 0.88, 0.92);
+const RED = rgb(0.9, 0.1, 0.1);
 const LABEL_W = 42 * MM;
+const require = createRequire(import.meta.url);
+
+async function poppins(weight: 400 | 500 | 600): Promise<Uint8Array> {
+  return new Uint8Array(await readFile(require.resolve(`@fontsource/poppins/files/poppins-latin-${weight}-normal.woff`)));
+}
 
 /** Greedy word wrap on measured width. */
 function wrap(text: string, font: PDFFont, size: number, width: number): string[] {
@@ -22,7 +33,7 @@ function wrap(text: string, font: PDFFont, size: number, width: number): string[
   return out;
 }
 
-/** WinAnsi can't draw every character (e.g. smart quotes beyond Latin-1); replace what the standard font can't encode. */
+/** Replace characters the font subset can't draw. */
 function safe(text: string): string {
   return text.replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[^\x20-\x7e\xa0-\xff]/g, '?');
 }
@@ -31,73 +42,77 @@ async function dataMatrix(text: string): Promise<Uint8Array> {
   return bwipjs.toBuffer({ bcid: 'datamatrix', text, scale: 4, padding: 0 });
 }
 
-/** One A4 page. Fonts: Helvetica stands in for Poppins until the licensed font files are supplied. */
+interface Row { label: string; values: string[]; red?: boolean }
+
+/** One A4 page laid out like the FileMaker run sheet. Poppins (OFL) is embedded. */
 export async function renderRunSheet(data: RunSheetData, logoPng?: Uint8Array): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
+  doc.registerFontkit(fontkit);
   doc.setTitle(`Run sheet ${data.batchCode}`);
   const page = doc.addPage([595.28, 841.89]);
-  const regular = await doc.embedFont(StandardFonts.Helvetica);
-  const bold = await doc.embedFont(StandardFonts.HelveticaBold);
-  let y = page.getHeight() - 20 * MM;
+  const light = await doc.embedFont(await poppins(400), { subset: true });
+  const medium = await doc.embedFont(await poppins(500), { subset: true });
+  const semi = await doc.embedFont(await poppins(600), { subset: true });
+  let y = page.getHeight() - 14 * MM;
 
+  let logoH = 0;
   if (logoPng) {
     const img = await doc.embedPng(logoPng);
-    const h = 14 * MM;
-    page.drawImage(img, { x: LEFT, y: y - h, width: (img.width / img.height) * h, height: h });
+    logoH = 16 * MM;
+    page.drawImage(img, { x: LEFT, y: y - logoH, width: (img.width / img.height) * logoH, height: logoH });
   }
   const dm = await doc.embedPng(await dataMatrix(data.batchCode));
-  const dmSize = 24 * MM;
+  const dmSize = 12 * MM;
   page.drawImage(dm, { x: LEFT + WIDTH - dmSize, y: y - dmSize, width: dmSize, height: dmSize });
-  y -= 30 * MM;
+  y -= logoH + 16 * MM;
 
-  const section = (title: string, rows: [string, string[]][]): void => {
-    page.drawText(title, { x: LEFT, y, size: 12, font: bold, color: HEADER });
-    y -= 3 * MM;
-    page.drawLine({ start: { x: LEFT, y }, end: { x: LEFT + WIDTH, y }, thickness: 0.8, color: HEADER });
-    y -= 6 * MM;
-    for (const [label, values] of rows) {
-      page.drawText(safe(label), { x: LEFT, y, size: 10, font: bold });
-      let first = true;
-      for (const v of values.length ? values : ['']) {
-        for (const l of wrap(safe(v), regular, 10, WIDTH - LABEL_W)) {
-          page.drawText(l, { x: LEFT + LABEL_W, y, size: 10, font: regular });
-          y -= 5 * MM;
-          first = false;
+  page.drawText(safe(data.customerName), { x: LEFT, y, size: 18, font: semi, color: BLUE });
+  y -= 7 * MM;
+  if (data.brand) { page.drawText(safe(data.brand), { x: LEFT, y, size: 12, font: light, color: BLUE }); }
+  y -= 14 * MM;
+
+  const section = (title: string, rows: Row[]): void => {
+    page.drawText(title, { x: LEFT, y, size: 11, font: semi, color: BLUE });
+    y -= 7 * MM;
+    for (const r of rows) {
+      page.drawText(safe(r.label), { x: LEFT, y, size: 8.5, font: medium, color: LABEL });
+      for (const v of r.values.length ? r.values : ['']) {
+        for (const l of wrap(safe(v), light, 8.5, WIDTH - LABEL_W)) {
+          page.drawText(l, { x: LEFT + LABEL_W, y, size: 8.5, font: light, color: r.red ? RED : rgb(0, 0, 0) });
+          y -= 4.6 * MM;
         }
       }
-      if (first) y -= 5 * MM;
-      y -= 1.5 * MM;
+      if (!r.values.length) y -= 4.6 * MM;
+      y += 1.2 * MM;
+      page.drawLine({ start: { x: LEFT, y }, end: { x: LEFT + WIDTH, y }, thickness: 0.6, color: RULE });
+      y -= 5 * MM;
     }
-    y -= 6 * MM;
+    y -= 4 * MM;
   };
 
   section('Job details', [
-    ['Job number', [data.jobNumber]],
-    ['Customer', [data.customerName]],
-    ['Batch code', [data.batchCode]],
-    ['File name', [data.fileName]],
-    ['Date submitted', [data.dateSubmitted]],
+    { label: 'Imprint Job Number', values: [data.jobNumber] },
+    { label: 'Batch code', values: [data.batchCode] },
+    { label: 'File name', values: [data.fileName] },
+    { label: 'Date submitted', values: [data.dateSubmitted] },
   ]);
   section('Production details', [
-    ['Print method', [data.printMethod]],
-    ['Total mailpieces', [data.totalMailpieces.toLocaleString('en-GB')]],
-    ['Total pages', [data.totalPages.toLocaleString('en-GB')]],
+    { label: 'Print method', values: [data.printMethod] },
+    { label: 'Total mailpieces', values: [data.totalMailpieces.toLocaleString('en-GB')] },
+    { label: 'Total pages', values: [data.totalPages.toLocaleString('en-GB')] },
   ]);
-  const fulfil: [string, string[]][] = [
-    ['Department', [data.department]],
-    ['Envelope', [data.envelope]],
-  ];
-  if (data.inserts.length) fulfil.push(['Inserts', data.inserts]);
-  fulfil.push(['Postal provider', [data.postalProvider]], ['Postal service', [data.postalService]], ['Postal format', [data.postalFormat]],
-    ['Weight bands', data.weightBands]);
-  if (data.returnAddress) fulfil.push(['Return address', [data.returnAddress]]);
+  const fulfil: Row[] = [{ label: 'Department', values: [data.department] }, { label: 'Envelope', values: [data.envelope] }];
+  if (data.inserts.length) fulfil.push({ label: 'Inserts', values: data.inserts, red: true });
+  fulfil.push({ label: 'Postal provider', values: [data.postalProvider] }, { label: 'Postal service', values: [data.postalService] },
+    { label: 'Postal format', values: [data.postalFormat] }, { label: 'Weight bands', values: data.weightBands },
+    { label: 'Return address', values: data.returnAddress ? [data.returnAddress] : [] });
   section('Fulfilment details', fulfil);
-  drawPageFooter(page, regular, data);
+  footer(page, light, data);
   return doc.save();
 }
 
-function drawPageFooter(page: PDFPage, font: PDFFont, data: RunSheetData): void {
-  page.drawText(safe(`Batch ${data.batchCode}`), { x: LEFT, y: 10 * MM, size: 8, font, color: rgb(0.4, 0.4, 0.4) });
+function footer(page: PDFPage, font: PDFFont, data: RunSheetData): void {
+  page.drawText(safe(`Batch ${data.batchCode}`), { x: LEFT, y: 10 * MM, size: 7, font, color: rgb(0.5, 0.5, 0.5) });
 }
 
 /** Merges single-page PDFs (already rendered) into one document, in the order given. */
