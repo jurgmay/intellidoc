@@ -1,8 +1,8 @@
 import sql from 'mssql';
 import { ConflictError, NotFoundError, ValidationError } from '../errors.js';
-import { describeBecameCustomer, describeBecameSubAccount, describeDetailsChange, describeEnvelope, describeEnvelopesMode, describeLeftAsCustomer, describeMatchRules, describeSequenceRules, describeSubAccountOf, noChildCustomers } from './describe.js';
+import { describeBecameCustomer, describeBecameSubAccount, describeDetailsChange, describeEnvelope, describeMode, describeLeftAsCustomer, describeMatchRules, describeSequenceRules, describeSubAccountOf, noChildCustomers } from './describe.js';
 import {
-  FLAGS, type AuditEntry, type CustomerDetail, type CustomerDetailsInput, type CustomerRow, type CustomerStore, type EnvelopeInput, type EnvelopesMode, type FlagKey, type InheritedEnvelopeView, type Lookups, type MatchRule, type SequenceRule,
+  FLAGS, SETTINGS, type AuditEntry, type CustomerDetail, type CustomerDetailsInput, type CustomerRow, type CustomerStore, type EnvelopeInput, type InheritMode, type FlagKey, type InheritedEnvelopeView, type InheritedSettings, type Lookups, type MatchRule, type ParentView, type SequenceRule, type SettingKey, type Modes,
 } from './types.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -14,6 +14,7 @@ const FLAG_COLUMNS: Record<FlagKey, string> = {
   isUseMrdf: 'is_use_mrdf', isTesting: 'is_testing', isDeleted: 'is_deleted',
 };
 
+const MODE_COLUMNS: Record<SettingKey, string> = { envelopes: 'envelopes_mode', brands: 'brands_mode', matching: 'matching_mode', sequence: 'sequence_mode', emails: 'emails_mode' };
 const isDuplicate = (e: unknown): boolean => { const n = (e as { number?: number }).number; return n === 2627 || n === 2601; };
 const rateLabel = (r: R): string => `${r.provider} – ${r.service} (${r.format}), ${r.min_weight_g <= 1 ? 'up to ' : `${r.min_weight_g}–`}${r.max_weight_g}g`;
 
@@ -70,7 +71,7 @@ export class MssqlCustomerStore implements CustomerStore {
 
   async get(id: number): Promise<CustomerDetail> {
     const q = (text: string) => this.pool.request().input('id', sql.Int, id).query(text);
-    const [c, accts, brands, envs, match, seq, emails, kids, invOpts, inheritedRows] = await Promise.all([
+    const [c, accts, brands, envs, match, seq, emails, kids, invOpts, inheritedRows, inhBrands, inhRules, inhSeq, inhEmails, inhSingles] = await Promise.all([
       q(`SELECT a.*, bk.name AS batching_key, sk.name AS pack_sequence_key, par.account_id AS p_id, par.account_code AS p_code, par.name AS p_name, inv.account_id AS i_id, inv.account_code AS i_code, inv.name AS i_name FROM idoc.account a
          LEFT JOIN idoc.account par ON par.account_id = a.parent_account_id
          LEFT JOIN idoc.account inv ON inv.account_id = a.invoicing_account_id
@@ -120,6 +121,25 @@ export class MssqlCustomerStore implements CustomerStore {
          LEFT JOIN idoc.brand b ON b.brand_id = e.brand_id
          WHERE src.account_id = @id AND src.source_account_id <> @id AND e.is_deleted = 0
          ORDER BY src.depth, b.name, e.delivery_band, r.max_weight_g, e.reference`),
+      // the other groups: rows that come from the parents, nearest first
+      q(`SELECT x.name, src.depth, sa.account_id AS from_id, sa.account_code AS from_code, sa.name AS from_name
+         FROM idoc.v_account_setting_source src JOIN idoc.account sa ON sa.account_id = src.source_account_id JOIN idoc.brand x ON x.account_id = src.source_account_id
+         WHERE src.account_id = @id AND src.setting = N'brands' AND src.source_account_id <> @id ORDER BY src.depth, x.name`),
+      q(`SELECT m.is_include, k.name, m.passthrough_value, src.depth, sa.account_id AS from_id, sa.account_code AS from_code, sa.name AS from_name
+         FROM idoc.v_account_setting_source src JOIN idoc.account sa ON sa.account_id = src.source_account_id
+         JOIN idoc.address_match_rule m ON m.account_id = src.source_account_id JOIN idoc.passthrough_key k ON k.passthrough_key_id = m.passthrough_key_id
+         WHERE src.account_id = @id AND src.setting = N'matching' AND src.source_account_id <> @id ORDER BY src.depth, m.sequence_no`),
+      q(`SELECT x.passthrough_value, x.sequence_number, src.depth, sa.account_id AS from_id, sa.account_code AS from_code, sa.name AS from_name
+         FROM idoc.v_account_setting_source src JOIN idoc.account sa ON sa.account_id = src.source_account_id JOIN idoc.pack_sequence_rule x ON x.account_id = src.source_account_id
+         WHERE src.account_id = @id AND src.setting = N'sequence' AND src.source_account_id <> @id ORDER BY src.depth, x.sequence_number, x.passthrough_value`),
+      q(`SELECT x.email, src.depth, sa.account_id AS from_id, sa.account_code AS from_code, sa.name AS from_name
+         FROM idoc.v_account_setting_source src JOIN idoc.account sa ON sa.account_id = src.source_account_id JOIN idoc.account_notification_email x ON x.account_id = src.source_account_id
+         WHERE src.account_id = @id AND src.setting = N'emails' AND src.source_account_id <> @id ORDER BY src.depth, x.email`),
+      // the single values (address matching, batching key, pack sequence key) of the nearest source of the matching and sequence groups
+      q(`SELECT src.setting, src.depth, a.is_address_matching, bk.name AS batching_key, sk.name AS seq_key, a.account_id AS from_id, a.account_code AS from_code, a.name AS from_name
+         FROM idoc.v_account_setting_source src JOIN idoc.account a ON a.account_id = src.source_account_id
+         LEFT JOIN idoc.passthrough_key bk ON bk.passthrough_key_id = a.batching_key_id LEFT JOIN idoc.passthrough_key sk ON sk.passthrough_key_id = a.pack_sequence_key_id
+         WHERE src.account_id = @id AND src.setting IN (N'matching', N'sequence') ORDER BY src.depth`),
     ]);
     const a = c.recordset[0] as R | undefined;
     if (!a) throw new NotFoundError('Customer not found');
@@ -140,8 +160,9 @@ export class MssqlCustomerStore implements CustomerStore {
         id: r.account_envelope_id, brandId: r.brand_id, brandName: r.brand, deliveryBand: r.delivery_band, postalRateId: r.postal_rate_id, rateLabel: rateLabel(r),
         stockItemId: r.outer_stock_item_id, stockCode: r.stock_code, stockDescription: r.description, reference: r.reference, externalName: r.external_name, isOversticker: !!r.is_oversticker,
       })),
-      envelopesMode: a.envelopes_mode as EnvelopesMode,
+      modes: Object.fromEntries(SETTINGS.map((k) => [k, a[MODE_COLUMNS[k]] as InheritMode])) as Modes,
       inheritedEnvelopes: this.inherited(inheritedRows.recordset as R[], (envs.recordset as R[])),
+      inherited: this.inheritedSettings(a, { brands: brands.recordset, match: match.recordset, seq: seq.recordset, emails: emails.recordset }, { brands: inhBrands.recordset, rules: inhRules.recordset, seq: inhSeq.recordset, emails: inhEmails.recordset, singles: inhSingles.recordset }),
       matchRules: (match.recordset as R[]).map((r) => ({ isInclude: !!r.is_include, key: r.name, value: r.passthrough_value })),
       sequenceRules: (seq.recordset as R[]).map((r) => ({ value: r.passthrough_value, number: r.sequence_number })),
       emails: (emails.recordset as R[]).map((r) => r.email),
@@ -163,14 +184,37 @@ export class MssqlCustomerStore implements CustomerStore {
     return out;
   }
 
-  async setEnvelopesMode(customerId: number, mode: EnvelopesMode, by: string): Promise<void> {
+  /** What the parents add to each list (a nearer entry, or this customer's own, with the same key replaces a further one) and, for INHERIT, the single values. */
+  private inheritedSettings(a: R, own: { brands: R[]; match: R[]; seq: R[]; emails: R[] }, from: { brands: R[]; rules: R[]; seq: R[]; emails: R[]; singles: R[] }): InheritedSettings {
+    const src = (r: R): ParentView => ({ id: r.from_id, code: r.from_code, name: r.from_name });
+    const pick = <T>(rows: R[], key: (r: R) => string, ownKeys: string[], make: (r: R) => T): T[] => {
+      const seen = new Set(ownKeys); const out: T[] = [];
+      for (const r of rows) { const k = key(r); if (seen.has(k)) continue; seen.add(k); out.push(make(r)); }
+      return out;
+    };
+    const ruleKey = (inc: boolean, key: string, value: string | null): string => `${inc}|${key.toLowerCase()}|${(value ?? '').toLowerCase()}`;
+    const single = (setting: string): R | undefined => (from.singles.find((r) => r.setting === setting));
+    const m = a.matching_mode === 'INHERIT' ? single('matching') : undefined; const q = a.sequence_mode === 'INHERIT' ? single('sequence') : undefined;
+    return {
+      brands: pick(from.brands, (r) => String(r.name).toLowerCase(), own.brands.map((r) => String(r.name).toLowerCase()), (r) => ({ name: r.name, from: src(r) })),
+      matchRules: pick(from.rules, (r) => ruleKey(!!r.is_include, r.name, r.passthrough_value), own.match.map((r) => ruleKey(!!r.is_include, r.name, r.passthrough_value)),
+        (r) => ({ isInclude: !!r.is_include, key: r.name, value: r.passthrough_value, from: src(r) })),
+      sequenceRules: pick(from.seq, (r) => String(r.passthrough_value).toLowerCase(), own.seq.map((r) => String(r.passthrough_value).toLowerCase()), (r) => ({ value: r.passthrough_value, number: r.sequence_number, from: src(r) })),
+      emails: pick(from.emails, (r) => String(r.email).toLowerCase(), own.emails.map((r) => String(r.email).toLowerCase()), (r) => ({ email: r.email, from: src(r) })),
+      matching: m ? { isAddressMatching: !!m.is_address_matching, batchingKey: m.batching_key ?? null, from: src(m) } : null,
+      sequence: q ? { key: q.seq_key ?? null, from: src(q) } : null,
+    };
+  }
+
+  async setMode(customerId: number, setting: SettingKey, mode: InheritMode, by: string): Promise<void> {
     await this.mustBeCustomer(undefined, customerId);
-    const cur = (await this.pool.request().input('id', sql.Int, customerId).query('SELECT envelopes_mode, parent_account_id FROM idoc.account WHERE account_id = @id')).recordset[0] as R;
-    if (mode !== 'OWN' && cur.parent_account_id === null) throw new ValidationError({ mode: 'This customer has no parent to take envelopes from. Choose a parent on the Details tab first.' });
-    if (cur.envelopes_mode === mode) return;
+    const col = MODE_COLUMNS[setting];
+    const cur = (await this.pool.request().input('id', sql.Int, customerId).query(`SELECT ${col} AS mode, parent_account_id FROM idoc.account WHERE account_id = @id`)).recordset[0] as R;
+    if (mode !== 'OWN' && cur.parent_account_id === null) throw new ValidationError({ mode: 'This customer has no parent to take these settings from. Choose a parent on the Details tab first.' });
+    if (cur.mode === mode) return;
     await this.tx(async (t) => {
-      await this.req(t).input('id', sql.Int, customerId).input('m', sql.NVarChar(10), mode).query('UPDATE idoc.account SET envelopes_mode = @m WHERE account_id = @id');
-      await this.audit(t, customerId, by, describeEnvelopesMode(cur.envelopes_mode as EnvelopesMode, mode));
+      await this.req(t).input('id', sql.Int, customerId).input('m', sql.NVarChar(10), mode).query(`UPDATE idoc.account SET ${col} = @m WHERE account_id = @id`);
+      await this.audit(t, customerId, by, describeMode(setting, cur.mode as InheritMode, mode));
     });
   }
 
@@ -249,9 +293,9 @@ export class MssqlCustomerStore implements CustomerStore {
         .input('mis', sql.NVarChar(50), input.misJobNumber).input('pmis', sql.NVarChar(50), input.pendingJobNumber).input('rday', sql.TinyInt, input.jobNumberRolloverDay).input('pfrom', sql.NVarChar(10), pendingFrom).input('ret', sql.NVarChar(500), input.returnAddress)
         .input('bk', sql.Int, await this.keyId(t, input.batchingKey)).input('sk', sql.Int, await this.keyId(t, input.packSequenceKey));
       const sets = FLAGS.map((f) => { req.input(f, sql.Bit, input.flags[f]); return `${FLAG_COLUMNS[f]} = @${f}`; });
-      await req.query(`UPDATE idoc.account SET envelopes_mode = CASE WHEN @par IS NULL THEN N'OWN' ELSE envelopes_mode END, parent_account_id = @par, invoicing_account_id = @inv, account_code = @code, name = @name, mis_job_number = @mis, pending_mis_job_number = @pmis, pending_job_number_from = CAST(@pfrom AS DATE), job_number_rollover_day = @rday, return_address = @ret, batching_key_id = @bk, pack_sequence_key_id = @sk, ${sets.join(', ')} WHERE account_id = @id`);
+      await req.query(`UPDATE idoc.account SET ${SETTINGS.map((k) => `${MODE_COLUMNS[k]} = CASE WHEN @par IS NULL THEN N'OWN' ELSE ${MODE_COLUMNS[k]} END`).join(', ')}, parent_account_id = @par, invoicing_account_id = @inv, account_code = @code, name = @name, mis_job_number = @mis, pending_mis_job_number = @pmis, pending_job_number_from = CAST(@pfrom AS DATE), job_number_rollover_day = @rday, return_address = @ret, batching_key_id = @bk, pack_sequence_key_id = @sk, ${sets.join(', ')} WHERE account_id = @id`);
       for (const l of lines) await this.audit(t, id, by, l);
-      if (input.parentId === null && old.envelopesMode !== 'OWN') await this.audit(t, id, by, describeEnvelopesMode(old.envelopesMode, 'OWN'));
+      if (input.parentId === null) for (const k of SETTINGS) if (old.modes[k] !== 'OWN') await this.audit(t, id, by, describeMode(k, old.modes[k], 'OWN'));
     }, `Account code "${input.code}" is already in use`);
   }
 

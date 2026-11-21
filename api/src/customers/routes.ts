@@ -3,7 +3,7 @@ import { NotFoundError } from '../errors.js';
 import { userOf } from '../settings/routes.js';
 import { FLAG_LABELS } from './describe.js';
 import type { CustomerStore } from './types.js';
-import { parseAccountUpdate, parseBrandName, parseDetails, parseEmailList, parseEnvelope, parseEnvelopesMode, parseMatchRules, parseNewAccount, parseSequenceRules } from './validate.js';
+import { parseAccountUpdate, parseBrandName, parseDetails, parseEmailList, parseEnvelope, parseInheritance, parseMatchRules, parseNewAccount, parseSequenceRules } from './validate.js';
 
 type Body = Record<string, unknown> | null;
 type IdParams = { id: string };
@@ -89,8 +89,10 @@ export function customerRoutes(app: FastifyInstance, store: CustomerStore): void
     return reply.code(204).send();
   });
 
-  app.put<{ Params: IdParams }>('/api/customers/:id/envelopes-mode', async (req, reply) => {
-    await store.setEnvelopesMode(idOf(req.params.id), parseEnvelopesMode(req.body as Body), userOf(req));
+  // Where a group of settings comes from: its own, the parent's, or the parent's plus its own
+  app.put<{ Params: IdParams }>('/api/customers/:id/inheritance', async (req, reply) => {
+    const { setting, mode } = parseInheritance(req.body as Body);
+    await store.setMode(idOf(req.params.id), setting, mode, userOf(req));
     return reply.code(204).send();
   });
 

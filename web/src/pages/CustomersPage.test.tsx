@@ -10,7 +10,7 @@ import { CustomersPage } from './CustomersPage';
 
 const flags = { isAddressMatching: true, isArchiveMailpieces: false, isCreateOutputFiles: false, isSso: false, isSameDayService: false, isUseMrdf: false, isTesting: false, isDeleted: false };
 const detail = () => ({
-  id: 7, code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', pendingJobNumber: '24601', pendingFrom: '2026-12-01', jobNumberRolloverDay: 1, envelopesMode: 'OWN', inheritedEnvelopes: [], invoicing: null, invoicingOptions: [{ id: 7, code: 'ACME', name: 'Acme Energy Ltd' }], returnAddress: 'PO Box 1', colourMode: null, flags, batchingKey: 'Department', packSequenceKey: null,
+  id: 7, code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', pendingJobNumber: '24601', pendingFrom: '2026-12-01', jobNumberRolloverDay: 1, modes: { envelopes: 'OWN', brands: 'OWN', matching: 'OWN', sequence: 'OWN', emails: 'OWN' }, inheritedEnvelopes: [], inherited: { brands: [], matchRules: [], sequenceRules: [], emails: [], matching: null, sequence: null }, invoicing: null, invoicingOptions: [{ id: 7, code: 'ACME', name: 'Acme Energy Ltd' }], returnAddress: 'PO Box 1', colourMode: null, flags, batchingKey: 'Department', packSequenceKey: null,
   parent: null, children: [{ id: 9, code: 'ACME-HL', name: 'Highline Solicitors', isDeleted: false }],
   accounts: [{ id: 8, code: 'ACME-SC', name: 'Acme Scotland', isDeleted: false }],
   brands: [{ id: 21, name: 'Home', usage: 1 }, { id: 22, name: 'Business', usage: 0 }],
@@ -193,7 +193,7 @@ describe('Envelope inheritance', () => {
     expect(screen.getByText(/Choose a parent customer on the Details tab/)).toBeInTheDocument();
   });
   it('shows the parent list read only with where each setting comes from', async () => {
-    withParent({ envelopesMode: 'EXTEND', inheritedEnvelopes: [inherited] });
+    withParent({ modes: { ...detail().modes, envelopes: 'EXTEND' }, inheritedEnvelopes: [inherited] });
     wrap('/customers/7');
     await userEvent.click(await screen.findByRole('tab', { name: /Envelopes/ }));
     expect(await screen.findByText('From the parent')).toBeInTheDocument();
@@ -207,10 +207,10 @@ describe('Envelope inheritance', () => {
     const combo = await screen.findByRole('combobox', { name: 'Where the envelope list comes from' });
     await userEvent.click(combo);
     await userEvent.click(within(document.getElementById(combo.getAttribute('aria-controls')!)!).getByRole('option', { name: "The parent's list plus this customer's own", hidden: true }));
-    await waitFor(() => expect(calls.find((c) => c.url === '/api/customers/7/envelopes-mode')?.body).toEqual({ mode: 'EXTEND' }));
+    await waitFor(() => expect(calls.find((c) => c.url === '/api/customers/7/inheritance')?.body).toEqual({ setting: 'envelopes', mode: 'EXTEND' }));
   });
   it('does not allow adding an envelope while the parent list is used instead', async () => {
-    withParent({ envelopesMode: 'INHERIT', inheritedEnvelopes: [inherited] });
+    withParent({ modes: { ...detail().modes, envelopes: 'INHERIT' }, inheritedEnvelopes: [inherited] });
     wrap('/customers/7');
     await userEvent.click(await screen.findByRole('tab', { name: /Envelopes/ }));
     expect(await screen.findByRole('button', { name: /Add envelope/ })).toBeDisabled();
@@ -401,5 +401,66 @@ describe('Sub-account', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Give it its own settings' }));
     await waitFor(() => expect(calls.some((c) => c.url === '/api/accounts/8/make-customer' && c.method === 'POST')).toBe(true));
     expect(await screen.findByRole('heading', { name: 'Acme Scotland' })).toBeInTheDocument();
+  });
+});
+
+describe('Inheritance of brands, matching, pack order and e-mails', () => {
+  const odevo = { id: 5, code: 'ODEVO', name: 'Odevo' };
+  const modes = (over: Record<string, string> = {}) => ({ envelopes: 'OWN', brands: 'OWN', matching: 'OWN', sequence: 'OWN', emails: 'OWN', ...over });
+  const withParent = (over: Record<string, unknown> = {}) => {
+    respond = ((prev) => (url, method, body) => (url === '/api/customers/7' && method === 'GET' ? { status: 200, json: { ...detail(), parent: odevo, ...over } } : prev(url, method, body)))(respond);
+  };
+  const choose = async (name: string, option: string) => {
+    const combo = await screen.findByRole('combobox', { name });
+    await userEvent.click(combo);
+    await userEvent.click(within(document.getElementById(combo.getAttribute('aria-controls')!)!).getByRole('option', { name: option, hidden: true }));
+  };
+
+  it('each group cannot be changed without a parent, and says why', async () => {
+    wrap('/customers/7');
+    for (const [tab, label] of [['Brands', 'Where the brand list comes from'], ['Matching', 'Where the matching settings come from'], ['Notifications', 'Where the notification addresses come from']] as const) {
+      await userEvent.click(await screen.findByRole('tab', { name: new RegExp(tab) }));
+      expect(await screen.findByRole('combobox', { name: label })).toBeDisabled();
+    }
+  });
+
+  it('brands: sends the choice, shows the parent’s brands read only, and does not allow adding while the parent’s list is used', async () => {
+    withParent({ modes: modes({ brands: 'INHERIT' }), inherited: { ...detail().inherited, brands: [{ name: 'Parent brand', from: odevo }] } });
+    wrap('/customers/7');
+    await userEvent.click(await screen.findByRole('tab', { name: /Brands/ }));
+    expect(await screen.findByText('Parent brand')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Add brand/ })).toBeDisabled();
+    expect(screen.getByText(/own brands are kept but not used/)).toBeInTheDocument();
+    await choose('Where the brand list comes from', "The parent's list plus this customer's own");
+    await waitFor(() => expect(calls.find((c) => c.url === '/api/customers/7/inheritance')?.body).toEqual({ setting: 'brands', mode: 'EXTEND' }));
+  });
+
+  it('matching: takes the parent’s values and rules, which are shown and cannot be edited', async () => {
+    withParent({ modes: modes({ matching: 'INHERIT' }), inherited: { ...detail().inherited, matching: { isAddressMatching: false, batchingKey: 'Parent key', from: odevo }, matchRules: [{ isInclude: false, key: 'Doc Type', value: 'Final Demand', from: odevo }] } });
+    wrap('/customers/7');
+    await userEvent.click(await screen.findByRole('tab', { name: /Matching/ }));
+    expect(await screen.findByText(/Exclude Doc Type = "Final Demand"/)).toBeInTheDocument();
+    const key = screen.getByRole('combobox', { name: 'Batching key' });
+    expect(key).toHaveValue('Parent key');
+    expect(key).toBeDisabled();
+    expect(screen.getByRole('switch', { name: 'Match addresses for this customer' })).toBeDisabled();
+    expect(screen.getByRole('switch', { name: 'Match addresses for this customer' })).not.toBeChecked(); // the parent's value, not this customer's own (on)
+    expect(screen.queryByRole('button', { name: 'Add rule' })).not.toBeInTheDocument();
+  });
+
+  it('pack order: sends its own choice, separate from matching', async () => {
+    withParent();
+    wrap('/customers/7');
+    await userEvent.click(await screen.findByRole('tab', { name: /Matching/ }));
+    await choose('Where the pack order comes from', "The parent's settings");
+    await waitFor(() => expect(calls.find((c) => c.url === '/api/customers/7/inheritance')?.body).toEqual({ setting: 'sequence', mode: 'INHERIT' }));
+  });
+
+  it('notification e-mails: shows the parent’s addresses and locks the box while the parent’s list is used', async () => {
+    withParent({ modes: modes({ emails: 'INHERIT' }), inherited: { ...detail().inherited, emails: [{ email: 'ops@odevo.example', from: odevo }] } });
+    wrap('/customers/7');
+    await userEvent.click(await screen.findByRole('tab', { name: /Notifications/ }));
+    expect(await screen.findByText('ops@odevo.example')).toBeInTheDocument();
+    expect(screen.getByLabelText('Notification e-mail addresses')).toBeDisabled();
   });
 });

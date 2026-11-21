@@ -166,16 +166,16 @@ describe.skipIf(!cs)('MssqlCustomerStore', { timeout: 120_000 }, () => {
     const kid = await store.create({ code: 'EI-KID', name: 'Env kid' }, 'tester');
     await store.addEnvelope(top, env({ reference: 'A' }), 'tester');
     await store.addEnvelope(top, env({ reference: 'B' }), 'tester');
-    await expect(store.setEnvelopesMode(kid, 'INHERIT', 'tester')).rejects.toBeInstanceOf(ValidationError);
+    await expect(store.setMode(kid, 'envelopes', 'INHERIT', 'tester')).rejects.toBeInstanceOf(ValidationError);
     const flags = (await store.get(kid)).flags;
     const setParent = (p: number | null) => store.updateDetails(kid, { code: 'EI-KID', name: 'Env kid', misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, returnAddress: null, batchingKey: null, packSequenceKey: null, parentId: p, flags }, 'tester');
     await setParent(top);
-    await store.setEnvelopesMode(kid, 'INHERIT', 'tester');
+    await store.setMode(kid, 'envelopes', 'INHERIT', 'tester');
     let d = await store.get(kid);
-    expect(d.envelopesMode).toBe('INHERIT');
+    expect(d.modes.envelopes).toBe('INHERIT');
     expect(d.inheritedEnvelopes.map((e) => e.reference).sort()).toEqual(['A', 'B']);
     expect(d.inheritedEnvelopes[0]!.from).toMatchObject({ id: top, code: 'EI-TOP' });
-    await store.setEnvelopesMode(kid, 'EXTEND', 'tester');
+    await store.setMode(kid, 'envelopes', 'EXTEND', 'tester');
     await store.addEnvelope(kid, env({ reference: 'A' }), 'tester'); // same key as the parent's A: replaces it
     await store.addEnvelope(kid, env({ reference: 'C' }), 'tester');
     d = await store.get(kid);
@@ -184,7 +184,51 @@ describe.skipIf(!cs)('MssqlCustomerStore', { timeout: 120_000 }, () => {
     expect((await store.history(kid, 10)).map((h) => h.summary)).toContain("Envelopes: the parent's list → the parent's list plus its own");
     // removing the parent puts it back on its own list
     await setParent(null);
-    expect((await store.get(kid)).envelopesMode).toBe('OWN');
+    expect((await store.get(kid)).modes.envelopes).toBe('OWN');
+  });
+
+  it('brands, matching, pack sequence and e-mails: INHERIT and EXTEND read the parent, a nearer entry wins, single values come from the nearest source', async () => {
+    const top = await store.create({ code: 'SG-TOP', name: 'Sg top' }, 'tester');
+    const kid = await store.create({ code: 'SG-KID', name: 'Sg kid' }, 'tester');
+    await store.addBrand(top, 'Home', 'tester'); await store.addBrand(top, 'Business', 'tester');
+    await store.setMatchRules(top, [{ isInclude: true, key: 'Department', value: null }, { isInclude: false, key: 'Doc Type', value: 'Final Demand' }], 'tester');
+    await store.setSequenceRules(top, [{ value: 'Bill', number: 1 }, { value: 'Reminder', number: 2 }], 'tester');
+    await store.setEmails(top, ['print@sg.example', 'ops@sg.example'], 'tester');
+    const topFlags = (await store.get(top)).flags;
+    const detailsOf = (id: number, code: string, name: string, parentId: number | null, over: Partial<{ batchingKey: string | null; packSequenceKey: string | null }> = {}, fl = (undefined as unknown as typeof topFlags)) =>
+      ({ code, name, misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, returnAddress: null, batchingKey: null, packSequenceKey: null, parentId, flags: fl ?? topFlags, ...over });
+    await store.updateDetails(top, detailsOf(top, 'SG-TOP', 'Sg top', null, { batchingKey: 'Department', packSequenceKey: 'Doc Type' }, { ...topFlags, isAddressMatching: true }), 'tester');
+    await expect(store.setMode(kid, 'brands', 'INHERIT', 'tester')).rejects.toBeInstanceOf(ValidationError); // no parent yet
+    await store.updateDetails(kid, detailsOf(kid, 'SG-KID', 'Sg kid', top), 'tester');
+    for (const g of ['brands', 'matching', 'sequence', 'emails'] as const) await store.setMode(kid, g, 'INHERIT', 'tester');
+    let d = await store.get(kid);
+    expect(d.modes).toEqual({ envelopes: 'OWN', brands: 'INHERIT', matching: 'INHERIT', sequence: 'INHERIT', emails: 'INHERIT' });
+    expect(d.brands).toEqual([]);
+    expect(d.inherited.brands.map((b) => b.name).sort()).toEqual(['Business', 'Home']);
+    expect(d.inherited.brands[0]!.from).toMatchObject({ id: top, code: 'SG-TOP' });
+    expect(d.inherited.matchRules).toHaveLength(2);
+    expect(d.inherited.sequenceRules.map((r) => r.value)).toEqual(['Bill', 'Reminder']);
+    expect(d.inherited.emails.map((e) => e.email).sort()).toEqual(['ops@sg.example', 'print@sg.example']);
+    expect(d.inherited.matching).toMatchObject({ isAddressMatching: true, batchingKey: 'Department', from: { code: 'SG-TOP' } });
+    expect(d.inherited.sequence).toMatchObject({ key: 'Doc Type', from: { code: 'SG-TOP' } });
+    // EXTEND: its own entries replace the parent's with the same key; the single values are its own again
+    for (const g of ['brands', 'matching', 'sequence', 'emails'] as const) await store.setMode(kid, g, 'EXTEND', 'tester');
+    await store.addBrand(kid, 'home', 'tester'); await store.addBrand(kid, 'Extra', 'tester');
+    await store.setSequenceRules(kid, [{ value: 'Reminder', number: 5 }], 'tester');
+    await store.setEmails(kid, ['PRINT@sg.example'], 'tester');
+    await store.setMatchRules(kid, [{ isInclude: true, key: 'Department', value: null }], 'tester');
+    d = await store.get(kid);
+    expect(d.inherited.brands.map((b) => b.name)).toEqual(['Business']);
+    expect(d.inherited.sequenceRules.map((r) => r.value)).toEqual(['Bill']);
+    expect(d.inherited.emails.map((e) => e.email)).toEqual(['ops@sg.example']);
+    expect(d.inherited.matchRules).toEqual([expect.objectContaining({ isInclude: false, key: 'Doc Type' })]);
+    expect(d.inherited.matching).toBeNull(); expect(d.inherited.sequence).toBeNull();
+    expect((await store.history(kid, 30)).map((h) => h.summary)).toEqual(expect.arrayContaining(["Brands: its own list → the parent's list", "Matching: the parent's settings → the parent's settings plus its own"]));
+    // removing the parent puts every group back on its own
+    await store.updateDetails(kid, detailsOf(kid, 'SG-KID', 'Sg kid', null), 'tester');
+    d = await store.get(kid);
+    expect(d.modes).toEqual({ envelopes: 'OWN', brands: 'OWN', matching: 'OWN', sequence: 'OWN', emails: 'OWN' });
+    expect(d.inherited).toEqual({ brands: [], matchRules: [], sequenceRules: [], emails: [], matching: null, sequence: null });
   });
 
   it('match rules, pack sequence and e-mails are replaced as a list and audited', async () => {

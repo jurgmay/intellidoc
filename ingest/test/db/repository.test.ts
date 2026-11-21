@@ -117,6 +117,49 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     }
   });
 
+  it('settings inheritance: brands, matching, pack sequence read from the parent under INHERIT, add up under EXTEND, and stay own under OWN', async () => {
+    await pool.request().query(`
+      INSERT INTO idoc.passthrough_key (name) VALUES (N'SetDept'), (N'SetDoc'), (N'SetRef');
+      INSERT INTO idoc.account (account_code, name, is_address_matching, batching_key_id, pack_sequence_key_id)
+        SELECT N'SET_P', N'Settings parent', 1, (SELECT passthrough_key_id FROM idoc.passthrough_key WHERE name = N'SetDept'), (SELECT passthrough_key_id FROM idoc.passthrough_key WHERE name = N'SetDoc');
+      INSERT INTO idoc.account (account_code, name, parent_account_id) SELECT N'SET_K', N'Settings kid', account_id FROM idoc.account WHERE account_code = N'SET_P';
+      INSERT INTO idoc.brand (account_id, name) SELECT account_id, v.n FROM idoc.account CROSS JOIN (VALUES (N'Home'), (N'Business')) v(n) WHERE account_code = N'SET_P';
+      INSERT INTO idoc.address_match_rule (account_id, sequence_no, is_include, passthrough_key_id, passthrough_value)
+        SELECT a.account_id, 1, 1, k.passthrough_key_id, NULL FROM idoc.account a, idoc.passthrough_key k WHERE a.account_code = N'SET_P' AND k.name = N'SetRef';
+      INSERT INTO idoc.pack_sequence_rule (account_id, passthrough_value, sequence_number) SELECT account_id, v.n, v.i FROM idoc.account CROSS JOIN (VALUES (N'Bill', 1), (N'Reminder', 2)) v(n, i) WHERE account_code = N'SET_P'`);
+    const kid = async () => (await loadReferenceData(pool)).accounts.get('SET_K')!;
+    const mode = (set: string) => pool.request().query(`UPDATE idoc.account SET ${set} WHERE account_code = N'SET_K'`);
+    // OWN (the default): nothing from the parent
+    let k = await kid();
+    expect(k.brands).toEqual([]); expect(k.matchingEnabled).toBe(false); expect(k.batchingKey).toBeNull(); expect(k.matchIncludeKeys).toEqual([]); expect(k.packSequence).toBeUndefined();
+    // INHERIT: the parent's list and the parent's single values
+    await mode(`brands_mode = N'INHERIT', matching_mode = N'INHERIT', sequence_mode = N'INHERIT'`);
+    k = await kid();
+    expect(k.brands.slice().sort()).toEqual(['Business', 'Home']);
+    expect(k.matchingEnabled).toBe(true); expect(k.batchingKey).toBe('SetDept'); expect(k.matchIncludeKeys).toEqual(['SetRef']);
+    expect(k.packSequence).toMatchObject({ key: 'SetDoc' }); expect([...k.packSequence!.rules]).toEqual([['Bill', 1], ['Reminder', 2]]);
+    // EXTEND: the parent's list plus its own; its own single values; a nearer number for the same value replaces the parent's
+    await pool.request().query(`
+      INSERT INTO idoc.brand (account_id, name) SELECT account_id, N'Extra' FROM idoc.account WHERE account_code = N'SET_K';
+      INSERT INTO idoc.pack_sequence_rule (account_id, passthrough_value, sequence_number) SELECT account_id, v.n, v.i FROM idoc.account CROSS JOIN (VALUES (N'Reminder', 5), (N'Final', 3)) v(n, i) WHERE account_code = N'SET_K';
+      UPDATE idoc.account SET pack_sequence_key_id = (SELECT passthrough_key_id FROM idoc.passthrough_key WHERE name = N'SetDoc') WHERE account_code = N'SET_K'`);
+    await mode(`brands_mode = N'EXTEND', matching_mode = N'EXTEND', sequence_mode = N'EXTEND'`);
+    k = await kid();
+    expect(k.brands.slice().sort()).toEqual(['Business', 'Extra', 'Home']);
+    expect(k.matchingEnabled).toBe(false); expect(k.batchingKey).toBeNull(); expect(k.matchIncludeKeys).toEqual(['SetRef']); // single values are its own; the rules add up
+    expect(Object.fromEntries(k.packSequence!.rules)).toEqual({ Reminder: 5, Final: 3, Bill: 1 });
+    // OWN again: only its own
+    await mode(`brands_mode = N'OWN', matching_mode = N'OWN', sequence_mode = N'OWN'`);
+    k = await kid();
+    expect(k.brands).toEqual(['Extra']); expect(k.matchIncludeKeys).toEqual([]); expect(Object.fromEntries(k.packSequence!.rules)).toEqual({ Reminder: 5, Final: 3 });
+    // a sub-account of the kid follows the kid's choice, whatever it is
+    await pool.request().query(`INSERT INTO idoc.account (account_code, name, parent_account_id, inherits_settings) SELECT N'SET_SUB', N'Settings sub', account_id, 1 FROM idoc.account WHERE account_code = N'SET_K'`);
+    expect((await loadReferenceData(pool)).accounts.get('SET_SUB')!.brands).toEqual(['Extra']);
+    // the mode needs a parent and one of the three values
+    await expect(pool.request().query(`INSERT INTO idoc.account (account_code, name, brands_mode) VALUES (N'SET_ORPHAN', N'Orphan', N'INHERIT')`)).rejects.toThrow(/ck_account_modes/);
+    await expect(mode(`emails_mode = N'SOMETIMES'`)).rejects.toThrow(/ck_account_modes/);
+  });
+
   it('invoicing account: the batch and mailpieces record it, and the run sheet prints its job number', async () => {
     await pool.request().query(`UPDATE idoc.account SET mis_job_number = N'1111' WHERE account_code = N'FEXCO_CUSTOMER'; UPDATE idoc.account SET mis_job_number = N'2222' WHERE account_code = N'FEXCO'`);
     try {
