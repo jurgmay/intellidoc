@@ -798,7 +798,9 @@ BEGIN
                    WHERE i.current_status <> d.current_status AND i.current_status IN (N'Printed', N'Enclosed', N'Despatched') AND j.status <> N'Received')
         THROW 50001, N'Production gate: a batch cannot be printed, enclosed or despatched until the PDF of its job has been received.', 1;
 END;
+GO
 
+/* ===========================================================================
    12. COSTING MODELS
    A costing model is a named price list that belongs to a customer (the account that holds the settings) and applies between two
    dates. A customer can have several over time; the one in force on the production date prices the mailpiece. A sub-account that
