@@ -91,8 +91,8 @@ describe('Hierarchy', () => {
     respond = ((prev) => (url, method, body) => (url.startsWith('/api/customers?') ? { status: 200, json: { rows: [row, other, child].sort((a, b) => (a.name < b.name ? -1 : 1)) } } : prev(url, method, body)))(respond);
     wrap('/customers');
     await screen.findByText('Highline Solicitors');
-    const names = screen.getAllByRole('row').slice(1).map((r) => within(r).getAllByRole('cell')[1]!.textContent);
-    expect(names).toEqual(['Acme Energy Ltd', 'Highline Solicitors', 'Zed Ltd']);
+    const names = screen.getAllByRole('row').slice(1).map((r) => within(r).getAllByRole('cell')[0]!.textContent);
+    expect(names).toEqual(['Acme Energy Ltd', '└ Highline Solicitors', 'Zed Ltd']);
   });
   it('says which parent a child belongs to when the parent is filtered out of the list', async () => {
     const child = { ...row, id: 9, code: 'ACME-HL', name: 'Highline Solicitors', parentId: 7, parentCode: 'ACME' };

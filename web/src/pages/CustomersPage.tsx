@@ -68,15 +68,15 @@ export function CustomersPage() {
           <Table highlightOnHover verticalSpacing="sm">
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Account code</Table.Th><Table.Th>Name</Table.Th><Table.Th>MIS job</Table.Th>
+                <Table.Th>Name</Table.Th><Table.Th>Account code</Table.Th><Table.Th>MIS job</Table.Th>
                 <Table.Th ta="right">Accounts</Table.Th><Table.Th ta="right">Brands</Table.Th><Table.Th ta="right">Envelopes</Table.Th><Table.Th>Flags</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
               {inHierarchy(rows).map(({ row: r, depth }) => (
                 <Table.Tr key={r.id} onClick={() => nav(`/customers/${r.id}`)} style={{ cursor: 'pointer' }}>
-                  <Table.Td pl={depth * 24 + 12}>{depth > 0 && <Text span c="dimmed">└ </Text>}{r.code}</Table.Td>
-                  <Table.Td fw={500}>{r.name}{depth === 0 && r.parentCode && <Text span size="xs" c="dimmed" fw={400}> · part of {r.parentCode}</Text>}</Table.Td>
+                  <Table.Td fw={500} pl={depth * 24 + 12}>{depth > 0 && <Text span c="dimmed" fw={400}>└ </Text>}{r.name}{depth === 0 && r.parentCode && <Text span size="xs" c="dimmed" fw={400}> · part of {r.parentCode}</Text>}</Table.Td>
+                  <Table.Td>{r.code}</Table.Td>
                   <Table.Td>{r.misJobNumber ?? <Text span c="dimmed">–</Text>}</Table.Td>
                   <Table.Td ta="right">{r.accountCount}</Table.Td>
                   <Table.Td ta="right">{r.brandCount}</Table.Td>
