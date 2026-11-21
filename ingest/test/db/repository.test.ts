@@ -387,10 +387,12 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     await ingest(d.xml, 'job-reprice-d.xml', 'job-reprice-d.pdf', { ref, pdf: new FakePdf(d.pages, '', ['mono', 'mono', 'mono', 'mono']), repo });
     const jobD = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-reprice-d'`);
     const customer = await scalar(`SELECT account_id AS n FROM idoc.job WHERE job_id = ${jobD}`);
-    // as if it had been ingested before any model existed
+    const re = new Repricer(process.env['INTELLIDOC_TEST_DB']!);
+    // earlier tests left mail of this customer unpriced: clear that first, so only job D is left to fill in
+    await re.run({ accountId: customer, from: null, to: null, overwrite: false });
+    // as if job D had been ingested before any model existed
     await pool.request().query(`DELETE FROM idoc.mailpiece_price_line WHERE mailpiece_id IN (SELECT mailpiece_id FROM idoc.mailpiece WHERE job_id = ${jobD});
       UPDATE idoc.mailpiece SET costing_model_id = NULL, production_cost = NULL, production_sell = NULL, postage_cost = NULL, postage_sell = NULL, priced_at = NULL WHERE job_id = ${jobD}`);
-    const re = new Repricer(process.env['INTELLIDOC_TEST_DB']!);
     try {
       const all = { accountId: customer, from: null, to: null, overwrite: false };
       const before = await re.preview(all);
