@@ -68,7 +68,7 @@ The data must not be held up by a missing PDF, so an XML is imported as soon as 
 
 A PDF that arrives before its XML waits in the inbox and is handled together with the XML as before. If the alert e-mail cannot be sent
 it is tried again at the next check (once a minute). Without `SMTP_HOST` the alerts are only written to the log (with a warning at start-up).
-`XML_FIRST=0` restores the old behaviour (wait for both files). Existing databases need the new `idoc.job` columns: `initDevDb.ts --reset`.
+Switching "Import an XML without waiting for its PDF" off in Settings restores the old behaviour (wait for both files). Existing databases need the new `idoc.job` columns: `initDevDb.ts --reset`.
 
 ### Settings (environment variables)
 
@@ -80,9 +80,7 @@ it is tried again at the next check (once a minute). Without `SMTP_HOST` the ale
 | `PDF_ENGINE` | `auto` (qpdf if installed, else built-in pdf-lib), `qpdf`, `pdflib` |
 | `CHECK_POSTCODES` | `1` warns when a pack's postcode is not on its first PDF page (needs qpdf + pdftotext) |
 | `LOG_FILE` | also append the log to this file |
-| `XML_FIRST` | `1` (default) imports an XML without waiting for its PDF; `0` waits for the pair |
-| `PDF_WAIT_MINUTES` / `PDF_REMINDER_MINUTES` | 30 / same as the wait: when to alert, and how often to repeat |
-| `ALERT_TO` | who is e-mailed, comma separated |
+| `XML_FIRST` / `PDF_WAIT_MINUTES` / `PDF_REMINDER_MINUTES` / `ALERT_TO` | only a fallback now: these are set on the web app's **Settings** screen (stored in `idoc.settings`) and re-read every minute. The `.env` values are used only until the first successful read |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | mail server (port 587 + `SMTP_SECURE=0` = STARTTLS; 465 + `1` = TLS). `SMTP_FROM` defaults to `SMTP_USER` |
 
 Flags: `--dry-run` (read and validate against the database, save nothing, leave files in the inbox) and

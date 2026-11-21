@@ -5,6 +5,7 @@ import { FolderWatcher } from './watcher/folderWatcher.js';
 import { loadConfig, ConfigError } from './watcher/config.js';
 import { makeProcessor, makeAttachProcessor } from './watcher/processor.js';
 import { PdfWatchdog } from './watcher/pdfWatchdog.js';
+import { loadAlertSettings, type AlertSettings } from './mssql/alertSettings.js';
 import { LogMailer, SmtpMailer, type Mailer } from './mail.js';
 import { MssqlRepository } from './mssql/repository.js';
 import { loadReferenceData } from './mssql/reference.js';
@@ -45,15 +46,21 @@ const dbName = (await pool.request().query('SELECT DB_NAME() AS n')).recordset[0
 log('info', `Connected to database "${dbName}"${cfg.dryRun ? ' (DRY RUN: nothing will be saved, files stay in the inbox)' : ''}`);
 
 const real = new MssqlRepository(pool);
+// XML-first and alert settings live in the database (Settings screen) and are re-read every minute; the environment values are only the fallback.
+let live: AlertSettings = { xmlFirst: cfg.xmlFirst, pdfWaitMinutes: cfg.pdfWaitMinutes, pdfReminderMinutes: cfg.pdfReminderMinutes, alertTo: cfg.alertTo };
+async function refreshSettings(): Promise<void> {
+  try { live = await loadAlertSettings(pool); } catch (e) { log('warn', `Could not read the alert settings from the database (${(e as Error).message}); using the last known values`); }
+}
+await refreshSettings();
 const repo: Repository = cfg.dryRun ? { packExists: (g) => real.packExists(g), saveJob: async () => { /* dry run */ } } : real;
 const mailer: Mailer = cfg.smtp ? new SmtpMailer(cfg.smtp) : new LogMailer(log);
 if (!cfg.smtp) log('warn', 'SMTP_HOST is not set: "PDF missing" alerts will only be written to the log');
-if (cfg.smtp && cfg.alertTo.length === 0) log('warn', 'ALERT_TO is not set: there is nobody to send "PDF missing" alerts to');
+if (cfg.smtp && live.alertTo.length === 0) log('warn', 'No alert recipients are set (Settings screen): there is nobody to send "PDF missing" alerts to');
 const process1 = makeProcessor({ loadReference: () => loadReferenceData(pool), repo, pdf, checkPostcodes: cfg.checkPostcodes });
-const attach = makeAttachProcessor({ repo: real, pdf, notify: async (_to, subject, text) => { try { await mailer.send(cfg.alertTo, subject, text); } catch (e) { log('error', `Could not send "${subject}": ${(e as Error).message}`); } } });
+const attach = makeAttachProcessor({ repo: real, pdf, notify: async (_to, subject, text) => { try { await mailer.send(live.alertTo, subject, text); } catch (e) { log('error', `Could not send "${subject}": ${(e as Error).message}`); } } });
 const watcher = new FolderWatcher(cfg.dirs, {
   process: process1,
-  ...(cfg.xmlFirst ? { processXmlOnly: (x: string) => process1(x, null), attachPdf: attach } : {}),
+  processXmlOnly: (x: string) => process1(x, null), attachPdf: attach, xmlFirstEnabled: () => live.xmlFirst,
   log, now: () => Date.now(),
 }, { stableMs: cfg.stableMs, retryMs: cfg.retryMs, orphanWarnMs: 5 * 60_000, dryRun: cfg.dryRun });
 
@@ -62,13 +69,13 @@ function abortSignalCleanup(t: NodeJS.Timeout): void { abort.signal.addEventList
 for (const s of ['SIGINT', 'SIGTERM'] as const) process.on(s, () => { log('info', `${s}: finishing the current file, then stopping`); abort.abort(); });
 
 await watcher.init();
-if (cfg.xmlFirst && !cfg.dryRun && !cfg.once) {
-  const dog = new PdfWatchdog(real, mailer, { waitMinutes: cfg.pdfWaitMinutes, reminderMinutes: cfg.pdfReminderMinutes, to: cfg.alertTo, inbox: cfg.dirs.inbox }, log);
-  const tick = (): void => { dog.check().catch((e) => log('error', `PDF check failed: ${(e as Error).message}`)); };
+if (!cfg.dryRun && !cfg.once) {
+  const dog = new PdfWatchdog(real, mailer, { get waitMinutes() { return live.pdfWaitMinutes; }, get reminderMinutes() { return live.pdfReminderMinutes; }, get to() { return live.alertTo; }, inbox: cfg.dirs.inbox }, log);
+  const tick = (): void => { refreshSettings().then(() => (live.xmlFirst ? dog.check() : 0)).catch((e) => log('error', `PDF check failed: ${(e as Error).message}`)); };
   const timer = setInterval(tick, 60_000);
   abortSignalCleanup(timer);
   tick();
-  log('info', `XML-first import: alert after ${cfg.pdfWaitMinutes} min without a PDF, then every ${cfg.pdfReminderMinutes} min`);
+  log('info', `XML-first import ${live.xmlFirst ? 'on' : 'OFF'}: alert after ${live.pdfWaitMinutes} min without a PDF, then every ${live.pdfReminderMinutes} min (settings are re-read every minute)`);
 }
 log('info', `Watching ${cfg.dirs.inbox}`);
 

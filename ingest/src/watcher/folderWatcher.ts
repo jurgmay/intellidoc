@@ -15,6 +15,8 @@ export interface WatcherDeps {
   processXmlOnly?(xmlPath: string): Promise<Outcome>;
   /** XML-first import: when given, a PDF with no XML beside it is offered to jobs waiting for their PDF. 'unmatched' = no such job (yet). */
   attachPdf?(pdfPath: string): Promise<Outcome | { kind: 'unmatched' }>;
+  /** Checked on every pass; false = wait for the pair even if processXmlOnly/attachPdf are given. Defaults to true. */
+  xmlFirstEnabled?(): boolean;
   log(level: 'info' | 'warn' | 'error', msg: string): void;
   now(): number;
 }
@@ -78,7 +80,8 @@ export class FolderWatcher {
     for (const [stem, f] of [...stems].sort((a, b) => a[0].localeCompare(b[0]))) {
       if (!f.xml || !f.pdf) {
         const lone = f.xml ?? f.pdf!;
-        const single = f.xml ? this.deps.processXmlOnly : this.opts.dryRun ? undefined : this.deps.attachPdf;
+        const on = this.deps.xmlFirstEnabled ? this.deps.xmlFirstEnabled() : true;
+        const single = !on ? undefined : f.xml ? this.deps.processXmlOnly : this.opts.dryRun ? undefined : this.deps.attachPdf;
         if (!single) { this.noteOrphan(stem, lone, now); continue; }
         if ((this.notBefore.get(stem) ?? 0) > now || (this.unmatchedUntil.get(stem) ?? 0) > now) continue;
         let sig1: string;

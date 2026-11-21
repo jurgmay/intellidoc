@@ -4,6 +4,7 @@ import { connect, hasDb, resetAndSeed } from './setup.js';
 import { MssqlRepository, DuplicatePackError, ReferenceError_ } from '../../src/mssql/repository.js';
 import { loadReferenceData } from '../../src/mssql/reference.js';
 import { ingest } from '../../src/ingest.js';
+import { loadAlertSettings, parseRecipients } from '../../src/mssql/alertSettings.js';
 import { loadRunSheetInputs } from '../../src/runsheet/query.js';
 import { buildXml, FakePdf, type PackSpec } from '../helpers.js';
 
@@ -87,6 +88,14 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     expect(await repo.markPdfReceived(jobId, 4)).toEqual({ alertCount: 1 });
     expect(await scalar(`SELECT COUNT(*) AS n FROM idoc.job WHERE job_id = ${jobId} AND status = N'Received' AND pdf_received_at IS NOT NULL`)).toBe(1);
     expect(await repo.findAwaitingPdf('job-nopdf')).toBeNull();
+  });
+
+  it('reads the alert settings, with their defaults, from idoc.settings', async () => {
+    expect(await loadAlertSettings(pool)).toEqual({ xmlFirst: true, pdfWaitMinutes: 30, pdfReminderMinutes: 30, alertTo: [] });
+    await pool.request().query(`UPDATE idoc.settings SET pdf_wait_minutes = 5, alert_recipients = N'a@x.com, b@x.com' WHERE settings_id = 1`);
+    expect(await loadAlertSettings(pool)).toMatchObject({ pdfWaitMinutes: 5, alertTo: ['a@x.com', 'b@x.com'] });
+    await pool.request().query('UPDATE idoc.settings SET pdf_wait_minutes = 30, alert_recipients = N\'\' WHERE settings_id = 1');
+    expect(parseRecipients('a@x.com; b@x.com  c@x.com')).toEqual(['a@x.com', 'b@x.com', 'c@x.com']);
   });
 
   it('stores address lines without the postcode line and keeps >6 lines', async () => {
