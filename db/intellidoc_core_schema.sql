@@ -723,3 +723,31 @@ LEFT JOIN idoc.account_envelope AS ae ON ae.account_envelope_id = m.account_enve
 LEFT JOIN idoc.stock_item AS si ON si.stock_item_id = ae.outer_stock_item_id
 LEFT JOIN idoc.envelope_size AS es ON es.envelope_size_id = si.envelope_size_id;
 GO
+
+/* ===========================================================================
+   10. USAGE
+   One row per invoicing account, brand, UK calendar day, postal format and service, counted from the production snapshot on the
+   mailpiece. The day is the date the mailpiece was produced (created_at is UTC, the day is the UK day). Mailpieces that are
+   cancelled, or in a cancelled batch, are left out. Brand and invoicing account are as at production.
+   =========================================================================== */
+CREATE VIEW idoc.v_usage_daily AS
+SELECT m.invoicing_account_id,
+       m.invoicing_account_code,
+       m.invoicing_account_name,
+       COALESCE(m.brand_name, N'(no brand)')                                           AS brand,
+       CAST(m.created_at AT TIME ZONE N'UTC' AT TIME ZONE N'GMT Standard Time' AS DATE) AS usage_day,
+       COALESCE(pf.name, N'Unknown')                                                   AS postal_format,
+       COALESCE(sv.name, m.delivery_band, N'Unknown')                                  AS postal_service,
+       COUNT(*)                                                                        AS mailpieces,
+       SUM(m.pack_count)                                                               AS packs,
+       SUM(m.sheet_count)                                                              AS sheets
+FROM idoc.mailpiece AS m
+LEFT JOIN idoc.batch          AS b  ON b.batch_id = m.batch_id
+LEFT JOIN idoc.postal_format  AS pf ON pf.postal_format_id = m.postal_format_id
+LEFT JOIN idoc.postal_rate    AS r  ON r.postal_rate_id = m.postal_rate_id
+LEFT JOIN idoc.postal_service AS sv ON sv.postal_service_id = r.postal_service_id
+WHERE m.is_cancelled = 0 AND COALESCE(b.current_status, N'') <> N'Cancelled'
+GROUP BY m.invoicing_account_id, m.invoicing_account_code, m.invoicing_account_name, COALESCE(m.brand_name, N'(no brand)'),
+         CAST(m.created_at AT TIME ZONE N'UTC' AT TIME ZONE N'GMT Standard Time' AS DATE),
+         COALESCE(pf.name, N'Unknown'), COALESCE(sv.name, m.delivery_band, N'Unknown');
+GO

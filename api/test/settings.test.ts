@@ -1,3 +1,4 @@
+import { MemoryReportStore } from '../src/reports/memoryStore.js';
 import { MemoryRecipientStore } from '../src/recipients/memoryStore.js';
 import { MemoryCustomerStore } from '../src/customers/memoryStore.js';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -7,7 +8,7 @@ import { MemorySettingsStore } from '../src/settings/store.js';
 import { SETTINGS, validate, BY_KEY } from '../src/settings/catalogue.js';
 
 let store: MemorySettingsStore; let app: FastifyInstance;
-beforeEach(async () => { store = new MemorySettingsStore(); app = await buildApp({ settings: store, customers: new MemoryCustomerStore(), recipients: new MemoryRecipientStore() }); });
+beforeEach(async () => { store = new MemorySettingsStore(); app = await buildApp({ settings: store, customers: new MemoryCustomerStore(), recipients: new MemoryRecipientStore(), reports: new MemoryReportStore() }); });
 
 const put = (values: Record<string, unknown>) => app.inject({ method: 'PUT', url: '/api/settings', payload: { values } });
 
