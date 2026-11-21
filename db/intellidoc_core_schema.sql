@@ -164,6 +164,9 @@ CREATE TABLE idoc.account (
     name                       NVARCHAR(200)      NOT NULL,
     parent_account_id          INT                NULL CONSTRAINT fk_account_parent REFERENCES idoc.account (account_id),
     inherits_settings          BIT                NOT NULL CONSTRAINT df_account_inherits DEFAULT (0), -- 1 = settings come from the parent (resolved up the tree)
+    -- Where this account's envelope list comes from (only for accounts that hold their own settings; an inheriting account follows its parent):
+    --   OWN = its own rows only, INHERIT = the parent's effective list, EXTEND = the parent's effective list plus its own rows. See idoc.v_account_envelope_source.
+    envelopes_mode             NVARCHAR(10)       NOT NULL CONSTRAINT df_account_envmode DEFAULT (N'OWN'),
     -- The account that is invoiced for this account's mail and whose job number is printed on the run sheet. Must be this account or an
     -- ancestor (checked by the API and the import). NULL = the account that holds the settings. See idoc.v_account_invoicing.
     invoicing_account_id       INT                NULL CONSTRAINT fk_account_invoicing REFERENCES idoc.account (account_id),
@@ -191,6 +194,7 @@ CREATE TABLE idoc.account (
     legacy_id                  UNIQUEIDENTIFIER   NULL,   -- FileMaker Customers.id (reference import only)
     CONSTRAINT uq_account_code UNIQUE (account_code),
     CONSTRAINT ck_account_inherits CHECK (inherits_settings = 0 OR parent_account_id IS NOT NULL),
+    CONSTRAINT ck_account_envmode CHECK (envelopes_mode IN (N'OWN', N'INHERIT', N'EXTEND') AND (envelopes_mode = N'OWN' OR parent_account_id IS NOT NULL)),
     CONSTRAINT ck_account_rollday CHECK (job_number_rollover_day BETWEEN 1 AND 28),
     CONSTRAINT ck_account_pending CHECK ((pending_mis_job_number IS NULL AND pending_job_number_from IS NULL) OR (pending_mis_job_number IS NOT NULL AND pending_job_number_from IS NOT NULL))
 );
@@ -207,6 +211,22 @@ WITH up AS (
     SELECT up.account_id, p.account_id, p.inherits_settings, p.parent_account_id
     FROM up INNER JOIN idoc.account AS p ON p.account_id = up.next_id WHERE up.inherits = 1)
 SELECT account_id, node_id AS owner_account_id FROM up WHERE inherits = 0;
+GO
+
+-- For every account, the accounts whose envelope rows make up its effective envelope list, nearest first (depth 0 = the account itself).
+-- An inheriting account passes straight through to its parent. Otherwise OWN stops here, INHERIT contributes nothing and goes up, EXTEND contributes and goes up.
+CREATE VIEW idoc.v_account_envelope_source AS
+WITH walk AS (
+    SELECT account_id AS origin, account_id AS node_id, parent_account_id AS next_id, 0 AS depth,
+           CASE WHEN inherits_settings = 0 AND envelopes_mode <> N'INHERIT' THEN 1 ELSE 0 END AS adds_self,
+           CASE WHEN inherits_settings = 1 OR envelopes_mode <> N'OWN' THEN 1 ELSE 0 END AS goes_up
+    FROM idoc.account
+    UNION ALL
+    SELECT w.origin, p.account_id, p.parent_account_id, w.depth + 1,
+           CASE WHEN p.inherits_settings = 0 AND p.envelopes_mode <> N'INHERIT' THEN 1 ELSE 0 END,
+           CASE WHEN p.inherits_settings = 1 OR p.envelopes_mode <> N'OWN' THEN 1 ELSE 0 END
+    FROM walk AS w INNER JOIN idoc.account AS p ON p.account_id = w.next_id WHERE w.goes_up = 1)
+SELECT origin AS account_id, node_id AS source_account_id, depth FROM walk WHERE adds_self = 1;
 GO
 
 -- For every account, the account that is invoiced for its mail (its own choice, else the account that holds the settings).

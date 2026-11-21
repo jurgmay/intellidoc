@@ -58,6 +58,33 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     expect(await scalar('SELECT COUNT(*) AS n FROM idoc.v_rule_violations')).toBe(0);
   });
 
+  it('envelope inheritance: INHERIT uses the parent list, EXTEND adds to it, and a nearer entry replaces one with the same key', async () => {
+    const parent = (await loadReferenceData(pool)).accounts.get('FEXCO_CUSTOMER')!.envelopes.length;
+    expect(parent).toBeGreaterThan(1);
+    await pool.request().query(`INSERT INTO idoc.account (account_code, name, parent_account_id, envelopes_mode) SELECT N'ENV_CHILD', N'Env child', account_id, N'INHERIT' FROM idoc.account WHERE account_code = N'FEXCO_CUSTOMER'`);
+    expect((await loadReferenceData(pool)).accounts.get('ENV_CHILD')!.envelopes).toHaveLength(parent);
+    // its own envelope for its own brand, in addition to the parent's
+    await pool.request().query(`
+      UPDATE idoc.account SET envelopes_mode = N'EXTEND' WHERE account_code = N'ENV_CHILD';
+      INSERT INTO idoc.account_envelope (account_id, brand_id, delivery_band, postal_rate_id, outer_stock_item_id, reference)
+      SELECT c.account_id, NULL, e.delivery_band, e.postal_rate_id, e.outer_stock_item_id, N'child-only'
+      FROM idoc.account c CROSS APPLY (SELECT TOP 1 * FROM idoc.account_envelope WHERE account_id = (SELECT account_id FROM idoc.account WHERE account_code = N'FEXCO_CUSTOMER')) e WHERE c.account_code = N'ENV_CHILD'`);
+    expect((await loadReferenceData(pool)).accounts.get('ENV_CHILD')!.envelopes).toHaveLength(parent + 1);
+    // an entry with the same brand name, band, rate and reference as one of the parent's replaces it instead of adding a second
+    await pool.request().query(`
+      INSERT INTO idoc.brand (account_id, name) SELECT account_id, N'Remus' FROM idoc.account WHERE account_code = N'ENV_CHILD';
+      INSERT INTO idoc.account_envelope (account_id, brand_id, delivery_band, postal_rate_id, outer_stock_item_id, reference)
+      SELECT c.account_id, (SELECT brand_id FROM idoc.brand WHERE account_id = c.account_id AND name = N'Remus'), e.delivery_band, e.postal_rate_id, e.outer_stock_item_id, e.reference
+      FROM idoc.account c CROSS APPLY (SELECT TOP 1 ae.* FROM idoc.account_envelope ae JOIN idoc.brand b ON b.brand_id = ae.brand_id
+        WHERE ae.account_id = (SELECT account_id FROM idoc.account WHERE account_code = N'FEXCO_CUSTOMER') AND b.name = N'Remus') e WHERE c.account_code = N'ENV_CHILD'`);
+    expect((await loadReferenceData(pool)).accounts.get('ENV_CHILD')!.envelopes).toHaveLength(parent + 1);
+    // OWN: only its own rows; the mode needs a parent
+    await pool.request().query(`UPDATE idoc.account SET envelopes_mode = N'OWN' WHERE account_code = N'ENV_CHILD'`);
+    expect((await loadReferenceData(pool)).accounts.get('ENV_CHILD')!.envelopes.length).toBeLessThan(parent);
+    await expect(pool.request().query(`INSERT INTO idoc.account (account_code, name, envelopes_mode) VALUES (N'ENV_ORPHAN', N'Orphan', N'INHERIT')`)).rejects.toThrow(/ck_account_envmode/);
+    await expect(pool.request().query(`UPDATE idoc.account SET envelopes_mode = N'SOMETIMES' WHERE account_code = N'ENV_CHILD'`)).rejects.toThrow(/ck_account_envmode/);
+  });
+
   it('invoicing account: the batch and mailpieces record it, and the run sheet prints its job number', async () => {
     await pool.request().query(`UPDATE idoc.account SET mis_job_number = N'1111' WHERE account_code = N'FEXCO_CUSTOMER'; UPDATE idoc.account SET mis_job_number = N'2222' WHERE account_code = N'FEXCO'`);
     try {

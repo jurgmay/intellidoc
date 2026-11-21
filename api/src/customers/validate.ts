@@ -1,6 +1,6 @@
 import { ValidationError } from '../errors.js';
 import { parseEmails } from '../settings/catalogue.js';
-import { FLAGS, type CustomerDetailsInput, type EnvelopeInput, type FlagKey, type MatchRule, type SequenceRule } from './types.js';
+import { ENVELOPE_MODES, type EnvelopesMode, FLAGS, type CustomerDetailsInput, type EnvelopeInput, type FlagKey, type MatchRule, type SequenceRule } from './types.js';
 
 const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 type Body = Record<string, unknown> | null | undefined;
@@ -73,6 +73,12 @@ export function parseBrandName(body: Body): string {
   const name = text(errs, body, 'name', 'Brand name', 200, true);
   done(errs);
   return name!;
+}
+
+export function parseEnvelopesMode(body: Body): EnvelopesMode {
+  const m = body?.['mode'];
+  if (typeof m !== 'string' || !(ENVELOPE_MODES as readonly string[]).includes(m)) throw new ValidationError({ mode: 'Mode must be OWN, INHERIT or EXTEND' });
+  return m as EnvelopesMode;
 }
 
 export function parseEnvelope(body: Body): EnvelopeInput {

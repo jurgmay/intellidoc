@@ -177,6 +177,10 @@ A customer can be given next month's job number in advance (Customers > Details 
 
 This added three columns to `idoc.account` (`pending_mis_job_number`, `pending_job_number_from`, `job_number_rollover_day`) and removed `is_nhs` and `is_create_separate_batches`: reset the scratch database (`npm run db:reset`, or `npm run db:rebuild <folder>`).
 
+## Envelope inheritance
+
+An account's envelope list is its own rows (`OWN`), its parent's effective list (`INHERIT`) or the parent's plus its own (`EXTEND`), set per account in `account.envelopes_mode`. `idoc.v_account_envelope_source` resolves it; the loader reads the effective list and, where a nearer source has an entry with the same brand name, delivery band, postal rate and reference, uses the nearer one. The schema changed, so reset the scratch database (`npm run db:rebuild <folder>`).
+
 ## Invoicing account and batching boundary
 
 Jobs, batches and mailpieces belong to the **root** of the account tree. Every account has an invoicing account (itself or an ancestor; the account that holds the settings when not set) and the invoicing account is part of the batch key, so mail for two invoicing accounts never shares a batch. The run sheet prints the invoicing account's name and job number. Packs from different sub-accounts are not merged into one envelope (the match key includes the sub-account and the invoicing account). Reset the scratch database after pulling this change (`npm run db:rebuild <folder>`).

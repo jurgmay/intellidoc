@@ -1,4 +1,4 @@
-import { FLAGS, type CustomerDetail, type CustomerDetailsInput, type EnvelopeInput, type FlagKey, type MatchRule, type SequenceRule } from './types.js';
+import { FLAGS, type EnvelopesMode, type CustomerDetail, type CustomerDetailsInput, type EnvelopeInput, type FlagKey, type MatchRule, type SequenceRule } from './types.js';
 
 /** Plain-English names for the account flags, shared by the audit log and (via the API) the screen. */
 export const FLAG_LABELS: Record<FlagKey, string> = {
@@ -28,6 +28,9 @@ export function describeDetailsChange(old: CustomerDetail, next: CustomerDetails
   for (const f of FLAGS) if (old.flags[f] !== next.flags[f]) out.push(`${FLAG_LABELS[f]}: ${old.flags[f] ? 'on' : 'off'} → ${next.flags[f] ? 'on' : 'off'}`);
   return out;
 }
+
+export const ENVELOPES_MODE_LABELS: Record<EnvelopesMode, string> = { OWN: 'its own list', INHERIT: "the parent's list", EXTEND: "the parent's list plus its own" };
+export const describeEnvelopesMode = (from: EnvelopesMode, to: EnvelopesMode): string => `Envelopes: ${ENVELOPES_MODE_LABELS[from]} → ${ENVELOPES_MODE_LABELS[to]}`;
 
 export const describeEnvelope = (brand: string | null, band: string, rate: string, stock: string): string =>
   `${brand ?? 'any brand'} / ${band} / ${rate} / ${stock}`;
