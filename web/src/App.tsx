@@ -15,7 +15,7 @@ export function App() {
     <AppShell header={{ height: 64 }} navbar={{ width: 220, breakpoint: 'sm' }} padding="lg">
       <AppShell.Header>
         <Group h="100%" px="lg" justify="space-between">
-          <Image src="/intellidoc-logo.svg" alt="Intellidoc" h={40} w="auto" />
+          <Image src="/intellidoc-logo.svg" alt="Intellidoc" h={48} w="auto" />
           <Text size="xs" c="dimmed">Not signed in (sign-in comes later)</Text>
         </Group>
       </AppShell.Header>
