@@ -4,6 +4,7 @@ import { Alert, Anchor, Badge, Button, Group, Loader, Modal, Paper, Select, Stac
 import { IconAlertCircle, IconPlus } from '@tabler/icons-react';
 import { createModel, getCosting, setCostingMode, type CostingMode, type CostingOverview, type ModelSummary } from '../../api/costing';
 import { CostingModelEditor } from './CostingModelEditor';
+import { RepriceCard } from './RepriceCard';
 import { orNull, run, type TabProps } from './shared';
 
 const today = (): string => new Date().toISOString().slice(0, 10);
@@ -91,6 +92,7 @@ export function CostingTab({ detail }: TabProps) {
         </Group>
         {o.source ? <ModelTable models={o.sourceModels} inForceId={o.inForceId} /> : <ModelTable models={o.models} inForceId={o.inForceId} onOpen={setOpenId} />}
       </Paper>
+      <RepriceCard customerId={detail.id} />
       <Modal opened={adding} onClose={() => setAdding(false)} title="New costing model">
         <Stack>
           {general && <Alert color="red">{general}</Alert>}

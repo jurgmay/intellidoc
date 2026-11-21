@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { MemoryCostingStore } from '../src/costing/memoryStore.js';
 import { MemoryCustomerStore } from '../src/customers/memoryStore.js';
+import { MemoryRepriceStore } from '../src/reprice/memoryStore.js';
 import { MemoryPostalStore } from '../src/postal/memoryStore.js';
 import { MemoryRecipientStore } from '../src/recipients/memoryStore.js';
 import { MemoryReportStore } from '../src/reports/memoryStore.js';
@@ -16,7 +17,7 @@ const put = (url: string, payload: unknown) => app.inject({ method: 'PUT', url, 
 
 beforeEach(async () => {
   store = new MemoryPostalStore(); store.today = () => '2026-11-21';
-  app = await buildApp({ settings: new MemorySettingsStore(), customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: store, recipients: new MemoryRecipientStore(), reports: new MemoryReportStore() });
+  app = await buildApp({ settings: new MemorySettingsStore(), customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: store, reprice: new MemoryRepriceStore(), recipients: new MemoryRecipientStore(), reports: new MemoryReportStore() });
   provider = (await post('/api/postal/providers', { name: 'Royal Mail' })).json().id;
   service = (await post(`/api/postal/providers/${provider}/services`, svc)).json().id;
   rate = (await post(`/api/postal/services/${service}/rates`, rateBody)).json().id;

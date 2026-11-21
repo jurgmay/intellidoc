@@ -2,6 +2,8 @@ import { existsSync } from 'node:fs';
 import Fastify, { type FastifyInstance } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { costingRoutes } from './costing/routes.js';
+import { repriceRoutes } from './reprice/routes.js';
+import type { RepriceStore } from './reprice/types.js';
 import { postalRoutes } from './postal/routes.js';
 import type { PostalStore } from './postal/types.js';
 import type { CostingStore } from './costing/types.js';
@@ -15,7 +17,7 @@ import type { ReportStore } from './reports/types.js';
 import { settingsRoutes } from './settings/routes.js';
 import type { SettingsStore } from './settings/store.js';
 
-export interface AppDeps { settings: SettingsStore; customers: CustomerStore; costing: CostingStore; postal: PostalStore; recipients: RecipientStore; reports: ReportStore; /** Folder with the built web app, served at / when it exists. */ webDir?: string }
+export interface AppDeps { settings: SettingsStore; customers: CustomerStore; costing: CostingStore; postal: PostalStore; reprice: RepriceStore; recipients: RecipientStore; reports: ReportStore; /** Folder with the built web app, served at / when it exists. */ webDir?: string }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
@@ -24,6 +26,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   customerRoutes(app, deps.customers);
   costingRoutes(app, deps.costing);
   postalRoutes(app, deps.postal);
+  repriceRoutes(app, deps.reprice);
   recipientRoutes(app, deps.recipients);
   reportRoutes(app, deps.reports);
   app.setErrorHandler((err, _req, reply) => {

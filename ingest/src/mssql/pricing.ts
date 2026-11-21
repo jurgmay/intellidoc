@@ -13,13 +13,39 @@ interface Row {
 
 export interface PriceJobResult { priced: number; noModel: number; unknownColours: number }
 
+/** Which mailpieces to price: either a job's, or a customer's (and everything below it) between two production days. */
+export type PriceFilter = { jobId: number } | { accountId: number; from: string | null; to: string | null; onlyUnpriced: boolean };
+
 /**
  * Prices every mailpiece of a job and stores the totals and the lines on the mailpiece. The costing model is the one in force on the
  * mailpiece's production day (the UK day it was created) for its customer. Safe to run again: a mailpiece's lines are replaced.
  * A mailpiece is left alone when there is no model, or when the colours of any of its pages are not known.
  */
 export async function priceJob(pool: sql.ConnectionPool, jobId: number): Promise<PriceJobResult> {
-  const rows = (await pool.request().input('j', sql.BigInt, jobId).query<Row>(`
+  return priceMailpieces(pool, { jobId }, false);
+}
+
+const DAY = `CAST(m.created_at AT TIME ZONE N'UTC' AT TIME ZONE N'GMT Standard Time' AS DATE)`;
+
+/**
+ * The work behind priceJob and the re-price screen. With dryRun nothing is written and the result says what a real run would do.
+ * For a customer filter the account and every account below it are covered (by the sub-account that submitted the mail), never the whole system.
+ */
+export async function priceMailpieces(pool: sql.ConnectionPool, filter: PriceFilter, dryRun: boolean): Promise<PriceJobResult> {
+  const req = pool.request();
+  let tree = ''; let where: string;
+  if ('jobId' in filter) { req.input('j', sql.BigInt, filter.jobId); where = 'm.job_id = @j'; }
+  else {
+    req.input('a', sql.Int, filter.accountId);
+    tree = `WITH tree (account_id) AS (SELECT account_id FROM idoc.account WHERE account_id = @a
+              UNION ALL SELECT x.account_id FROM idoc.account AS x INNER JOIN tree AS t ON x.parent_account_id = t.account_id)`;
+    const w = ['m.submitting_account_id IN (SELECT account_id FROM tree)'];
+    if (filter.from) { req.input('from', sql.Date, filter.from); w.push(`${DAY} >= @from`); }
+    if (filter.to) { req.input('to', sql.Date, filter.to); w.push(`${DAY} <= @to`); }
+    if (filter.onlyUnpriced) w.push('m.priced_at IS NULL');
+    where = w.join(' AND ');
+  }
+  const rows = (await req.query<Row>(`${tree}
     SELECT m.mailpiece_id, m.account_id, m.is_cancelled, m.pack_count,
            CONVERT(CHAR(10), CAST(m.created_at AT TIME ZONE N'UTC' AT TIME ZONE N'GMT Standard Time' AS DATE), 23) AS usage_day,
            pk.unknown_packs, pk.colour, pk.mono, pk.blank,
@@ -39,12 +65,12 @@ export async function priceJob(pool: sql.ConnectionPool, jobId: number): Promise
     LEFT JOIN idoc.postal_format AS f ON f.postal_format_id = m.postal_format_id
     LEFT JOIN idoc.account_envelope AS ae ON ae.account_envelope_id = m.account_envelope_id
     LEFT JOIN idoc.postal_rate AS r ON r.postal_rate_id = m.postal_rate_id
-    WHERE m.job_id = @j AND m.is_cancelled = 0`)).recordset;
+    WHERE ${where} AND m.is_cancelled = 0`)).recordset;
 
   const result: PriceJobResult = { priced: 0, noModel: 0, unknownColours: 0 };
   const models = new Map<string, CostingModel | null>();
   const tx = new sql.Transaction(pool);
-  await tx.begin();
+  if (!dryRun) await tx.begin();
   try {
     for (const m of rows) {
       if (m.unknown_packs > 0) { result.unknownColours++; continue; }
@@ -52,6 +78,7 @@ export async function priceJob(pool: sql.ConnectionPool, jobId: number): Promise
       if (!models.has(key)) models.set(key, await findCostingModel(pool, m.account_id, m.usage_day));
       const model = models.get(key);
       if (!model) { result.noModel++; continue; }
+      if (dryRun) { result.priced++; continue; }
       const price = priceMailpiece(model, {
         packs: m.pack_count, colourPages: m.colour, monoPages: m.mono, blankPages: m.blank, inserts: m.inserts,
         enclosing: m.department === 'Machine enclosing' ? 'Machine' : 'Hand', // Reception work is done by hand
@@ -77,7 +104,7 @@ export async function priceJob(pool: sql.ConnectionPool, jobId: number): Promise
       }
       result.priced++;
     }
-    await tx.commit();
-  } catch (e) { try { await tx.rollback(); } catch { /* already rolled back */ } throw e; }
+    if (!dryRun) await tx.commit();
+  } catch (e) { if (dryRun) throw e; try { await tx.rollback(); } catch { /* already rolled back */ } throw e; }
   return result;
 }

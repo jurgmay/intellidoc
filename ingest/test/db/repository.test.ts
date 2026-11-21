@@ -5,6 +5,7 @@ import { MssqlRepository, DuplicatePackError, ProductionGateError, ReferenceErro
 import { loadReferenceData } from '../../src/mssql/reference.js';
 import { findCostingModel } from '../../src/mssql/costing.js';
 import { priceJob } from '../../src/mssql/pricing.js';
+import { Repricer } from '../../src/mssql/reprice.js';
 import { ingest } from '../../src/ingest.js';
 import { loadAlertSettings, parseRecipients } from '../../src/mssql/alertSettings.js';
 import { loadRunSheetInputs } from '../../src/runsheet/query.js';
@@ -378,6 +379,40 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     await ingest(c.xml, 'job-price-c.xml', null, { ref, pdf: new FakePdf(0), repo });
     const jobC = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-price-c'`);
     expect(await priceJob(pool, jobC)).toEqual({ priced: 0, noModel: 0, unknownColours: 1 });
+  });
+
+  it('re-price: fills in unpriced mail for a customer and date range, and overwrites only when asked', async () => {
+    const ref = await loadReferenceData(pool);
+    const d = buildXml([person('Una', 'Reprice'), person('Vic', 'Reprice')]);
+    await ingest(d.xml, 'job-reprice-d.xml', 'job-reprice-d.pdf', { ref, pdf: new FakePdf(d.pages, '', ['mono', 'mono', 'mono', 'mono']), repo });
+    const jobD = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-reprice-d'`);
+    const customer = await scalar(`SELECT account_id AS n FROM idoc.job WHERE job_id = ${jobD}`);
+    // as if it had been ingested before any model existed
+    await pool.request().query(`DELETE FROM idoc.mailpiece_price_line WHERE mailpiece_id IN (SELECT mailpiece_id FROM idoc.mailpiece WHERE job_id = ${jobD});
+      UPDATE idoc.mailpiece SET costing_model_id = NULL, production_cost = NULL, production_sell = NULL, postage_cost = NULL, postage_sell = NULL, priced_at = NULL WHERE job_id = ${jobD}`);
+    const re = new Repricer(process.env['INTELLIDOC_TEST_DB']!);
+    try {
+      const all = { accountId: customer, from: null, to: null, overwrite: false };
+      const before = await re.preview(all);
+      expect(before.wouldPrice).toBe(2);
+      expect(before.inScope).toBeGreaterThanOrEqual(2);
+      // a date range that excludes today finds nothing
+      expect(await re.preview({ ...all, to: '2000-01-01' })).toMatchObject({ inScope: 0, wouldPrice: 0 });
+      // a preview writes nothing
+      expect(await scalar(`SELECT COUNT(*) AS n FROM idoc.mailpiece WHERE job_id = ${jobD} AND priced_at IS NOT NULL`)).toBe(0);
+      expect(await re.run(all)).toMatchObject({ priced: before.wouldPrice, unknownColours: 0 });
+      expect(await scalar(`SELECT COUNT(*) AS n FROM idoc.mailpiece WHERE job_id = ${jobD} AND priced_at IS NOT NULL`)).toBe(2);
+      // nothing left to fill in, but the overwrite option covers the priced mail too
+      expect((await re.preview(all)).wouldPrice).toBe(0);
+      const over = await re.preview({ ...all, overwrite: true });
+      expect(over.wouldPrice).toBe(over.alreadyPriced);
+      // a corrected model changes the price only when overwriting
+      await pool.request().query(`UPDATE r SET sell_price = 1 FROM idoc.costing_model_rate AS r WHERE r.charge_code = N'HPOD'`);
+      await re.run(all);
+      expect(await scalar(`SELECT COUNT(*) AS n FROM idoc.mailpiece WHERE job_id = ${jobD} AND production_sell > 1`)).toBe(0);
+      await re.run({ ...all, overwrite: true });
+      expect(await scalar(`SELECT COUNT(*) AS n FROM idoc.mailpiece WHERE job_id = ${jobD} AND production_sell > 1`)).toBe(2);
+    } finally { await re.close(); }
   });
 
   it('a dated price change: envelope settings follow the row that prices their band today', async () => {
