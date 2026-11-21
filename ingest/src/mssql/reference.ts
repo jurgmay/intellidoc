@@ -2,6 +2,17 @@ import sql from 'mssql';
 import type { AccountConfig, EnvelopeOption, PostalFormat, ReferenceData, Settings, StockItem } from '../reference.js';
 
 /** Loads everything the ingest needs from the idoc.* tables. One round of read-only queries. */
+/** An account's effective envelope rows, nearest source first. Where a nearer source has the same brand, band, rate and reference, it replaces the further one. */
+function nearestWins<T extends { depth: number; brand: string | null; delivery_band: string; postal_rate_id: number; reference: string | null }>(rows: T[]): T[] {
+  const seen = new Set<string>(); const out: T[] = [];
+  for (const r of [...rows].sort((a, b) => a.depth - b.depth)) {
+    const k = `${(r.brand ?? '').toLowerCase()}|${r.delivery_band.toLowerCase()}|${r.postal_rate_id}|${(r.reference ?? '').toLowerCase()}`;
+    if (seen.has(k)) continue;
+    seen.add(k); out.push(r);
+  }
+  return out;
+}
+
 export async function loadReferenceData(pool: sql.ConnectionPool): Promise<ReferenceData> {
   const q = async <T>(text: string): Promise<T[]> => (await pool.request().query(text)).recordset as T[];
 
@@ -59,13 +70,14 @@ export async function loadReferenceData(pool: sql.ConnectionPool): Promise<Refer
     FROM idoc.address_match_rule AS r INNER JOIN idoc.passthrough_key AS k ON k.passthrough_key_id = r.passthrough_key_id ORDER BY r.sequence_no`);
   const seqRules = await q<{ account_id: number; passthrough_value: string; sequence_number: number }>('SELECT account_id, passthrough_value, sequence_number FROM idoc.pack_sequence_rule');
   const envRows = await q<{
-    account_envelope_id: number; account_id: number; brand: string | null; delivery_band: string; reference: string | null;
+    account_envelope_id: number; account_id: number; depth: number; brand: string | null; delivery_band: string; reference: string | null;
     postal_rate_id: number; min_weight_g: number; max_weight_g: number; postal_service_id: number; provider_name: string; service_name: string; service_code: string | null; format_name: string; size: string; stock_code: string;
   }>(`
-    SELECT ae.account_envelope_id, ae.account_id, b.name AS brand, ae.delivery_band, ae.reference,
+    SELECT ae.account_envelope_id, src.account_id AS account_id, src.depth, b.name AS brand, ae.delivery_band, ae.reference,
            ae.postal_rate_id, r.min_weight_g, r.max_weight_g, r.postal_service_id,
            pp.name AS provider_name, ps.name AS service_name, ps.service_code, pf.name AS format_name, es.code AS size, si.stock_code
-    FROM idoc.account_envelope AS ae
+    FROM idoc.v_account_envelope_source AS src
+    INNER JOIN idoc.account_envelope AS ae ON ae.account_id = src.source_account_id
     LEFT JOIN idoc.brand AS b ON b.brand_id = ae.brand_id
     INNER JOIN idoc.postal_rate AS r ON r.postal_rate_id = ae.postal_rate_id
     INNER JOIN idoc.postal_service AS ps ON ps.postal_service_id = r.postal_service_id
@@ -91,7 +103,7 @@ export async function loadReferenceData(pool: sql.ConnectionPool): Promise<Refer
       matchIncludeKeys: myRules.filter((r) => r.is_include).map((r) => r.key_name),
       matchExclude: myRules.filter((r) => !r.is_include).map((r) => ({ key: r.key_name, value: r.passthrough_value ?? '' })),
       packSequence: a.seq_key && seq.length ? { key: a.seq_key, rules: new Map(seq.map((r) => [r.passthrough_value, r.sequence_number])) } : undefined,
-      envelopes: envRows.filter((e) => e.account_id === cust).map((e): EnvelopeOption => ({
+      envelopes: nearestWins(envRows.filter((e) => e.account_id === a.account_id)).map((e): EnvelopeOption => ({
         brand: e.brand, reference: e.reference ?? '', postalFormat: e.format_name, size: e.size, stockCode: e.stock_code,
         deliveryBand: e.delivery_band, minWeightG: e.min_weight_g, maxWeightG: e.max_weight_g,
         accountEnvelopeId: e.account_envelope_id, postalRateId: e.postal_rate_id, postalServiceId: e.postal_service_id,

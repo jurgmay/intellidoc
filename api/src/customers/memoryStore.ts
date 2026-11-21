@@ -1,11 +1,11 @@
 import { ConflictError, NotFoundError, ValidationError } from '../errors.js';
-import { describeDetailsChange, describeEnvelope, describeMatchRules, describeSequenceRules } from './describe.js';
+import { describeDetailsChange, describeEnvelope, describeEnvelopesMode, describeMatchRules, describeSequenceRules } from './describe.js';
 import type {
-  AuditEntry, CustomerDetail, CustomerDetailsInput, CustomerRow, CustomerStore, EnvelopeInput, EnvelopeView, FlagKey, Lookups, MatchRule, SequenceRule,
+  AuditEntry, CustomerDetail, CustomerDetailsInput, CustomerRow, CustomerStore, EnvelopeInput, EnvelopesMode, EnvelopeView, InheritedEnvelopeView, FlagKey, Lookups, MatchRule, SequenceRule,
 } from './types.js';
 import { FLAGS } from './types.js';
 
-interface Cust extends Omit<CustomerDetail, 'accounts' | 'brands' | 'envelopes' | 'parent' | 'children' | 'pendingJobNumber' | 'pendingFrom' | 'invoicing' | 'invoicingOptions'> {
+interface Cust extends Omit<CustomerDetail, 'accounts' | 'brands' | 'envelopes' | 'parent' | 'children' | 'pendingJobNumber' | 'pendingFrom' | 'invoicing' | 'invoicingOptions' | 'inheritedEnvelopes'> {
   parentId: number | null; invoicingAccountId: number | null; pendingJobNumber: string | null; pendingFrom: string | null; jobNumberRolloverDay: number;
 }
 
@@ -52,7 +52,7 @@ export class MemoryCustomerStore implements CustomerStore {
 
   seed(c: { code: string; name: string } & Partial<Cust>): number {
     const id = this.nextId();
-    this.customers.set(id, { id, parentId: null, invoicingAccountId: null, misJobNumber: null, pendingJobNumber: null, pendingFrom: null, jobNumberRolloverDay: 1, returnAddress: null, colourMode: null, flags: noFlags(), batchingKey: null, packSequenceKey: null, matchRules: [], sequenceRules: [], emails: [], ...c });
+    this.customers.set(id, { id, parentId: null, envelopesMode: 'OWN', invoicingAccountId: null, misJobNumber: null, pendingJobNumber: null, pendingFrom: null, jobNumberRolloverDay: 1, returnAddress: null, colourMode: null, flags: noFlags(), batchingKey: null, packSequenceKey: null, matchRules: [], sequenceRules: [], emails: [], ...c });
     return id;
   }
 
@@ -93,14 +93,48 @@ export class MemoryCustomerStore implements CustomerStore {
       children: [...this.customers.values()].filter((x) => x.parentId === id).sort((a, b) => a.name.localeCompare(b.name)).map((x) => ({ id: x.id, code: x.code, name: x.name, isDeleted: x.flags.isDeleted })),
       accounts: this.accounts.filter((a) => a.customerId === id).map(({ id: i, code, name, isDeleted }) => ({ id: i, code, name, isDeleted })),
       brands: this.brands.filter((b) => b.customerId === id).map((b) => ({ id: b.id, name: b.name, usage: this.brandUsage(b.id) })),
-      envelopes: this.envelopes.filter((e) => e.customerId === id && !e.isDeleted).map((e): EnvelopeView => {
-        const r = this.rate(e.postalRateId), s = this.stock(e.stockItemId);
-        return {
-          id: e.id, brandId: e.brandId, brandName: this.brands.find((b) => b.id === e.brandId)?.name ?? null, deliveryBand: e.deliveryBand, postalRateId: e.postalRateId, rateLabel: r.label,
-          stockItemId: e.stockItemId, stockCode: s.code, stockDescription: s.description, reference: e.reference, externalName: e.externalName, isOversticker: e.isOversticker,
-        };
-      }),
+      envelopes: this.envelopes.filter((e) => e.customerId === id && !e.isDeleted).map((e) => this.envelopeView(e)),
+      inheritedEnvelopes: this.inheritedEnvelopes(id),
     };
+  }
+
+  private envelopeView(e: Env): EnvelopeView {
+    const r = this.rate(e.postalRateId), s = this.stock(e.stockItemId);
+    return {
+      id: e.id, brandId: e.brandId, brandName: this.brands.find((b) => b.id === e.brandId)?.name ?? null, deliveryBand: e.deliveryBand, postalRateId: e.postalRateId, rateLabel: r.label,
+      stockItemId: e.stockItemId, stockCode: s.code, stockDescription: s.description, reference: e.reference, externalName: e.externalName, isOversticker: e.isOversticker,
+    };
+  }
+
+  /** The customers whose envelope rows make up this customer's list, nearest first (itself included when it contributes). */
+  private envelopeSources(id: number): number[] {
+    const c = this.cust(id);
+    if (c.envelopesMode === 'OWN') return [id];
+    const up = c.parentId === null ? [] : this.envelopeSources(c.parentId);
+    return c.envelopesMode === 'INHERIT' ? up : [id, ...up];
+  }
+
+  /** What comes from the parents. A nearer entry with the same brand name, band, rate and reference replaces a further one. */
+  private inheritedEnvelopes(id: number): InheritedEnvelopeView[] {
+    const key = (e: EnvelopeView): string => `${(e.brandName ?? '').toLowerCase()}|${e.deliveryBand.toLowerCase()}|${e.postalRateId}|${(e.reference ?? '').toLowerCase()}`;
+    const seen = new Set<string>(); const out: InheritedEnvelopeView[] = [];
+    for (const src of this.envelopeSources(id)) {
+      for (const e of this.envelopes.filter((x) => x.customerId === src && !x.isDeleted)) {
+        const v = this.envelopeView(e); const k = key(v);
+        if (seen.has(k)) continue;
+        seen.add(k);
+        if (src !== id) { const c = this.cust(src); out.push({ ...v, from: { id: c.id, code: c.code, name: c.name } }); }
+      }
+    }
+    return out;
+  }
+
+  async setEnvelopesMode(customerId: number, mode: EnvelopesMode, by: string): Promise<void> {
+    const c = this.cust(customerId);
+    if (mode !== 'OWN' && c.parentId === null) throw new ValidationError({ mode: 'This customer has no parent to take envelopes from. Choose a parent on the Details tab first.' });
+    if (c.envelopesMode === mode) return;
+    const was = c.envelopesMode; c.envelopesMode = mode;
+    this.log(customerId, by, describeEnvelopesMode(was, mode));
   }
 
   async lookups(): Promise<Lookups> { return { ...this.lookupData, customers: this.customersLookup() }; }
@@ -124,6 +158,8 @@ export class MemoryCustomerStore implements CustomerStore {
     const lines = describeDetailsChange(old, input, input.parentId === null ? null : this.cust(input.parentId).code, pendingFrom, invoicing);
     Object.assign(this.cust(id), input, { pendingFrom });
     for (const l of lines) this.log(id, by, l);
+    // without a parent there is nothing to inherit from
+    if (input.parentId === null && old.envelopesMode !== 'OWN') { this.cust(id).envelopesMode = 'OWN'; this.log(id, by, describeEnvelopesMode(old.envelopesMode, 'OWN')); }
   }
 
   /** This customer, then each ancestor up the tree (using `parentId` for this customer when it is being changed). */

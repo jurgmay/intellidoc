@@ -1,8 +1,8 @@
 import sql from 'mssql';
 import { ConflictError, NotFoundError, ValidationError } from '../errors.js';
-import { describeDetailsChange, describeEnvelope, describeMatchRules, describeSequenceRules } from './describe.js';
+import { describeDetailsChange, describeEnvelope, describeEnvelopesMode, describeMatchRules, describeSequenceRules } from './describe.js';
 import {
-  FLAGS, type AuditEntry, type CustomerDetail, type CustomerDetailsInput, type CustomerRow, type CustomerStore, type EnvelopeInput, type FlagKey, type Lookups, type MatchRule, type SequenceRule,
+  FLAGS, type AuditEntry, type CustomerDetail, type CustomerDetailsInput, type CustomerRow, type CustomerStore, type EnvelopeInput, type EnvelopesMode, type FlagKey, type InheritedEnvelopeView, type Lookups, type MatchRule, type SequenceRule,
 } from './types.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -70,7 +70,7 @@ export class MssqlCustomerStore implements CustomerStore {
 
   async get(id: number): Promise<CustomerDetail> {
     const q = (text: string) => this.pool.request().input('id', sql.Int, id).query(text);
-    const [c, accts, brands, envs, match, seq, emails, kids, invOpts] = await Promise.all([
+    const [c, accts, brands, envs, match, seq, emails, kids, invOpts, inheritedRows] = await Promise.all([
       q(`SELECT a.*, bk.name AS batching_key, sk.name AS pack_sequence_key, par.account_id AS p_id, par.account_code AS p_code, par.name AS p_name, inv.account_id AS i_id, inv.account_code AS i_code, inv.name AS i_name FROM idoc.account a
          LEFT JOIN idoc.account par ON par.account_id = a.parent_account_id
          LEFT JOIN idoc.account inv ON inv.account_id = a.invoicing_account_id
@@ -105,6 +105,21 @@ export class MssqlCustomerStore implements CustomerStore {
            UNION ALL
            SELECT a.account_id, a.account_code, a.name, a.parent_account_id, up.depth + 1 FROM idoc.account a JOIN up ON a.account_id = up.parent_account_id)
          SELECT account_id, account_code, name FROM up ORDER BY depth OPTION (MAXRECURSION 100)`),
+      // envelope rows that come from the parents, nearest first (rows of this account itself are in `envs`)
+      q(`SELECT e.account_envelope_id, e.brand_id, b.name AS brand, e.delivery_band, e.postal_rate_id, e.outer_stock_item_id, e.external_name, e.reference, e.is_oversticker,
+           pp.name AS provider, ps.name AS service, pf.name AS format, r.min_weight_g, r.max_weight_g, s.stock_code, s.description,
+           sa.account_id AS from_id, sa.account_code AS from_code, sa.name AS from_name, src.depth
+         FROM idoc.v_account_envelope_source src
+         JOIN idoc.account sa ON sa.account_id = src.source_account_id
+         JOIN idoc.account_envelope e ON e.account_id = src.source_account_id
+         JOIN idoc.postal_rate r ON r.postal_rate_id = e.postal_rate_id
+         JOIN idoc.postal_service ps ON ps.postal_service_id = r.postal_service_id
+         JOIN idoc.postal_provider pp ON pp.postal_provider_id = ps.postal_provider_id
+         JOIN idoc.postal_format pf ON pf.postal_format_id = ps.postal_format_id
+         JOIN idoc.stock_item s ON s.stock_item_id = e.outer_stock_item_id
+         LEFT JOIN idoc.brand b ON b.brand_id = e.brand_id
+         WHERE src.account_id = @id AND src.source_account_id <> @id AND e.is_deleted = 0
+         ORDER BY src.depth, b.name, e.delivery_band, r.max_weight_g, e.reference`),
     ]);
     const a = c.recordset[0] as R | undefined;
     if (!a) throw new NotFoundError('Customer not found');
@@ -125,10 +140,38 @@ export class MssqlCustomerStore implements CustomerStore {
         id: r.account_envelope_id, brandId: r.brand_id, brandName: r.brand, deliveryBand: r.delivery_band, postalRateId: r.postal_rate_id, rateLabel: rateLabel(r),
         stockItemId: r.outer_stock_item_id, stockCode: r.stock_code, stockDescription: r.description, reference: r.reference, externalName: r.external_name, isOversticker: !!r.is_oversticker,
       })),
+      envelopesMode: a.envelopes_mode as EnvelopesMode,
+      inheritedEnvelopes: this.inherited(inheritedRows.recordset as R[], (envs.recordset as R[])),
       matchRules: (match.recordset as R[]).map((r) => ({ isInclude: !!r.is_include, key: r.name, value: r.passthrough_value })),
       sequenceRules: (seq.recordset as R[]).map((r) => ({ value: r.passthrough_value, number: r.sequence_number })),
       emails: (emails.recordset as R[]).map((r) => r.email),
     };
+  }
+
+  /** Parent envelope rows as views; a nearer entry, or this customer's own, with the same brand name, band, rate and reference replaces a further one. */
+  private inherited(rows: R[], own: R[]): InheritedEnvelopeView[] {
+    const key = (r: R): string => `${(r.brand ?? '').toLowerCase()}|${String(r.delivery_band).toLowerCase()}|${r.postal_rate_id}|${(r.reference ?? '').toLowerCase()}`;
+    const seen = new Set(own.map(key)); const out: InheritedEnvelopeView[] = [];
+    for (const r of rows) {
+      const k = key(r); if (seen.has(k)) continue; seen.add(k);
+      out.push({
+        id: r.account_envelope_id, brandId: r.brand_id, brandName: r.brand, deliveryBand: r.delivery_band, postalRateId: r.postal_rate_id, rateLabel: rateLabel(r),
+        stockItemId: r.outer_stock_item_id, stockCode: r.stock_code, stockDescription: r.description, reference: r.reference, externalName: r.external_name, isOversticker: !!r.is_oversticker,
+        from: { id: r.from_id, code: r.from_code, name: r.from_name },
+      });
+    }
+    return out;
+  }
+
+  async setEnvelopesMode(customerId: number, mode: EnvelopesMode, by: string): Promise<void> {
+    await this.mustBeCustomer(undefined, customerId);
+    const cur = (await this.pool.request().input('id', sql.Int, customerId).query('SELECT envelopes_mode, parent_account_id FROM idoc.account WHERE account_id = @id')).recordset[0] as R;
+    if (mode !== 'OWN' && cur.parent_account_id === null) throw new ValidationError({ mode: 'This customer has no parent to take envelopes from. Choose a parent on the Details tab first.' });
+    if (cur.envelopes_mode === mode) return;
+    await this.tx(async (t) => {
+      await this.req(t).input('id', sql.Int, customerId).input('m', sql.NVarChar(10), mode).query('UPDATE idoc.account SET envelopes_mode = @m WHERE account_id = @id');
+      await this.audit(t, customerId, by, describeEnvelopesMode(cur.envelopes_mode as EnvelopesMode, mode));
+    });
   }
 
   async lookups(): Promise<Lookups> {
@@ -179,8 +222,9 @@ export class MssqlCustomerStore implements CustomerStore {
         .input('mis', sql.NVarChar(50), input.misJobNumber).input('pmis', sql.NVarChar(50), input.pendingJobNumber).input('rday', sql.TinyInt, input.jobNumberRolloverDay).input('pfrom', sql.NVarChar(10), pendingFrom).input('ret', sql.NVarChar(500), input.returnAddress)
         .input('bk', sql.Int, await this.keyId(t, input.batchingKey)).input('sk', sql.Int, await this.keyId(t, input.packSequenceKey));
       const sets = FLAGS.map((f) => { req.input(f, sql.Bit, input.flags[f]); return `${FLAG_COLUMNS[f]} = @${f}`; });
-      await req.query(`UPDATE idoc.account SET parent_account_id = @par, invoicing_account_id = @inv, account_code = @code, name = @name, mis_job_number = @mis, pending_mis_job_number = @pmis, pending_job_number_from = CAST(@pfrom AS DATE), job_number_rollover_day = @rday, return_address = @ret, batching_key_id = @bk, pack_sequence_key_id = @sk, ${sets.join(', ')} WHERE account_id = @id`);
+      await req.query(`UPDATE idoc.account SET envelopes_mode = CASE WHEN @par IS NULL THEN N'OWN' ELSE envelopes_mode END, parent_account_id = @par, invoicing_account_id = @inv, account_code = @code, name = @name, mis_job_number = @mis, pending_mis_job_number = @pmis, pending_job_number_from = CAST(@pfrom AS DATE), job_number_rollover_day = @rday, return_address = @ret, batching_key_id = @bk, pack_sequence_key_id = @sk, ${sets.join(', ')} WHERE account_id = @id`);
       for (const l of lines) await this.audit(t, id, by, l);
+      if (input.parentId === null && old.envelopesMode !== 'OWN') await this.audit(t, id, by, describeEnvelopesMode(old.envelopesMode, 'OWN'));
     }, `Account code "${input.code}" is already in use`);
   }
 

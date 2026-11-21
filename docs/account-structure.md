@@ -32,6 +32,8 @@ Each account has a mode for each setting group.
 - The importer reads the effective settings only, resolved once per run. The UI shows the effective result and where each item comes from.
 - Examples: Somerset Council Planning and Housing use inherit + extras for envelopes (the generic envelope from the parent plus their own). Brands and matching rules are normally own.
 
+**Built so far (step 3, envelopes only):** `account.envelopes_mode` (OWN, INHERIT, EXTEND) and the view `idoc.v_account_envelope_source`, which lists the accounts whose envelope rows make up an account's list (nearest first). An account that inherits all its settings follows its parent. A nearer entry with the same brand name, delivery band, postal rate and reference replaces a further one. The importer reads the effective list, and Customers > Envelopes has the choice, shows the parent's settings read only with where each comes from, and removing a customer's parent puts it back on its own list. Brands, matching rules and notification emails still take everything from the account that holds the settings; each gets its own mode next.
+
 ## 3a. Merging packs from different sub-accounts
 
 - By default two sub-accounts never share an envelope (the account is part of the match key).
@@ -82,7 +84,7 @@ The user decides which envelopes an account may use (its effective list). The im
 
 1. Audit the schema (this document, section 7). **Done.**
 2. Tree and migration; retire grouping. **Done.**
-3. Inheritance modes: schema, resolver, importer, UI.
+3. Inheritance modes: schema, resolver, importer, UI. **Envelopes done**; brands, matching and pack-sequence rules, notification emails and costing to follow.
 4. Invoicing account link and validation. **Done** (see section 5), apart from the opt-in merge setting (3a) and editing job numbers on sub-accounts.
 5. Snapshot fields, batch event log and recipient search.
 6. Reporting.

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Alert, Autocomplete, Badge, Button, Group, Modal, Paper, Select, Stack, Switch, Table, Text, TextInput } from '@mantine/core';
 import { IconPlus } from '@tabler/icons-react';
-import { addEnvelope, deleteEnvelope, updateEnvelope, type EnvelopeInput, type EnvelopeView } from '../../api/customers';
+import { addEnvelope, deleteEnvelope, setEnvelopesMode, updateEnvelope, type EnvelopeInput, type EnvelopesMode, type EnvelopeView } from '../../api/customers';
 import { orNull, run, type TabProps } from './shared';
 
 interface Form { brandId: string | null; deliveryBand: string; postalRateId: string | null; stockItemId: string | null; reference: string; externalName: string; isOversticker: boolean }
@@ -38,6 +38,13 @@ export function EnvelopesTab({ detail, lookups, reload }: TabProps) {
     if (res.ok) await reload();
   };
 
+  const mode = detail.envelopesMode;
+  const hasParent = detail.parent !== null;
+  const changeMode = async (m: string | null) => {
+    if (m === null || m === mode) return;
+    const res = await run(() => setEnvelopesMode(detail.id, m as EnvelopesMode), 'Envelope list changed');
+    if (res.ok) await reload();
+  };
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }));
   const stockLabel = (s: { code: string | null; description: string; size: string | null }) => `${s.code ?? 'no code'} – ${s.description}${s.size ? ` (${s.size})` : ''}`;
   // Keep the saved choice visible even if it is no longer in the current lists.
@@ -46,11 +53,17 @@ export function EnvelopesTab({ detail, lookups, reload }: TabProps) {
 
   return (
     <Stack>
+      <Paper withBorder p="md">
+        <Select label="Where the envelope list comes from" allowDeselect={false} disabled={!hasParent} maw={420} value={mode} onChange={changeMode}
+          data={[{ value: 'OWN', label: 'This customer\'s own list' }, { value: 'INHERIT', label: 'The parent\'s list' }, { value: 'EXTEND', label: 'The parent\'s list plus this customer\'s own' }]}
+          description={hasParent ? `The parent is ${detail.parent!.name} (${detail.parent!.code}). A setting here with the same brand, delivery band, service and reference replaces the parent's.` : 'Choose a parent customer on the Details tab to take envelopes from it.'} />
+        {mode === 'INHERIT' && detail.envelopes.length > 0 && <Alert color="yellow" variant="light" mt="sm">This customer's own envelope settings are kept but not used while it takes the parent's list.</Alert>}
+      </Paper>
       <Group justify="space-between" align="flex-start">
         <Text size="sm" c="dimmed" maw={760}>
           Which outer envelope is used for each brand, delivery band and postal service weight band. When a mailpiece is weighed, the importer picks the setting whose weight band covers it. A setting with no brand is used for packs that have no brand.
         </Text>
-        <Button leftSection={<IconPlus size={16} />} onClick={() => open('new')}>Add envelope</Button>
+        <Button leftSection={<IconPlus size={16} />} onClick={() => open('new')} disabled={mode === 'INHERIT'}>Add envelope</Button>
       </Group>
       <Paper withBorder>
         <Table verticalSpacing="sm">
@@ -66,10 +79,26 @@ export function EnvelopesTab({ detail, lookups, reload }: TabProps) {
                 <Table.Td><Group justify="flex-end" gap="xs"><Button size="xs" variant="default" onClick={() => open(e)}>Edit</Button><Button size="xs" variant="subtle" color="red" onClick={() => setConfirm(e)}>Remove</Button></Group></Table.Td>
               </Table.Tr>
             ))}
-            {detail.envelopes.length === 0 && <Table.Tr><Table.Td colSpan={6}><Text c="dimmed" ta="center" py="md">No envelope settings. Files for this customer cannot be given an envelope until one is added.</Text></Table.Td></Table.Tr>}
+            {detail.envelopes.length === 0 && <Table.Tr><Table.Td colSpan={6}><Text c="dimmed" ta="center" py="md">{mode === 'OWN' ? 'No envelope settings. Files for this customer cannot be given an envelope until one is added.' : 'No envelope settings of its own.'}</Text></Table.Td></Table.Tr>}
           </Table.Tbody>
         </Table>
       </Paper>
+      {detail.inheritedEnvelopes.length > 0 && (
+        <Paper withBorder>
+          <Text fw={600} px="md" pt="sm">From the parent</Text>
+          <Table verticalSpacing="sm" c="dimmed">
+            <Table.Thead><Table.Tr><Table.Th>Brand</Table.Th><Table.Th>Delivery band</Table.Th><Table.Th>Postal service and weight band</Table.Th><Table.Th>Envelope</Table.Th><Table.Th>Reference</Table.Th><Table.Th>From</Table.Th></Table.Tr></Table.Thead>
+            <Table.Tbody>
+              {detail.inheritedEnvelopes.map((e) => (
+                <Table.Tr key={`i${e.id}`}>
+                  <Table.Td>{e.brandName ?? 'Any brand'}</Table.Td><Table.Td>{e.deliveryBand}</Table.Td><Table.Td>{e.rateLabel}</Table.Td>
+                  <Table.Td>{e.stockCode ?? 'no code'} – {e.stockDescription}</Table.Td><Table.Td>{e.reference ?? '–'}</Table.Td><Table.Td>{e.from.name}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Paper>
+      )}
       <Modal opened={editing !== null} onClose={() => setEditing(null)} title={editing === 'new' ? 'Add envelope' : 'Edit envelope'} size="lg">
         <Stack>
           {general && <Alert color="red">{general}</Alert>}

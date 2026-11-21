@@ -8,6 +8,7 @@ export interface CustomerRow {
   parentId: number | null; parentCode: string | null;
   accountCount: number; brandCount: number; envelopeCount: number;
 }
+export type EnvelopesMode = 'OWN' | 'INHERIT' | 'EXTEND';
 export interface ParentView { id: number; code: string; name: string }
 export interface ChildView { id: number; code: string; name: string; isDeleted: boolean }
 export interface AccountView { id: number; code: string; name: string; isDeleted: boolean }
@@ -16,6 +17,7 @@ export interface EnvelopeView {
   id: number; brandId: number | null; brandName: string | null; deliveryBand: string; postalRateId: number; rateLabel: string;
   stockItemId: number; stockCode: string | null; stockDescription: string; reference: string | null; externalName: string | null; isOversticker: boolean;
 }
+export interface InheritedEnvelopeView extends EnvelopeView { from: ParentView }
 export interface MatchRule { isInclude: boolean; key: string; value: string | null }
 export interface SequenceRule { value: string; number: number }
 export interface CustomerDetail {
@@ -24,7 +26,7 @@ export interface CustomerDetail {
   parent: ParentView | null; children: ChildView[];
   /** null = the customer itself. */
   invoicing: ParentView | null; invoicingOptions: ParentView[];
-  accounts: AccountView[]; brands: BrandView[]; envelopes: EnvelopeView[]; matchRules: MatchRule[]; sequenceRules: SequenceRule[]; emails: string[];
+  accounts: AccountView[]; brands: BrandView[]; envelopes: EnvelopeView[]; envelopesMode: EnvelopesMode; inheritedEnvelopes: InheritedEnvelopeView[]; matchRules: MatchRule[]; sequenceRules: SequenceRule[]; emails: string[];
 }
 export type DetailsInput = Pick<CustomerDetail, 'code' | 'name' | 'misJobNumber' | 'pendingJobNumber' | 'jobNumberRolloverDay' | 'returnAddress' | 'flags' | 'batchingKey' | 'packSequenceKey'> & { parentId: number | null; invoicingAccountId: number | null };
 export interface EnvelopeInput {
@@ -52,6 +54,7 @@ export const renameBrand = (id: number, name: string) => api(`/api/brands/${id}`
 export const deleteBrand = (id: number) => api(`/api/brands/${id}`, { method: 'DELETE' });
 export const addEnvelope = (id: number, body: EnvelopeInput) => api(`/api/customers/${id}/envelopes`, { method: 'POST', body });
 export const updateEnvelope = (id: number, body: EnvelopeInput) => api(`/api/envelopes/${id}`, { method: 'PUT', body });
+export const setEnvelopesMode = (id: number, mode: EnvelopesMode) => api(`/api/customers/${id}/envelopes-mode`, { method: 'PUT', body: { mode } });
 export const deleteEnvelope = (id: number) => api(`/api/envelopes/${id}`, { method: 'DELETE' });
 export const saveMatchRules = (id: number, rules: MatchRule[]) => api(`/api/customers/${id}/match-rules`, { method: 'PUT', body: { rules } });
 export const saveSequenceRules = (id: number, rules: SequenceRule[]) => api(`/api/customers/${id}/sequence-rules`, { method: 'PUT', body: { rules } });
