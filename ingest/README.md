@@ -97,6 +97,8 @@ Flags: `--dry-run` (read and validate against the database, save nothing, leave 
 Alternatively copy `.env.example` to `.env`, edit it, and use `npm run db:init:env` / `npm run watch:env` (Node 20.6+).
 
 To wipe the scratch database and rebuild it from the current schema (deletes everything in it): `npm run db:reset` (reads `.env`).
+
+To do the whole job (reset, import the FileMaker export, assign stock codes): `npm run db:rebuild C:\idoc-import` (add `--start=N` to choose the first stock code; the folder holds the four `.mer` files). It stops at the first step that fails. Stock codes are handed out in a fixed order starting at 10001, so the same export gives the same codes, but a changed export can shift them: do not use this once codes have been printed on anything.
 Stop with Ctrl+C: the current file is finished first.
 
 `db:init` loads **test** reference data (placeholder stock weights, accounts `FEXCO`, `NATIONAL_GRID_PSR`). Real
