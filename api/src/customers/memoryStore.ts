@@ -5,7 +5,7 @@ import type {
 } from './types.js';
 import { FLAGS } from './types.js';
 
-interface Cust extends Omit<CustomerDetail, 'accounts' | 'brands' | 'envelopes'> { }
+interface Cust extends Omit<CustomerDetail, 'accounts' | 'brands' | 'envelopes' | 'parent' | 'children'> { parentId: number | null }
 interface Acct { id: number; customerId: number; code: string; name: string; isDeleted: boolean }
 interface Brand { id: number; customerId: number; name: string }
 interface Env extends EnvelopeInput { id: number; customerId: number; isDeleted: boolean }
@@ -21,6 +21,7 @@ export class MemoryCustomerStore implements CustomerStore {
   audit: (AuditEntry & { customerId: number })[] = [];
   lookupData: Lookups = {
     passthroughKeys: ['Department', 'Doc Type'],
+    customers: [],
     deliveryBands: ['1st Class', '2nd Class', 'Signed For'],
     postalRates: [
       { id: 1, label: 'Royal Mail – 2nd Class (Letter), up to 100g', format: 'Letter' },
@@ -32,13 +33,14 @@ export class MemoryCustomerStore implements CustomerStore {
       { id: 11, code: null, description: 'C4 white window envelope', size: 'C4' },
     ],
   };
+  customersLookup = (): Lookups['customers'] => [...this.customers.values()].filter((c) => !c.flags.isDeleted).sort((a, b) => a.name.localeCompare(b.name)).map(({ id, code, name }) => ({ id, code, name }));
   now = (): string => new Date().toISOString();
   private seq = 100;
   private nextId = (): number => ++this.seq;
 
   seed(c: { code: string; name: string } & Partial<Cust>): number {
     const id = this.nextId();
-    this.customers.set(id, { id, misJobNumber: null, returnAddress: null, colourMode: null, flags: noFlags(), batchingKey: null, packSequenceKey: null, matchRules: [], sequenceRules: [], emails: [], ...c });
+    this.customers.set(id, { id, parentId: null, misJobNumber: null, returnAddress: null, colourMode: null, flags: noFlags(), batchingKey: null, packSequenceKey: null, matchRules: [], sequenceRules: [], emails: [], ...c });
     return id;
   }
 
@@ -60,7 +62,7 @@ export class MemoryCustomerStore implements CustomerStore {
       .filter((c) => (includeDeleted || !c.flags.isDeleted) && (!q || c.code.toLowerCase().includes(q) || c.name.toLowerCase().includes(q) || (c.misJobNumber ?? '').toLowerCase().includes(q)))
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((c) => ({
-        id: c.id, code: c.code, name: c.name, misJobNumber: c.misJobNumber, isAddressMatching: c.flags.isAddressMatching, isTesting: c.flags.isTesting, isDeleted: c.flags.isDeleted,
+        id: c.id, code: c.code, name: c.name, misJobNumber: c.misJobNumber, parentId: c.parentId, parentCode: c.parentId === null ? null : this.customers.get(c.parentId)?.code ?? null, isAddressMatching: c.flags.isAddressMatching, isTesting: c.flags.isTesting, isDeleted: c.flags.isDeleted,
         accountCount: this.accounts.filter((a) => a.customerId === c.id && !a.isDeleted).length,
         brandCount: this.brands.filter((b) => b.customerId === c.id).length,
         envelopeCount: this.envelopes.filter((e) => e.customerId === c.id && !e.isDeleted).length,
@@ -68,9 +70,12 @@ export class MemoryCustomerStore implements CustomerStore {
   }
 
   async get(id: number): Promise<CustomerDetail> {
-    const c = this.cust(id);
+    const { parentId, ...c } = this.cust(id);
+    const par = parentId === null ? undefined : this.customers.get(parentId);
     return {
       ...c, flags: { ...c.flags },
+      parent: par ? { id: par.id, code: par.code, name: par.name } : null,
+      children: [...this.customers.values()].filter((x) => x.parentId === id).sort((a, b) => a.name.localeCompare(b.name)).map((x) => ({ id: x.id, code: x.code, name: x.name, isDeleted: x.flags.isDeleted })),
       accounts: this.accounts.filter((a) => a.customerId === id).map(({ id: i, code, name, isDeleted }) => ({ id: i, code, name, isDeleted })),
       brands: this.brands.filter((b) => b.customerId === id).map((b) => ({ id: b.id, name: b.name, usage: this.brandUsage(b.id) })),
       envelopes: this.envelopes.filter((e) => e.customerId === id && !e.isDeleted).map((e): EnvelopeView => {
@@ -83,7 +88,7 @@ export class MemoryCustomerStore implements CustomerStore {
     };
   }
 
-  async lookups(): Promise<Lookups> { return this.lookupData; }
+  async lookups(): Promise<Lookups> { return { ...this.lookupData, customers: this.customersLookup() }; }
 
   async create(input: { code: string; name: string }, by: string): Promise<number> {
     if (this.codeTaken(input.code)) throw new ConflictError(`Account code "${input.code}" is already in use`);
@@ -95,9 +100,19 @@ export class MemoryCustomerStore implements CustomerStore {
   async updateDetails(id: number, input: CustomerDetailsInput, by: string): Promise<void> {
     const old = await this.get(id);
     if (this.codeTaken(input.code, id)) throw new ConflictError(`Account code "${input.code}" is already in use`);
-    const lines = describeDetailsChange(old, input);
+    this.checkParent(id, input.parentId);
+    const lines = describeDetailsChange(old, input, input.parentId === null ? null : this.cust(input.parentId).code);
     Object.assign(this.cust(id), input);
     for (const l of lines) this.log(id, by, l);
+  }
+
+  /** A parent must be another customer, and must not be this customer or one of its descendants. */
+  private checkParent(id: number, parentId: number | null): void {
+    if (parentId === null) return;
+    if (!this.customers.has(parentId)) throw new ValidationError({ parentId: 'Parent customer not found' });
+    for (let at: number | null = parentId, n = 0; at !== null && n < 1000; at = this.customers.get(at)?.parentId ?? null, n++) {
+      if (at === id) throw new ValidationError({ parentId: parentId === id ? 'A customer cannot be its own parent' : 'That customer is below this one in the hierarchy, so it cannot be its parent' });
+    }
   }
 
   async addAccount(customerId: number, input: { code: string; name: string }, by: string): Promise<number> {

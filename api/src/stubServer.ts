@@ -17,6 +17,9 @@ await customers.addAccount(acme, { code: 'ACME-SC', name: 'Acme Energy – Scotl
 const brand = await customers.addBrand(acme, 'Acme Home', 'system');
 await customers.addEnvelope(acme, { brandId: brand, deliveryBand: '2nd Class', postalRateId: 1, stockItemId: 10, reference: null, externalName: null, isOversticker: false }, 'system');
 customers.seed({ code: 'NWB', name: 'Northwest Bank plc', misJobNumber: '24102' });
+const odevo = customers.seed({ code: 'ODEVO', name: 'Odevo', misJobNumber: '23990' });
+customers.seed({ code: 'ODEVO_HIGHLINE', name: 'Highline Solicitors', parentId: odevo });
+customers.seed({ code: 'ODEVO_R_AND_R', name: 'Rendall & Rittner' });
 const app = await buildApp({ settings: store, customers, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
 await app.listen({ port: Number(process.env['API_PORT'] ?? 3001), host: '127.0.0.1' });
 console.log('Stub API (no database) on http://127.0.0.1:3001');

@@ -38,7 +38,7 @@ describe.skipIf(!cs)('MssqlCustomerStore', { timeout: 120_000 }, () => {
 
   it('saves details, creates passthrough keys by name, and describes the changes', async () => {
     const id = await store.create({ code: 'DET', name: 'Details Co' }, 'tester');
-    await store.updateDetails(id, { code: 'DET', name: 'Details Co', misJobNumber: '777', returnAddress: 'PO Box 1', batchingKey: 'Brand New Key', packSequenceKey: 'Department', flags: flags({ isAddressMatching: true, isNhs: true }) }, 'tester');
+    await store.updateDetails(id, { code: 'DET', name: 'Details Co', misJobNumber: '777', returnAddress: 'PO Box 1', batchingKey: 'Brand New Key', packSequenceKey: 'Department', parentId: null, flags: flags({ isAddressMatching: true, isNhs: true }) }, 'tester');
     const d = await store.get(id);
     expect(d).toMatchObject({ misJobNumber: '777', returnAddress: 'PO Box 1', batchingKey: 'Brand New Key', packSequenceKey: 'Department', flags: { isAddressMatching: true, isNhs: true, isTesting: false } });
     expect((await store.lookups()).passthroughKeys).toContain('Brand New Key');
@@ -105,10 +105,31 @@ describe.skipIf(!cs)('MssqlCustomerStore', { timeout: 120_000 }, () => {
     expect(lines).toEqual(expect.arrayContaining(['Pack sequence: none → 1. Bill; 2. Arrears', 'Notification e-mails: a@x.com, b@x.com → none']));
   });
 
+  it('hierarchy: parent and children are shown, loops are refused, and the child keeps its own settings', async () => {
+    const parent = await store.create({ code: 'HPARENT', name: 'Hier Parent' }, 'tester');
+    const child = await store.create({ code: 'HCHILD', name: 'Hier Child' }, 'tester');
+    const grand = await store.create({ code: 'HGRAND', name: 'Hier Grandchild' }, 'tester');
+    const input = (code: string, name: string, parentId: number | null) => ({ code, name, misJobNumber: null, returnAddress: null, batchingKey: null, packSequenceKey: null, parentId, flags: flags({ isAddressMatching: true }) });
+    await store.updateDetails(child, input('HCHILD', 'Hier Child', parent), 'tester');
+    await store.updateDetails(grand, input('HGRAND', 'Hier Grandchild', child), 'tester');
+    expect((await store.get(child)).parent).toMatchObject({ id: parent, code: 'HPARENT' });
+    expect((await store.get(parent)).children.map((c) => c.code)).toEqual(['HCHILD']);
+    expect((await store.list('Hier', false)).find((r) => r.id === grand)).toMatchObject({ parentId: child, parentCode: 'HCHILD' });
+    await expect(store.updateDetails(parent, input('HPARENT', 'Hier Parent', grand), 'tester')).rejects.toBeInstanceOf(ValidationError);
+    await expect(store.updateDetails(parent, input('HPARENT', 'Hier Parent', parent), 'tester')).rejects.toBeInstanceOf(ValidationError);
+    await expect(store.updateDetails(parent, input('HPARENT', 'Hier Parent', 999999), 'tester')).rejects.toBeInstanceOf(ValidationError);
+    const sub = await store.addAccount(parent, { code: 'HPARENT-SUB', name: 'A sub-account' }, 'tester');
+    await expect(store.updateDetails(parent, input('HPARENT', 'Hier Parent', sub), 'tester')).rejects.toBeInstanceOf(ValidationError); // a sub-account is not a customer
+    expect((await store.history(child, 5)).map((h) => h.summary)).toContain('Parent: (none) → "HPARENT"');
+    expect((await store.lookups()).customers.map((c) => c.code)).toEqual(expect.arrayContaining(['HPARENT', 'HCHILD']));
+    await store.updateDetails(child, input('HCHILD', 'Hier Child', null), 'tester');
+    expect((await store.get(parent)).children).toEqual([]);
+  });
+
   it('a failed change leaves no half-written history', async () => {
     const id = await store.create({ code: 'ATOM', name: 'Atomic' }, 'tester');
     const before = (await store.history(id, 50)).length;
-    await expect(store.updateDetails(id, { code: 'FEXCO_CUSTOMER', name: 'Atomic', misJobNumber: '1', returnAddress: null, batchingKey: null, packSequenceKey: null, flags: flags() }, 'tester')).rejects.toBeInstanceOf(ConflictError);
+    await expect(store.updateDetails(id, { code: 'FEXCO_CUSTOMER', name: 'Atomic', misJobNumber: '1', returnAddress: null, batchingKey: null, packSequenceKey: null, parentId: null, flags: flags() }, 'tester')).rejects.toBeInstanceOf(ConflictError);
     expect((await store.history(id, 50)).length).toBe(before);
     expect((await store.get(id)).misJobNumber).toBeNull();
   });

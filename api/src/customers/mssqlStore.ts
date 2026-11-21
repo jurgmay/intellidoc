@@ -53,24 +53,26 @@ export class MssqlCustomerStore implements CustomerStore {
 
   async list(search: string, includeDeleted: boolean): Promise<CustomerRow[]> {
     const rows = (await this.pool.request().input('q', sql.NVarChar(200), `%${search.trim().replace(/[%_[]/g, '[$&]')}%`).input('d', sql.Bit, includeDeleted).query(`
-      SELECT a.account_id, a.account_code, a.name, a.mis_job_number, a.is_address_matching, a.is_testing, a.is_deleted,
+      SELECT a.account_id, a.account_code, a.name, a.mis_job_number, a.is_address_matching, a.is_testing, a.is_deleted, a.parent_account_id, par.account_code AS parent_code,
         (SELECT COUNT(*) FROM idoc.account s WHERE s.grouping_account_id = a.account_id AND s.is_deleted = 0) AS accounts,
         (SELECT COUNT(*) FROM idoc.brand b WHERE b.account_id = a.account_id) AS brands,
         (SELECT COUNT(*) FROM idoc.account_envelope e WHERE e.account_id = a.account_id AND e.is_deleted = 0) AS envelopes
       FROM idoc.account a
+      LEFT JOIN idoc.account par ON par.account_id = a.parent_account_id
       WHERE a.grouping_account_id IS NULL AND (@d = 1 OR a.is_deleted = 0)
         AND (a.account_code LIKE @q ESCAPE '[' OR a.name LIKE @q ESCAPE '[' OR a.mis_job_number LIKE @q ESCAPE '[')
       ORDER BY a.name`)).recordset as R[];
     return rows.map((r) => ({
-      id: r.account_id, code: r.account_code, name: r.name, misJobNumber: r.mis_job_number, isAddressMatching: !!r.is_address_matching, isTesting: !!r.is_testing, isDeleted: !!r.is_deleted,
+      id: r.account_id, code: r.account_code, name: r.name, misJobNumber: r.mis_job_number, parentId: r.parent_account_id ?? null, parentCode: r.parent_code ?? null, isAddressMatching: !!r.is_address_matching, isTesting: !!r.is_testing, isDeleted: !!r.is_deleted,
       accountCount: r.accounts, brandCount: r.brands, envelopeCount: r.envelopes,
     }));
   }
 
   async get(id: number): Promise<CustomerDetail> {
     const q = (text: string) => this.pool.request().input('id', sql.Int, id).query(text);
-    const [c, accts, brands, envs, match, seq, emails] = await Promise.all([
-      q(`SELECT a.*, bk.name AS batching_key, sk.name AS pack_sequence_key FROM idoc.account a
+    const [c, accts, brands, envs, match, seq, emails, kids] = await Promise.all([
+      q(`SELECT a.*, bk.name AS batching_key, sk.name AS pack_sequence_key, par.account_id AS p_id, par.account_code AS p_code, par.name AS p_name FROM idoc.account a
+         LEFT JOIN idoc.account par ON par.account_id = a.parent_account_id
          LEFT JOIN idoc.passthrough_key bk ON bk.passthrough_key_id = a.batching_key_id
          LEFT JOIN idoc.passthrough_key sk ON sk.passthrough_key_id = a.pack_sequence_key_id
          WHERE a.account_id = @id AND a.grouping_account_id IS NULL`),
@@ -96,6 +98,7 @@ export class MssqlCustomerStore implements CustomerStore {
       q(`SELECT m.is_include, k.name, m.passthrough_value FROM idoc.address_match_rule m JOIN idoc.passthrough_key k ON k.passthrough_key_id = m.passthrough_key_id WHERE m.account_id = @id ORDER BY m.sequence_no`),
       q('SELECT passthrough_value, sequence_number FROM idoc.pack_sequence_rule WHERE account_id = @id ORDER BY sequence_number, passthrough_value'),
       q('SELECT email FROM idoc.account_notification_email WHERE account_id = @id ORDER BY email'),
+      q('SELECT account_id, account_code, name, is_deleted FROM idoc.account WHERE parent_account_id = @id AND grouping_account_id IS NULL ORDER BY name'),
     ]);
     const a = c.recordset[0] as R | undefined;
     if (!a) throw new NotFoundError('Customer not found');
@@ -104,6 +107,8 @@ export class MssqlCustomerStore implements CustomerStore {
     return {
       id: a.account_id, code: a.account_code, name: a.name, misJobNumber: a.mis_job_number, returnAddress: a.return_address, colourMode: a.colour_mode ?? null, flags,
       batchingKey: a.batching_key, packSequenceKey: a.pack_sequence_key,
+      parent: a.p_id ? { id: a.p_id, code: a.p_code, name: a.p_name } : null,
+      children: (kids.recordset as R[]).map((r) => ({ id: r.account_id, code: r.account_code, name: r.name, isDeleted: !!r.is_deleted })),
       accounts: (accts.recordset as R[]).map((r) => ({ id: r.account_id, code: r.account_code, name: r.name, isDeleted: !!r.is_deleted })),
       brands: (brands.recordset as R[]).map((r) => ({ id: r.brand_id, name: r.name, usage: r.usage })),
       envelopes: (envs.recordset as R[]).map((r) => ({
@@ -117,7 +122,7 @@ export class MssqlCustomerStore implements CustomerStore {
   }
 
   async lookups(): Promise<Lookups> {
-    const [keys, bands, rates, stock] = await Promise.all([
+    const [keys, bands, rates, custs, stock] = await Promise.all([
       this.pool.request().query('SELECT name FROM idoc.passthrough_key ORDER BY name'),
       this.pool.request().query(`SELECT DISTINCT delivery_band FROM idoc.account_envelope WHERE is_deleted = 0 ORDER BY delivery_band`),
       this.pool.request().query(`SELECT r.postal_rate_id, pp.name AS provider, ps.name AS service, pf.name AS format, r.min_weight_g, r.max_weight_g
@@ -125,11 +130,13 @@ export class MssqlCustomerStore implements CustomerStore {
         JOIN idoc.postal_provider pp ON pp.postal_provider_id = ps.postal_provider_id JOIN idoc.postal_format pf ON pf.postal_format_id = ps.postal_format_id
         WHERE r.valid_from <= CAST(SYSUTCDATETIME() AS DATE) AND (r.valid_to IS NULL OR r.valid_to >= CAST(SYSUTCDATETIME() AS DATE))
         ORDER BY pp.name, ps.name, pf.rank_order, r.max_weight_g`),
+      this.pool.request().query('SELECT account_id, account_code, name FROM idoc.account WHERE grouping_account_id IS NULL AND is_deleted = 0 ORDER BY name'),
       this.pool.request().query(`SELECT s.stock_item_id, s.stock_code, s.description, z.code AS size FROM idoc.stock_item s LEFT JOIN idoc.envelope_size z ON z.envelope_size_id = s.envelope_size_id
         WHERE s.is_envelope = 1 AND s.is_active = 1 AND s.envelope_size_id IS NOT NULL ORDER BY s.description`),
     ]);
     return {
       passthroughKeys: (keys.recordset as R[]).map((r) => r.name),
+      customers: (custs.recordset as R[]).map((r) => ({ id: r.account_id, code: r.account_code, name: r.name })),
       deliveryBands: [...new Set(['1st Class', '2nd Class', ...(bands.recordset as R[]).map((r) => r.delivery_band as string)])].sort(),
       postalRates: (rates.recordset as R[]).map((r) => ({ id: r.postal_rate_id, label: rateLabel(r), format: r.format })),
       envelopeStock: (stock.recordset as R[]).map((r) => ({ id: r.stock_item_id, code: r.stock_code, description: r.description, size: r.size })),
@@ -147,15 +154,32 @@ export class MssqlCustomerStore implements CustomerStore {
 
   async updateDetails(id: number, input: CustomerDetailsInput, by: string): Promise<void> {
     const old = await this.get(id);
-    const lines = describeDetailsChange(old, input);
+    const parentCode = await this.checkParent(id, input.parentId);
+    const lines = describeDetailsChange(old, input, parentCode);
     await this.tx(async (t) => {
-      const req = this.req(t).input('id', sql.Int, id).input('code', sql.NVarChar(100), input.code).input('name', sql.NVarChar(200), input.name)
+      const req = this.req(t).input('id', sql.Int, id).input('par', sql.Int, input.parentId).input('code', sql.NVarChar(100), input.code).input('name', sql.NVarChar(200), input.name)
         .input('mis', sql.NVarChar(50), input.misJobNumber).input('ret', sql.NVarChar(500), input.returnAddress)
         .input('bk', sql.Int, await this.keyId(t, input.batchingKey)).input('sk', sql.Int, await this.keyId(t, input.packSequenceKey));
       const sets = FLAGS.map((f) => { req.input(f, sql.Bit, input.flags[f]); return `${FLAG_COLUMNS[f]} = @${f}`; });
-      await req.query(`UPDATE idoc.account SET account_code = @code, name = @name, mis_job_number = @mis, return_address = @ret, batching_key_id = @bk, pack_sequence_key_id = @sk, ${sets.join(', ')} WHERE account_id = @id`);
+      await req.query(`UPDATE idoc.account SET parent_account_id = @par, account_code = @code, name = @name, mis_job_number = @mis, return_address = @ret, batching_key_id = @bk, pack_sequence_key_id = @sk, ${sets.join(', ')} WHERE account_id = @id`);
       for (const l of lines) await this.audit(t, id, by, l);
     }, `Account code "${input.code}" is already in use`);
+  }
+
+  /** A parent must be another customer, never this customer or one of its descendants. Returns the parent's code. */
+  private async checkParent(id: number, parentId: number | null): Promise<string | null> {
+    if (parentId === null) return null;
+    if (parentId === id) throw new ValidationError({ parentId: 'A customer cannot be its own parent' });
+    const p = (await this.pool.request().input('p', sql.Int, parentId).query('SELECT account_code FROM idoc.account WHERE account_id = @p AND grouping_account_id IS NULL')).recordset[0] as R | undefined;
+    if (!p) throw new ValidationError({ parentId: 'Parent customer not found' });
+    const loop = await this.pool.request().input('p', sql.Int, parentId).input('id', sql.Int, id).query(`
+      WITH up AS (
+        SELECT account_id, parent_account_id FROM idoc.account WHERE account_id = @p
+        UNION ALL
+        SELECT a.account_id, a.parent_account_id FROM idoc.account a JOIN up ON a.account_id = up.parent_account_id)
+      SELECT 1 AS x FROM up WHERE account_id = @id OPTION (MAXRECURSION 100)`);
+    if (loop.recordset.length > 0) throw new ValidationError({ parentId: 'That customer is below this one in the hierarchy, so it cannot be its parent' });
+    return p.account_code as string;
   }
 
   async addAccount(customerId: number, input: { code: string; name: string }, by: string): Promise<number> {

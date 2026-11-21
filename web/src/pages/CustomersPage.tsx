@@ -6,6 +6,23 @@ import { IconAlertCircle, IconPlus, IconSearch } from '@tabler/icons-react';
 import { createCustomer, listCustomers, type CustomerRow } from '../api/customers';
 import { run } from './customer/shared';
 
+/** Puts each child directly under its parent. A row whose parent is not in the list (filtered out) stays at the top level. */
+function inHierarchy(rows: CustomerRow[]): { row: CustomerRow; depth: number }[] {
+  const ids = new Set(rows.map((r) => r.id));
+  const kids = new Map<number, CustomerRow[]>();
+  for (const r of rows) if (r.parentId !== null && ids.has(r.parentId) && r.parentId !== r.id) kids.set(r.parentId, [...(kids.get(r.parentId) ?? []), r]);
+  const out: { row: CustomerRow; depth: number }[] = [];
+  const seen = new Set<number>();
+  const walk = (r: CustomerRow, depth: number) => {
+    if (seen.has(r.id)) return; // guards against a loop in the data
+    seen.add(r.id); out.push({ row: r, depth });
+    for (const k of kids.get(r.id) ?? []) walk(k, depth + 1);
+  };
+  for (const r of rows) if (r.parentId === null || !ids.has(r.parentId) || r.parentId === r.id) walk(r, 0);
+  for (const r of rows) walk(r, 0); // anything left over is part of a loop
+  return out;
+}
+
 export function CustomersPage() {
   const nav = useNavigate();
   const [search, setSearch] = useState('');
@@ -56,10 +73,10 @@ export function CustomersPage() {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {rows.map((r) => (
+              {inHierarchy(rows).map(({ row: r, depth }) => (
                 <Table.Tr key={r.id} onClick={() => nav(`/customers/${r.id}`)} style={{ cursor: 'pointer' }}>
-                  <Table.Td>{r.code}</Table.Td>
-                  <Table.Td fw={500}>{r.name}</Table.Td>
+                  <Table.Td pl={depth * 24 + 12}>{depth > 0 && <Text span c="dimmed">└ </Text>}{r.code}</Table.Td>
+                  <Table.Td fw={500}>{r.name}{depth === 0 && r.parentCode && <Text span size="xs" c="dimmed" fw={400}> · part of {r.parentCode}</Text>}</Table.Td>
                   <Table.Td>{r.misJobNumber ?? <Text span c="dimmed">–</Text>}</Table.Td>
                   <Table.Td ta="right">{r.accountCount}</Table.Td>
                   <Table.Td ta="right">{r.brandCount}</Table.Td>

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Button, Group, Paper, SimpleGrid, Stack, Switch, Text, Textarea, TextInput, Title } from '@mantine/core';
+import { Alert, Button, Select, Group, Paper, SimpleGrid, Stack, Switch, Text, Textarea, TextInput, Title } from '@mantine/core';
 import { FLAGS, type FlagKey } from '../../api/customers';
 import { orNull, type TabProps } from './shared';
 
@@ -12,14 +12,15 @@ export function DetailsTab({ detail, lookups, patchDetails }: TabProps) {
   const [mis, setMis] = useState(detail.misJobNumber ?? '');
   const [ret, setRet] = useState(detail.returnAddress ?? '');
   const [flags, setFlags] = useState(detail.flags);
+  const [parentId, setParentId] = useState<string | null>(detail.parent ? String(detail.parent.id) : null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
-  const dirty = code !== detail.code || name !== detail.name || mis !== (detail.misJobNumber ?? '') || ret !== (detail.returnAddress ?? '') || FLAGS.some((f) => flags[f] !== detail.flags[f]);
+  const dirty = code !== detail.code || name !== detail.name || mis !== (detail.misJobNumber ?? '') || ret !== (detail.returnAddress ?? '') || FLAGS.some((f) => flags[f] !== detail.flags[f]) || parentId !== (detail.parent ? String(detail.parent.id) : null);
 
   const save = async () => {
     setSaving(true);
-    try { await patchDetails({ code: code.trim(), name: name.trim(), misJobNumber: orNull(mis), returnAddress: orNull(ret), flags }); setErrors({}); }
+    try { await patchDetails({ code: code.trim(), name: name.trim(), misJobNumber: orNull(mis), returnAddress: orNull(ret), flags, parentId: parentId === null ? null : Number(parentId) }); setErrors({}); }
     catch (e) { setErrors((e as { fieldErrors?: Record<string, string> }).fieldErrors ?? {}); }
     finally { setSaving(false); }
   };
@@ -32,6 +33,8 @@ export function DetailsTab({ detail, lookups, patchDetails }: TabProps) {
           <TextInput label="Account code" description="Unique across all customers and sub-accounts." value={code} onChange={(e) => setCode(e.currentTarget.value)} error={errors['code']} />
           <TextInput label="Name" description="Printed as written on the run sheet." value={name} onChange={(e) => setName(e.currentTarget.value)} error={errors['name']} />
           <TextInput label="MIS job number" description="The customer's job number in the MIS." value={mis} onChange={(e) => setMis(e.currentTarget.value)} error={errors['misJobNumber']} />
+          <Select label="Parent customer" description="Where this customer sits in a hierarchy. It keeps its own settings; this only organises the list." searchable clearable placeholder="None (top level)"
+            data={lookups.customers.filter((c) => c.id !== detail.id).map((c) => ({ value: String(c.id), label: `${c.name} (${c.code})` }))} value={parentId} onChange={setParentId} error={errors['parentId']} />
           <Textarea label="Return address" autosize minRows={3} value={ret} onChange={(e) => setRet(e.currentTarget.value)} error={errors['returnAddress']} />
         </SimpleGrid>
       </Paper>

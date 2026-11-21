@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Badge, Button, Group, Modal, Paper, Stack, Table, Text, TextInput } from '@mantine/core';
+import { Link } from 'react-router-dom';
+import { Anchor, Badge, Button, Group, Modal, Paper, Stack, Table, Text, TextInput } from '@mantine/core';
 import { IconPlus } from '@tabler/icons-react';
 import { addAccount, updateAccount, type AccountView } from '../../api/customers';
 import { run, type TabProps } from './shared';
@@ -21,7 +22,28 @@ export function AccountsTab({ detail, reload }: TabProps) {
   };
 
   return (
-    <Stack>
+    <Stack gap="xl">
+      {detail.children.length > 0 && (
+        <Stack>
+          <div>
+            <Text fw={600}>Child customers</Text>
+            <Text size="sm" c="dimmed" maw={700}>Customers placed under this one in the hierarchy. Each is a customer in its own right with its own settings; open one to edit it, or change its parent on its Details tab.</Text>
+          </div>
+          <Paper withBorder>
+            <Table verticalSpacing="sm">
+              <Table.Tbody>
+                {detail.children.map((c) => (
+                  <Table.Tr key={c.id}>
+                    <Table.Td w={220}>{c.code}</Table.Td>
+                    <Table.Td><Anchor component={Link} to={`/customers/${c.id}`}>{c.name}</Anchor> {c.isDeleted && <Badge color="gray" ml="xs">Deleted</Badge>}</Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Paper>
+        </Stack>
+      )}
+      <Stack>
       <Group justify="space-between">
         <Text size="sm" c="dimmed" maw={700}>
           Sub-accounts are the account codes that appear as the owner in this customer&apos;s XML files. Settings (brands, envelopes, matching) are read from the customer, not the sub-account.
@@ -55,6 +77,7 @@ export function AccountsTab({ detail, reload }: TabProps) {
           <Group justify="flex-end"><Button variant="default" onClick={() => setEditing(null)}>Cancel</Button><Button onClick={save}>Save</Button></Group>
         </Stack>
       </Modal>
+      </Stack>
     </Stack>
   );
 }

@@ -1,8 +1,12 @@
 export interface CustomerRow {
   id: number; code: string; name: string; misJobNumber: string | null;
   isAddressMatching: boolean; isTesting: boolean; isDeleted: boolean;
+  /** The hierarchy parent (not the same as the grouping account that holds the settings). */
+  parentId: number | null; parentCode: string | null;
   accountCount: number; brandCount: number; envelopeCount: number;
 }
+export interface ParentView { id: number; code: string; name: string }
+export interface ChildView { id: number; code: string; name: string; isDeleted: boolean }
 export interface AccountView { id: number; code: string; name: string; isDeleted: boolean }
 export interface BrandView { id: number; name: string; /** envelopes + stock items + mailpieces that use it */ usage: number }
 export interface EnvelopeView {
@@ -19,6 +23,7 @@ export interface CustomerDetail {
   id: number; code: string; name: string; misJobNumber: string | null; returnAddress: string | null; colourMode: number | null;
   flags: Record<FlagKey, boolean>;
   batchingKey: string | null; packSequenceKey: string | null;
+  parent: ParentView | null; children: ChildView[];
   accounts: AccountView[]; brands: BrandView[]; envelopes: EnvelopeView[];
   matchRules: MatchRule[]; sequenceRules: SequenceRule[]; emails: string[];
 }
@@ -27,6 +32,8 @@ export interface CustomerDetail {
 export interface CustomerDetailsInput {
   code: string; name: string; misJobNumber: string | null; returnAddress: string | null;
   flags: Record<FlagKey, boolean>; batchingKey: string | null; packSequenceKey: string | null;
+  /** null = top of its hierarchy. Must be another customer, and never itself or one of its own descendants. */
+  parentId: number | null;
 }
 export interface EnvelopeInput {
   brandId: number | null; deliveryBand: string; postalRateId: number; stockItemId: number; reference: string | null; externalName: string | null; isOversticker: boolean;
@@ -34,6 +41,7 @@ export interface EnvelopeInput {
 
 export interface Lookups {
   passthroughKeys: string[];
+  customers: { id: number; code: string; name: string }[];
   deliveryBands: string[];
   postalRates: { id: number; label: string; format: string }[];
   envelopeStock: { id: number; code: string | null; description: string; size: string | null }[];
