@@ -177,6 +177,10 @@ A customer can be given next month's job number in advance (Customers > Details 
 
 This added three columns to `idoc.account` (`pending_mis_job_number`, `pending_job_number_from`, `job_number_rollover_day`) and removed `is_nhs` and `is_create_separate_batches`: reset the scratch database (`npm run db:reset`, or `npm run db:rebuild <folder>`).
 
+## Invoicing account and batching boundary
+
+Jobs, batches and mailpieces belong to the **root** of the account tree. Every account has an invoicing account (itself or an ancestor; the account that holds the settings when not set) and the invoicing account is part of the batch key, so mail for two invoicing accounts never shares a batch. The run sheet prints the invoicing account's name and job number. Packs from different sub-accounts are not merged into one envelope (the match key includes the sub-account and the invoicing account). Reset the scratch database after pulling this change (`npm run db:rebuild <folder>`).
+
 ## Account tree
 
 Accounts form one tree through `parent_account_id`; `grouping_account_id` is gone. An account either holds its own settings (`inherits_settings = 0`, a customer) or reads them from its parent (`inherits_settings = 1`). The FileMaker import maps its two links like this: an account with a grouping customer inherits its settings, its parent is its parent (or the grouping customer when it has none), and where the two differ the parent wins (the import prints a warning). A loop in the parent links is cut with a warning. The schema changed, so reset the scratch database (`npm run db:rebuild <folder>`). See `docs/account-structure.md` for the full plan.
