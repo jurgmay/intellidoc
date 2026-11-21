@@ -492,6 +492,16 @@ CREATE TABLE idoc.mailpiece (
     brand_id             INT                   NULL CONSTRAINT fk_mp_brand REFERENCES idoc.brand (brand_id),
     invoicing_account_id INT                   NOT NULL CONSTRAINT fk_mp_invoicing REFERENCES idoc.account (account_id), -- as at production
     account_envelope_id  INT                   NULL CONSTRAINT fk_mp_envelope REFERENCES idoc.account_envelope (account_envelope_id),
+    -- Snapshot at production time, so later renaming or restructuring never changes past reports. The submitting account is the sub-account
+    -- that sent every pack in the mailpiece (packs from different sub-accounts are never merged). The path runs from the top of the tree to it.
+    submitting_account_id    INT               NOT NULL CONSTRAINT fk_mp_submitting REFERENCES idoc.account (account_id),
+    submitting_account_code  NVARCHAR(100)     NOT NULL,
+    submitting_account_name  NVARCHAR(200)     NOT NULL,
+    submitting_account_path  NVARCHAR(1000)    NOT NULL,   -- account names, top of the tree first, separated by ' > '
+    invoicing_account_code   NVARCHAR(100)     NOT NULL,
+    invoicing_account_name   NVARCHAR(200)     NOT NULL,
+    brand_name               NVARCHAR(200)     NULL,
+    outer_stock_code         NVARCHAR(50)      NULL,       -- the outer envelope's stock code
     postal_format_id     INT                   NULL CONSTRAINT fk_mp_format REFERENCES idoc.postal_format (postal_format_id),
     postal_rate_id       INT                   NULL CONSTRAINT fk_mp_rate REFERENCES idoc.postal_rate (postal_rate_id),
     delivery_band        NVARCHAR(50)          NULL,   -- best (first alphabetically) of the merged packs' requested services

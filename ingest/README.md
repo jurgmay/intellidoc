@@ -188,3 +188,7 @@ Jobs, batches and mailpieces belong to the **root** of the account tree. Every a
 ## Account tree
 
 Accounts form one tree through `parent_account_id`; `grouping_account_id` is gone. An account either holds its own settings (`inherits_settings = 0`, a customer) or reads them from its parent (`inherits_settings = 1`). The FileMaker import maps its two links like this: an account with a grouping customer inherits its settings, its parent is its parent (or the grouping customer when it has none), and where the two differ the parent wins (the import prints a warning). A loop in the parent links is cut with a warning. The schema changed, so reset the scratch database (`npm run db:rebuild <folder>`). See `docs/account-structure.md` for the full plan.
+
+## Mailpiece snapshot
+
+Each mailpiece records, as at production, its sub-account (id, code, name and path from the top of the tree), invoicing account (code and name), brand name and outer envelope stock code (`submitting_account_*`, `invoicing_account_*`, `brand_name`, `outer_stock_code` on `idoc.mailpiece`). They are written at ingest and never updated, so renaming or restructuring accounts later does not change past reports. The schema changed, so reset the scratch database (`npm run db:rebuild <folder>`).

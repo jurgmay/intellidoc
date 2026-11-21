@@ -85,6 +85,38 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     await expect(pool.request().query(`UPDATE idoc.account SET envelopes_mode = N'SOMETIMES' WHERE account_code = N'ENV_CHILD'`)).rejects.toThrow(/ck_account_envmode/);
   });
 
+  it('mailpiece snapshot: sub-account, path, invoicing account, brand and envelope are kept as at production, whatever changes later', async () => {
+    const r = await load([person('Sam', 'Snap')], 'job-snapshot.xml');
+    expect(r.persisted).toBe(true);
+    const jobId = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-snapshot'`);
+    const names = (await pool.request().query(`SELECT account_code, name FROM idoc.account WHERE account_code IN (N'FEXCO', N'FEXCO_CUSTOMER')`)).recordset as { account_code: string; name: string }[];
+    const nameOf = (c: string) => names.find((n) => n.account_code === c)!.name;
+    const read = async () => (await pool.request().query(`
+      SELECT m.submitting_account_code, m.submitting_account_name, m.submitting_account_path, m.invoicing_account_code, m.invoicing_account_name, m.brand_name, m.outer_stock_code,
+             s.account_code AS sub_code, b.outer_stock_item_id, si.stock_code AS batch_stock_code
+      FROM idoc.mailpiece m JOIN idoc.account s ON s.account_id = m.submitting_account_id JOIN idoc.batch b ON b.batch_id = m.batch_id JOIN idoc.stock_item si ON si.stock_item_id = b.outer_stock_item_id
+      WHERE m.job_id = ${jobId}`)).recordset[0] as Record<string, string>;
+    const before = await read();
+    expect(before).toMatchObject({
+      sub_code: 'FEXCO', submitting_account_code: 'FEXCO', submitting_account_name: nameOf('FEXCO'), submitting_account_path: `${nameOf('FEXCO_CUSTOMER')} > ${nameOf('FEXCO')}`,
+      invoicing_account_code: 'FEXCO_CUSTOMER', invoicing_account_name: nameOf('FEXCO_CUSTOMER'), brand_name: 'Remus',
+    });
+    expect(before.outer_stock_code).toBe(before.batch_stock_code);
+    // rename the accounts, the brand and the envelope's stock code afterwards: the snapshot does not move
+    try {
+      await pool.request().query(`
+        UPDATE idoc.account SET name = name + N' (renamed)' WHERE account_code IN (N'FEXCO', N'FEXCO_CUSTOMER');
+        UPDATE idoc.brand SET name = name + N' (renamed)' WHERE name = N'Remus';
+        UPDATE idoc.stock_item SET stock_code = stock_code + N'-X' WHERE stock_code = N'${before.batch_stock_code}'`);
+      expect(await read()).toEqual(before);
+    } finally {
+      await pool.request().query(`
+        UPDATE idoc.account SET name = REPLACE(name, N' (renamed)', N'') WHERE account_code IN (N'FEXCO', N'FEXCO_CUSTOMER');
+        UPDATE idoc.brand SET name = REPLACE(name, N' (renamed)', N'') WHERE name LIKE N'%(renamed)';
+        UPDATE idoc.stock_item SET stock_code = REPLACE(stock_code, N'-X', N'') WHERE stock_code = N'${before.batch_stock_code}-X'`);
+    }
+  });
+
   it('settings inheritance: brands, matching, pack sequence read from the parent under INHERIT, add up under EXTEND, and stay own under OWN', async () => {
     await pool.request().query(`
       INSERT INTO idoc.passthrough_key (name) VALUES (N'SetDept'), (N'SetDoc'), (N'SetRef');
