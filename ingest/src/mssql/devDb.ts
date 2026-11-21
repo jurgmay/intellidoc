@@ -15,6 +15,9 @@ EXEC sp_executesql @s;
 SET @s = N'';
 SELECT @s += N'DROP TABLE idoc.' + QUOTENAME(name) + N';' FROM sys.tables WHERE schema_id = SCHEMA_ID(N'idoc');
 EXEC sp_executesql @s;
+SET @s = N'';
+SELECT @s += N'DROP SEQUENCE idoc.' + QUOTENAME(name) + N';' FROM sys.sequences WHERE schema_id = SCHEMA_ID(N'idoc');
+EXEC sp_executesql @s;
 IF SCHEMA_ID(N'idoc') IS NOT NULL DROP SCHEMA idoc;`;
 
 export async function schemaExists(pool: sql.ConnectionPool): Promise<boolean> {
