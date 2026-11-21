@@ -201,6 +201,10 @@ Every batch gets a `Created` row in `idoc.batch_event` when it is made. `MssqlRe
 
 `idoc.costing_model` (named price list, per customer, between two dates) with its rates, envelope prices and postage adjustments. `findCostingModel(pool, accountId, day)` (src/mssql/costing.ts) returns the model in force for an account, following the account's `costing_mode` (OWN or INHERIT). `priceMailpiece(model, input)` (src/costing) returns the price line by line. Nothing prices mailpieces at production yet. Rebuild the scratch DB after pulling this (`npm run db:rebuild <folder>`).
 
+## Page colour analysis
+
+Each PDF page is classed as blank, mono or colour (`src/pdfInk.ts`) and the counts are stored per pack in `colour_pages`, `mono_pages` and `blank_pages`. Colour means any marking that is not pure black (RGB 0,0,0 or CMYK 0,0,0,100); white is not ink; blank means no marks at all. See docs/account-structure.md for the full rules. No schema change; run `npm run test:db` to check the stored counts.
+
 ## Production gate
 
 `recordBatchEvent` refuses `Printed`, `Enclosed` and `Despatched` while the job is `Awaiting PDF` or `PDF Rejected` (a `ProductionGateError`; `Cancelled` is always allowed), and database triggers refuse the same for any other writer. `idoc.v_batch_production` shows each batch's job status, `hold_reason` and `can_print`. Rebuild the scratch DB after pulling this (`npm run db:rebuild <folder>`).

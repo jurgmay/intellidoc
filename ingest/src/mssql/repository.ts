@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import sql from 'mssql';
-import type { AwaitingJob, OverdueJob, PdfTracker, Repository } from '../repository.js';
+import type { AwaitingJob, OverdueJob, PackInk, PdfTracker, Repository } from '../repository.js';
 import type { Batch, IngestPack, IngestResult, Mailpiece } from '../types.js';
 
 export type BatchEventType = 'Created' | 'Printed' | 'Enclosed' | 'Despatched' | 'Cancelled';
@@ -66,11 +66,27 @@ export class MssqlRepository implements Repository, PdfTracker {
       packs: packs.map((p) => ({ guid: p.pack_guid, startPage: p.start_page, endPage: p.end_page, pageCount: p.page_count })) };
   }
 
-  async markPdfReceived(jobId: number, pdfPages: number): Promise<{ alertCount: number }> {
-    const r = await this.pool.request().input('j', sql.BigInt, jobId).input('pg', sql.Int, pdfPages).query<{ pdf_alert_count: number }>(`
-      UPDATE idoc.job SET status = N'Received', pdf_received_at = SYSUTCDATETIME(), page_count = @pg, pdf_error = NULL
-      OUTPUT INSERTED.pdf_alert_count WHERE job_id = @j AND status = N'Awaiting PDF'`);
-    return { alertCount: r.recordset[0]?.pdf_alert_count ?? 0 };
+  /**
+   * The PDF checked out. The page colours (if they could be read) are stored on the packs in the same transaction that makes the job
+   * Received, so a Received job always has them when they are known.
+   */
+  async markPdfReceived(jobId: number, pdfPages: number, packInk: PackInk[] = []): Promise<{ alertCount: number }> {
+    const tx = new sql.Transaction(this.pool);
+    await tx.begin();
+    try {
+      if (packInk.length > 0) {
+        await new sql.Request(tx).input('j', sql.BigInt, jobId).input('ink', sql.NVarChar(sql.MAX), JSON.stringify(packInk)).query(`
+          UPDATE p SET colour_pages = k.colour, mono_pages = k.mono, blank_pages = k.blank
+          FROM idoc.pack AS p
+          INNER JOIN OPENJSON(@ink) WITH (guid UNIQUEIDENTIFIER '$.guid', colour INT '$.colour', mono INT '$.mono', blank INT '$.blank') AS k ON k.guid = p.pack_guid
+          WHERE p.job_id = @j`);
+      }
+      const r = await new sql.Request(tx).input('j', sql.BigInt, jobId).input('pg', sql.Int, pdfPages).query<{ pdf_alert_count: number }>(`
+        UPDATE idoc.job SET status = N'Received', pdf_received_at = SYSUTCDATETIME(), page_count = @pg, pdf_error = NULL
+        OUTPUT INSERTED.pdf_alert_count WHERE job_id = @j AND status = N'Awaiting PDF'`);
+      await tx.commit();
+      return { alertCount: r.recordset[0]?.pdf_alert_count ?? 0 };
+    } catch (e) { try { await tx.rollback(); } catch { /* already rolled back */ } throw e; }
   }
 
   async markPdfRejected(jobId: number, message: string): Promise<void> {
@@ -319,9 +335,10 @@ export class MssqlRepository implements Repository, PdfTracker {
           INSERT INTO idoc.pack (pack_guid, job_id, account_id, submitting_account_id, source_id, address_id, option_set_id, brand_id, mailpiece_id,
                                  recipient_first_name, recipient_surname, page_count, start_page, end_page, sheet_count, status,
                                  delivery_point_suffix, attachment_count, release_date, document_sequence, batching_reference,
-                                 is_match_excluded, match_exclusion_reason, match_key)
+                                 is_match_excluded, match_exclusion_reason, match_key, colour_pages, mono_pages, blank_pages)
           OUTPUT INSERTED.pack_id AS id
-          VALUES (@g, @job, @acct, @sub, @src, @addr, @opt, @brand, @mp, @fn, @sn, @pg, @sp, @ep, @sh, @st, @dps, @att, COALESCE(@rd, SYSUTCDATETIME()), @seq, @bref, @ex, @exr, @mk)`, [
+          VALUES (@g, @job, @acct, @sub, @src, @addr, @opt, @brand, @mp, @fn, @sn, @pg, @sp, @ep, @sh, @st, @dps, @att, COALESCE(@rd, SYSUTCDATETIME()), @seq, @bref, @ex, @exr, @mk, @cp, @mo, @bl)`, [
+          ['cp', sql.Int, p.ink?.colour ?? null], ['mo', sql.Int, p.ink?.mono ?? null], ['bl', sql.Int, p.ink?.blank ?? null],
           ['g', sql.UniqueIdentifier, x.guid], ['job', sql.BigInt, jobId], ['acct', sql.Int, customerId], ['sub', sql.Int, await accountId(p.accountCode)],
           ['src', sql.BigInt, await sourceId(p)], ['addr', sql.BigInt, await addressId(p)], ['opt', sql.Int, await optionSetId(p)], ['brand', sql.Int, await brandId(p.brand)],
           ['mp', sql.BigInt, mpDbId.get(m.id)], ['fn', sql.NVarChar(100), x.address.firstName || null], ['sn', sql.NVarChar(100), x.address.surname || null],

@@ -7,6 +7,7 @@ import { parseEnvelopeText } from './envelopeText.js';
 import { choosePhysical, PhysicalError } from './physical.js';
 import { batchKey, buildBatches, routeFor } from './batching.js';
 import type { PdfInspector } from './pdf.js';
+import { inkPerRange, type PageInk } from './pdfInk.js';
 import type { Repository } from './repository.js';
 import type { ReferenceData, AccountConfig } from './reference.js';
 import type { IngestIssue, IngestPack, IngestResult, Mailpiece, ParsedPack } from './types.js';
@@ -54,6 +55,16 @@ export async function ingest(
   // themselves; they are checked against the real PDF when it arrives (attachPdf).
   const pdfPages = pdfPath === null ? parsed.reduce((m, p) => Math.max(m, p.endPage), 0) : await pdf.pageCount(pdfPath);
   issues.push(...validatePageRanges(parsed, pdfPages));
+  // What each page carries (colour, mono, blank), for pricing. A PDF that cannot be read this way does not stop the job: its packs just have no counts yet.
+  let inkPages: PageInk[] | null = null;
+  if (pdfPath !== null) {
+    try {
+      inkPages = await pdf.pageInk(pdfPath);
+      if (inkPages.length !== pdfPages) inkPages = null;
+    } catch (e) {
+      issues.push({ severity: 'warning', message: `The colour of the pages could not be read: ${(e as Error).message}` });
+    }
+  }
 
   const duplicates: string[] = [];
   const packs: IngestPack[] = [];
@@ -77,6 +88,7 @@ export async function ingest(
       documentSequence: (seqKey !== undefined ? acct.packSequence?.rules.get(seqKey) : undefined) ?? 99,
       matchKey: '',
     };
+    if (inkPages) ip.ink = inkPerRange(inkPages, [{ startPage: p.startPage, endPage: p.endPage }])[0];
     ip.matchKey = createHash('sha256').update(matchKey(ip, acct), 'utf8').digest('hex');
     packs.push(ip);
     if (opts.checkPostcodes && pdfPath !== null) {

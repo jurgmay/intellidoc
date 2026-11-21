@@ -8,6 +8,8 @@ export interface Repository {
 }
 
 /** A job saved without its PDF, as far as the PDF check needs it. */
+/** Colour, mono and blank pages of one pack, by its guid. */
+export interface PackInk { guid: string; colour: number; mono: number; blank: number }
 export interface AwaitingJob {
   jobId: number;
   xmlName: string;
@@ -33,7 +35,7 @@ export interface PdfTracker {
   /** The job saved from `<baseName>.xml` that is still waiting for its PDF (case-insensitive), or null. */
   findAwaitingPdf(baseName: string): Promise<AwaitingJob | null>;
   /** The PDF checked out: status Received. Returns how many alerts had been sent while it was missing. */
-  markPdfReceived(jobId: number, pdfPages: number): Promise<{ alertCount: number }>;
+  markPdfReceived(jobId: number, pdfPages: number, packInk?: PackInk[]): Promise<{ alertCount: number }>;
   /** The PDF does not match the packs: status 'PDF Rejected' (production must not use it). */
   markPdfRejected(jobId: number, message: string): Promise<void>;
   /** Jobs still waiting after `waitMinutes`, not alerted within the last `reminderMinutes`. */
@@ -58,8 +60,9 @@ export class InMemoryRepository implements Repository, PdfTracker {
     return j ? { jobId: j.jobId, xmlName: j.result.xmlName, customerName: j.result.packs[0]?.customerCode ?? '',
       packs: j.result.packs.map((p) => ({ guid: p.parsed.guid, startPage: p.parsed.startPage, endPage: p.parsed.endPage, pageCount: p.parsed.pageCount })), alertCount: j.alerts } : null;
   }
-  async markPdfReceived(jobId: number, pdfPages: number): Promise<{ alertCount: number }> {
+  async markPdfReceived(jobId: number, pdfPages: number, packInk?: PackInk[]): Promise<{ alertCount: number }> {
     const j = this.tracked.find((t) => t.jobId === jobId)!; j.status = 'Received'; j.result.pdfPages = pdfPages; j.result.pdfReceived = true;
+    for (const k of packInk ?? []) { const p = j.result.packs.find((x) => x.parsed.guid === k.guid); if (p) p.ink = { colour: k.colour, mono: k.mono, blank: k.blank }; }
     return { alertCount: j.alerts };
   }
   async markPdfRejected(jobId: number, message: string): Promise<void> { const j = this.tracked.find((t) => t.jobId === jobId)!; j.status = 'PDF Rejected'; j.error = message; }

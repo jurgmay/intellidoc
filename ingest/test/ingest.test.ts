@@ -234,3 +234,17 @@ describe('account tree: batching boundary and invoicing account', () => {
     expect(r.mailpieces).toHaveLength(1);
   });
 });
+
+describe('page colour per pack', () => {
+  it('counts colour, mono and blank pages in each pack from the PDF', async () => {
+    const { xml } = buildXml([person('A', 'B'), person('C', 'D')]);
+    const r = await ingest(xml, 'j.xml', 'j.pdf', { ref: fixtureReference(), pdf: new FakePdf(4, '', ['colour', 'colour', 'blank', 'mono']), repo: new InMemoryRepository() });
+    const packs = r.mailpieces.flatMap((m) => m.packs).sort((a, b) => a.parsed.startPage - b.parsed.startPage);
+    expect(packs.map((p) => p.ink)).toEqual([{ colour: 2, mono: 0, blank: 0 }, { colour: 0, mono: 1, blank: 1 }]);
+  });
+  it('leaves the counts empty when there is no PDF yet', async () => {
+    const { xml } = buildXml([person('A', 'B')]);
+    const r = await ingest(xml, 'j.xml', null, { ref: fixtureReference(), pdf: new FakePdf(0), repo: new InMemoryRepository() });
+    expect(r.mailpieces[0]!.packs[0]!.ink).toBeUndefined();
+  });
+});
