@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import sql from 'mssql';
-import { assertScratchDatabase, resetAndSeed } from '../../../ingest/src/mssql/devDb.js';
+import { assertScratchDatabase } from '../../../ingest/src/mssql/devDb.js';
+import { connect as connectIngest, resetAndSeed } from '../../../ingest/test/db/setup.js';
 import { ingest } from '../../../ingest/src/ingest.js';
 import { loadReferenceData } from '../../../ingest/src/mssql/reference.js';
 import { MssqlRepository } from '../../../ingest/src/mssql/repository.js';
@@ -12,7 +13,8 @@ import type { RecipientQuery } from '../../src/recipients/types.js';
 /** Runs against the scratch database named in INTELLIDOC_TEST_DB. It DROPS and recreates the idoc schema. */
 const cs = process.env['INTELLIDOC_TEST_DB'];
 describe.skipIf(!cs)('MssqlRecipientStore', { timeout: 120_000 }, () => {
-  let pool: sql.ConnectionPool; let store: MssqlRecipientStore;
+  // The ingest code has its own copy of the mssql package, so it gets its own connection (mixing the two breaks parameter types).
+  let pool: sql.ConnectionPool; let ipool: Awaited<ReturnType<typeof connectIngest>>; let store: MssqlRecipientStore;
   let customer: number; let sub: number; let child: number; let other: number;
   const q = (over: Partial<RecipientQuery>): RecipientQuery => ({ accountId: customer, name: null, address: null, reference: null, referenceKey: null, from: null, to: null, limit: 100, ...over });
   const names = async (over: Partial<RecipientQuery>): Promise<string[]> => (await store.search(q(over))).rows.map((r) => r.addressLines[0]!).sort();
@@ -23,9 +25,9 @@ describe.skipIf(!cs)('MssqlRecipientStore', { timeout: 120_000 }, () => {
   beforeAll(async () => {
     pool = new sql.ConnectionPool(cs!); await pool.connect();
     await assertScratchDatabase(pool, /test|scratch|tmp/i);
-    await resetAndSeed(pool); store = new MssqlRecipientStore(pool);
-    const repo = new MssqlRepository(pool);
-    const ref = await loadReferenceData(pool);
+    ipool = await connectIngest(); await resetAndSeed(ipool); store = new MssqlRecipientStore(pool);
+    const repo = new MssqlRepository(ipool);
+    const ref = await loadReferenceData(ipool);
     const { xml, pages } = buildXml([
       person('Ann', 'Patel', { passthrough: { 'Tenant Reference': 'T-1001', 'Document Type': 'Statement' } }),
       person('Joe', 'Patel', { passthrough: { 'Tenant Reference': 'T-2040' }, lines: ['Joe Patel', '9 Mill_Lane', 'York', 'YO1 7HH'], postcode: 'YO1 7HH' }),
@@ -39,7 +41,7 @@ describe.skipIf(!cs)('MssqlRecipientStore', { timeout: 120_000 }, () => {
     // Zed Quinn's pack was submitted from the child account
     await pool.request().query(`UPDATE idoc.pack SET submitting_account_id = ${child} WHERE address_id IN (SELECT address_id FROM idoc.address_line WHERE line_no = 1 AND text = N'Zed Quinn')`);
   });
-  afterAll(async () => { await pool?.close(); });
+  afterAll(async () => { await pool?.close(); await ipool?.close(); });
 
   it('lists accounts with their path and whether they are customers', async () => {
     const s = await store.scopes();
