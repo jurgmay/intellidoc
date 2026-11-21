@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import sql from 'mssql';
+import { priceJob } from './pricing.js';
 import type { AwaitingJob, OverdueJob, PackInk, PdfTracker, Repository } from '../repository.js';
 import type { Batch, IngestPack, IngestResult, Mailpiece } from '../types.js';
 
@@ -45,7 +46,7 @@ class Dict {
  * The one-recipient-per-envelope rule is enforced again by the database (fk_pack_mailpiece_same_recipient).
  */
 export class MssqlRepository implements Repository, PdfTracker {
-  constructor(private readonly pool: sql.ConnectionPool) {}
+  constructor(private readonly pool: sql.ConnectionPool, private readonly onPriceError?: (jobId: number, e: unknown) => void) {}
 
   async packExists(guid: string): Promise<boolean> {
     const r = await this.pool.request().input('g', sql.UniqueIdentifier, guid).query('SELECT 1 AS x FROM idoc.pack WHERE pack_guid = @g');
@@ -85,6 +86,7 @@ export class MssqlRepository implements Repository, PdfTracker {
         UPDATE idoc.job SET status = N'Received', pdf_received_at = SYSUTCDATETIME(), page_count = @pg, pdf_error = NULL
         OUTPUT INSERTED.pdf_alert_count WHERE job_id = @j AND status = N'Awaiting PDF'`);
       await tx.commit();
+      if (r.recordset.length > 0) await this.price(jobId);
       return { alertCount: r.recordset[0]?.pdf_alert_count ?? 0 };
     } catch (e) { try { await tx.rollback(); } catch { /* already rolled back */ } throw e; }
   }
@@ -160,8 +162,9 @@ export class MssqlRepository implements Repository, PdfTracker {
     if (result.packs.length === 0) throw new Error('Nothing to save');
     const tx = new sql.Transaction(this.pool);
     await tx.begin();
+    let jobId: number;
     try {
-      await this.save(new Db(tx), result);
+      jobId = await this.save(new Db(tx), result);
       await tx.commit();
     } catch (e) {
       try { await tx.rollback(); } catch { /* already rolled back by the server */ }
@@ -170,9 +173,15 @@ export class MssqlRepository implements Repository, PdfTracker {
       if (/uq_job_base/i.test(msg)) throw new JobAlreadyExistsError(msg);
       throw e;
     }
+    if (result.pdfReceived) await this.price(jobId);
   }
 
-  private async save(db: Db, r: IngestResult): Promise<void> {
+  /** Prices the job's mailpieces. A pricing failure never undoes the job: the mailpieces just stay unpriced and priceJob can be run again. */
+  private async price(jobId: number): Promise<void> {
+    try { await priceJob(this.pool, jobId); } catch (e) { this.onPriceError?.(jobId, e); }
+  }
+
+  private async save(db: Db, r: IngestResult): Promise<number> {
     const d = { acct: new Dict(), key: new Dict(), val: new Dict(), idt: new Dict(), stock: new Dict(), src: new Dict(),
       addr: new Dict(), opt: new Dict(), paper: new Dict(), brand: new Dict(), fmt: new Dict(), svc: new Dict() };
 
@@ -367,6 +376,7 @@ export class MssqlRepository implements Repository, PdfTracker {
         }
       }
     }
+    return jobId;
   }
 
   private async insertBatch(db: Db, jobId: number, customerId: number, b: Batch, h: {

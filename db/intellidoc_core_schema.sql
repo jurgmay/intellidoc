@@ -854,3 +854,34 @@ CREATE TABLE idoc.costing_model_postage (
     CONSTRAINT pk_costing_model_postage PRIMARY KEY (costing_model_id, postal_rate_id)
 );
 GO
+
+/* ===========================================================================
+   13. PRICE AT PRODUCTION
+   When a job is Received (its PDF has been read, so the page colours are known), every mailpiece in it is priced from the costing model in
+   force on the production day. The model, the totals and every line are kept on the mailpiece, so a later change to a price list never
+   changes what was charged. A mailpiece is left unpriced (priced_at NULL) when the customer has no costing model that day or a pack's page
+   colours are unknown. price_warnings says what part of the price is missing (for example no postage rate).
+   =========================================================================== */
+ALTER TABLE idoc.mailpiece ADD
+    costing_model_id INT            NULL CONSTRAINT fk_mp_costing_model REFERENCES idoc.costing_model (costing_model_id),
+    production_cost  DECIMAL(12, 4) NULL,
+    production_sell  DECIMAL(12, 4) NULL,
+    postage_cost     DECIMAL(12, 4) NULL,
+    postage_sell     DECIMAL(12, 4) NULL,
+    priced_at        DATETIME2(0)   NULL,
+    price_warnings   NVARCHAR(500)  NULL;
+GO
+
+CREATE TABLE idoc.mailpiece_price_line (
+    mailpiece_id BIGINT         NOT NULL CONSTRAINT fk_mpl_mailpiece REFERENCES idoc.mailpiece (mailpiece_id),
+    line_no      INT            NOT NULL,
+    charge_code  NVARCHAR(50)   NOT NULL,   -- a costing charge code, or ENVELOPE
+    label        NVARCHAR(100)  NOT NULL,
+    quantity     INT            NOT NULL,
+    unit_cost    DECIMAL(12, 4) NOT NULL,
+    unit_sell    DECIMAL(12, 4) NOT NULL,
+    cost         DECIMAL(12, 4) NOT NULL,
+    sell         DECIMAL(12, 4) NOT NULL,
+    CONSTRAINT pk_mailpiece_price_line PRIMARY KEY (mailpiece_id, line_no)
+);
+GO

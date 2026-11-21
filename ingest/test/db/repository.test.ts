@@ -4,6 +4,7 @@ import { connect, hasDb, resetAndSeed } from './setup.js';
 import { MssqlRepository, DuplicatePackError, ProductionGateError, ReferenceError_ } from '../../src/mssql/repository.js';
 import { loadReferenceData } from '../../src/mssql/reference.js';
 import { findCostingModel } from '../../src/mssql/costing.js';
+import { priceJob } from '../../src/mssql/pricing.js';
 import { ingest } from '../../src/ingest.js';
 import { loadAlertSettings, parseRecipients } from '../../src/mssql/alertSettings.js';
 import { loadRunSheetInputs } from '../../src/runsheet/query.js';
@@ -322,6 +323,61 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     expect(await repo.markPdfReceived(jobId, 4)).toEqual({ alertCount: 1 });
     expect(await scalar(`SELECT COUNT(*) AS n FROM idoc.job WHERE job_id = ${jobId} AND status = N'Received' AND pdf_received_at IS NOT NULL`)).toBe(1);
     expect(await repo.findAwaitingPdf('job-nopdf')).toBeNull();
+  });
+
+  it('price at production: priced on ingest, when the PDF arrives, and again on request', async () => {
+    const ref = await loadReferenceData(pool);
+    const model = async (jobId: number): Promise<number> => {
+      const customer = await scalar(`SELECT account_id AS n FROM idoc.job WHERE job_id = ${jobId}`);
+      const id = await scalar(`INSERT INTO idoc.costing_model (account_id, name, valid_from) OUTPUT INSERTED.costing_model_id AS n VALUES (${customer}, N'Test prices', '2000-01-01')`);
+      await pool.request().query(`INSERT INTO idoc.costing_model_rate (costing_model_id, charge_code, cost, sell_price, adjustment) VALUES
+        (${id}, N'HPOD', 0.1, 0.2, 0), (${id}, N'MONO_PAGE', 0.02, 0.04, 0.01), (${id}, N'COLOUR_PAGE', 0.08, 0.12, 0)`);
+      return id;
+    };
+    const mps = async (jobId: number) => (await pool.request().query(
+      `SELECT mailpiece_id, costing_model_id, production_cost, production_sell, postage_cost, priced_at, price_warnings,
+              (SELECT SUM(sell) FROM idoc.mailpiece_price_line l WHERE l.mailpiece_id = m.mailpiece_id) AS line_sell,
+              (SELECT SUM(cost) FROM idoc.mailpiece_price_line l WHERE l.mailpiece_id = m.mailpiece_id) AS line_cost,
+              (SELECT SUM(quantity) FROM idoc.mailpiece_price_line l WHERE l.mailpiece_id = m.mailpiece_id AND l.charge_code = N'MONO_PAGE') AS mono_qty
+       FROM idoc.mailpiece m WHERE job_id = ${jobId} ORDER BY mailpiece_id`)).recordset;
+
+    // no costing model yet: the job is saved and its mailpieces stay unpriced
+    const a = buildXml([person('Pat', 'Price'), person('Quinn', 'Price')]);
+    await ingest(a.xml, 'job-price-a.xml', 'job-price-a.pdf', { ref, pdf: new FakePdf(a.pages, '', ['mono', 'mono', 'colour', 'mono']), repo });
+    const jobA = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-price-a'`);
+    expect((await mps(jobA)).every((m) => m.priced_at === null)).toBe(true);
+    // a model appears: pricing the job again prices it, and the lines add up to the totals
+    const m1 = await model(jobA);
+    expect(await priceJob(pool, jobA)).toEqual({ priced: 2, noModel: 0, unknownColours: 0 });
+    const priced = await mps(jobA);
+    expect(priced).toHaveLength(2);
+    for (const m of priced) {
+      expect(m.costing_model_id).toBe(m1);
+      expect(Number(m.production_sell)).toBeCloseTo(Number(m.line_sell), 4);
+      expect(Number(m.production_cost)).toBeCloseTo(Number(m.line_cost), 4);
+    }
+    // pack 1 is two mono pages: 0.20 + 2 x (0.04 + 0.01); pack 2 is a colour and a mono page: 0.20 + 0.12 + 0.05
+    expect(Number(priced[0]!.production_sell)).toBeCloseTo(0.3, 4);
+    expect(Number(priced[1]!.production_sell)).toBeCloseTo(0.37, 4);
+    expect(priced[0]!.price_warnings).toMatch(/envelope/i);
+    // running it again does not double the lines
+    await priceJob(pool, jobA);
+    expect(Number((await mps(jobA))[0]!.mono_qty)).toBe(2);
+
+    // XML first: nothing is priced until the PDF arrives
+    const b = buildXml([person('Rae', 'Price')]);
+    await ingest(b.xml, 'job-price-b.xml', null, { ref, pdf: new FakePdf(0), repo });
+    const jobB = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-price-b'`);
+    expect((await mps(jobB)).every((m) => m.priced_at === null)).toBe(true);
+    const found = await repo.findAwaitingPdf('job-price-b');
+    await repo.markPdfReceived(jobB, b.pages, found!.packs.map((k) => ({ guid: k.guid, colour: 0, mono: 2, blank: 0 })));
+    expect((await mps(jobB)).every((m) => m.priced_at !== null && Number(m.production_sell) > 0)).toBe(true);
+
+    // a pack whose colours are unknown is not priced
+    const c = buildXml([person('Sam', 'Price')]);
+    await ingest(c.xml, 'job-price-c.xml', null, { ref, pdf: new FakePdf(0), repo });
+    const jobC = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-price-c'`);
+    expect(await priceJob(pool, jobC)).toEqual({ priced: 0, noModel: 0, unknownColours: 1 });
   });
 
   it('page colours: stored on the packs at ingest, and after the PDF arrives on the XML-first path', async () => {
