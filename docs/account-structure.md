@@ -38,9 +38,7 @@ Each account has a mode for each setting group.
 
 ## 3a. Merging packs from different sub-accounts
 
-- By default two sub-accounts never share an envelope (the account is part of the match key).
-- It can be switched on by a setting on an account, which applies to everything below it, like the inherited setting groups. Packs then merge only between accounts under that node **that have the same invoicing account**.
-- Because of that rule a merged mailpiece always has exactly one invoicing account. (If the rule is ever relaxed, the mailpiece is billed to the nearest invoicing account above all the accounts involved.)
+**Decided: not needed.** Two sub-accounts never share an envelope (the submitting account and the invoicing account are part of the match key), and there is no setting to change that. If it is ever wanted, the earlier idea was an opt-in on an account applying below it, only between accounts with the same invoicing account, so that a merged mailpiece always has exactly one invoicing account.
 
 ## 4. Envelope choice
 
@@ -53,7 +51,7 @@ The user decides which envelopes an account may use (its effective list). The im
 - The **job number, name and return address on the run sheet come from the invoicing account**. A job number belongs to an invoicing account and applies to all its sub-accounts.
 - **Invoicing accounts never share a batch**: the invoicing account is part of the batch key (and recorded on each batch and mailpiece). Production batching is otherwise unaffected by who is invoiced.
 - The batching boundary is now the **root of the tree**: jobs, batches, mailpieces and packs belong to the root.
-- Packs from different sub-accounts are not merged into one envelope by default (the sub-account and the invoicing account are in the match key). The opt-in setting in section 3a is still to be built.
+- Packs from different sub-accounts are not merged into one envelope by default (the sub-account and the invoicing account are in the match key).  There is no opt-in to merge them; it was decided not to build one (section 3a).
 - The FileMaker import reads `id_invoicingAccount` (name assumed) and falls back, with a warning, when it is not an ancestor.
 - Editing the job number and return address of a sub-account that is itself an invoicing account is not on the screens yet.
 
@@ -87,13 +85,13 @@ The user decides which envelopes an account may use (its effective list). The im
 1. Audit the schema (this document, section 7). **Done.**
 2. Tree and migration; retire grouping. **Done.**
 3. Inheritance modes: schema, resolver, importer, UI. **Envelopes done**; brands, matching and pack-sequence rules, notification emails and costing to follow.
-4. Invoicing account link and validation. **Done** (see section 5), apart from the opt-in merge setting (3a) and editing job numbers on sub-accounts.
+4. Invoicing account link and validation. **Done** (see section 5), apart from editing job numbers on sub-accounts, which is not needed for B-hive. The opt-in merge setting (3a) will not be built.
 5. Snapshot fields, batch event log and recipient search.
 6. Reporting.
 
 ## 9. Decisions on the open questions
 
-1. Cross-sub-account merging: allowed but off by default; see section 3a.
+1. Cross-sub-account merging: never, and no setting to allow it (revised; see section 3a).
 2. "Recipient" means both the printed name and address, and the passthrough metadata.
 3. Parent wins where parent and grouping disagree.
 
