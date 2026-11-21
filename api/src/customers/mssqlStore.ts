@@ -47,19 +47,19 @@ export class MssqlCustomerStore implements CustomerStore {
   }
   /** Throws NotFound unless the id is a customer (not a sub-account). */
   private async mustBeCustomer(t: sql.Transaction | undefined, id: number): Promise<void> {
-    const r = await this.req(t).input('id', sql.Int, id).query('SELECT 1 AS x FROM idoc.account WHERE account_id = @id AND grouping_account_id IS NULL');
+    const r = await this.req(t).input('id', sql.Int, id).query('SELECT 1 AS x FROM idoc.account WHERE account_id = @id AND inherits_settings = 0');
     if (r.recordset.length === 0) throw new NotFoundError('Customer not found');
   }
 
   async list(search: string, includeDeleted: boolean): Promise<CustomerRow[]> {
     const rows = (await this.pool.request().input('q', sql.NVarChar(200), `%${search.trim().replace(/[%_[]/g, '[$&]')}%`).input('d', sql.Bit, includeDeleted).query(`
       SELECT a.account_id, a.account_code, a.name, a.mis_job_number, a.pending_mis_job_number, a.is_address_matching, a.is_testing, a.is_deleted, a.parent_account_id, par.account_code AS parent_code,
-        (SELECT COUNT(*) FROM idoc.account s WHERE s.grouping_account_id = a.account_id AND s.is_deleted = 0) AS accounts,
+        (SELECT COUNT(*) FROM idoc.v_account_owner o JOIN idoc.account s ON s.account_id = o.account_id WHERE o.owner_account_id = a.account_id AND o.account_id <> a.account_id AND s.is_deleted = 0) AS accounts,
         (SELECT COUNT(*) FROM idoc.brand b WHERE b.account_id = a.account_id) AS brands,
         (SELECT COUNT(*) FROM idoc.account_envelope e WHERE e.account_id = a.account_id AND e.is_deleted = 0) AS envelopes
       FROM idoc.account a
       LEFT JOIN idoc.account par ON par.account_id = a.parent_account_id
-      WHERE a.grouping_account_id IS NULL AND (@d = 1 OR a.is_deleted = 0)
+      WHERE a.inherits_settings = 0 AND (@d = 1 OR a.is_deleted = 0)
         AND (a.account_code LIKE @q ESCAPE '[' OR a.name LIKE @q ESCAPE '[' OR a.mis_job_number LIKE @q ESCAPE '[' OR a.pending_mis_job_number LIKE @q ESCAPE '[')
       ORDER BY a.name`)).recordset as R[];
     return rows.map((r) => ({
@@ -75,8 +75,8 @@ export class MssqlCustomerStore implements CustomerStore {
          LEFT JOIN idoc.account par ON par.account_id = a.parent_account_id
          LEFT JOIN idoc.passthrough_key bk ON bk.passthrough_key_id = a.batching_key_id
          LEFT JOIN idoc.passthrough_key sk ON sk.passthrough_key_id = a.pack_sequence_key_id
-         WHERE a.account_id = @id AND a.grouping_account_id IS NULL`),
-      q('SELECT account_id, account_code, name, is_deleted FROM idoc.account WHERE grouping_account_id = @id ORDER BY account_code'),
+         WHERE a.account_id = @id AND a.inherits_settings = 0`),
+      q('SELECT s.account_id, s.account_code, s.name, s.is_deleted FROM idoc.v_account_owner o JOIN idoc.account s ON s.account_id = o.account_id WHERE o.owner_account_id = @id AND o.account_id <> @id ORDER BY s.account_code'),
       q(`SELECT b.brand_id, b.name,
            (SELECT COUNT(*) FROM idoc.account_envelope e WHERE e.brand_id = b.brand_id AND e.is_deleted = 0)
          + (SELECT COUNT(*) FROM idoc.stock_item s WHERE s.brand_id = b.brand_id)
@@ -98,7 +98,7 @@ export class MssqlCustomerStore implements CustomerStore {
       q(`SELECT m.is_include, k.name, m.passthrough_value FROM idoc.address_match_rule m JOIN idoc.passthrough_key k ON k.passthrough_key_id = m.passthrough_key_id WHERE m.account_id = @id ORDER BY m.sequence_no`),
       q('SELECT passthrough_value, sequence_number FROM idoc.pack_sequence_rule WHERE account_id = @id ORDER BY sequence_number, passthrough_value'),
       q('SELECT email FROM idoc.account_notification_email WHERE account_id = @id ORDER BY email'),
-      q('SELECT account_id, account_code, name, is_deleted FROM idoc.account WHERE parent_account_id = @id AND grouping_account_id IS NULL ORDER BY name'),
+      q('SELECT account_id, account_code, name, is_deleted FROM idoc.account WHERE parent_account_id = @id AND inherits_settings = 0 ORDER BY name'),
     ]);
     const a = c.recordset[0] as R | undefined;
     if (!a) throw new NotFoundError('Customer not found');
@@ -132,7 +132,7 @@ export class MssqlCustomerStore implements CustomerStore {
         JOIN idoc.postal_provider pp ON pp.postal_provider_id = ps.postal_provider_id JOIN idoc.postal_format pf ON pf.postal_format_id = ps.postal_format_id
         WHERE r.valid_from <= CAST(SYSUTCDATETIME() AS DATE) AND (r.valid_to IS NULL OR r.valid_to >= CAST(SYSUTCDATETIME() AS DATE))
         ORDER BY pp.name, ps.name, pf.rank_order, r.max_weight_g`),
-      this.pool.request().query('SELECT account_id, account_code, name FROM idoc.account WHERE grouping_account_id IS NULL AND is_deleted = 0 ORDER BY name'),
+      this.pool.request().query('SELECT account_id, account_code, name FROM idoc.account WHERE inherits_settings = 0 AND is_deleted = 0 ORDER BY name'),
       this.pool.request().query(`SELECT s.stock_item_id, s.stock_code, s.description, z.code AS size FROM idoc.stock_item s LEFT JOIN idoc.envelope_size z ON z.envelope_size_id = s.envelope_size_id
         WHERE s.is_envelope = 1 AND s.is_active = 1 AND s.envelope_size_id IS NOT NULL ORDER BY s.description`),
     ]);
@@ -179,7 +179,7 @@ export class MssqlCustomerStore implements CustomerStore {
   private async checkParent(id: number, parentId: number | null): Promise<string | null> {
     if (parentId === null) return null;
     if (parentId === id) throw new ValidationError({ parentId: 'A customer cannot be its own parent' });
-    const p = (await this.pool.request().input('p', sql.Int, parentId).query('SELECT account_code FROM idoc.account WHERE account_id = @p AND grouping_account_id IS NULL')).recordset[0] as R | undefined;
+    const p = (await this.pool.request().input('p', sql.Int, parentId).query('SELECT account_code FROM idoc.account WHERE account_id = @p AND inherits_settings = 0')).recordset[0] as R | undefined;
     if (!p) throw new ValidationError({ parentId: 'Parent customer not found' });
     const loop = await this.pool.request().input('p', sql.Int, parentId).input('id', sql.Int, id).query(`
       WITH up AS (
@@ -195,14 +195,14 @@ export class MssqlCustomerStore implements CustomerStore {
     await this.mustBeCustomer(undefined, customerId);
     return this.tx(async (t) => {
       const id = (await this.req(t).input('g', sql.Int, customerId).input('c', sql.NVarChar(100), input.code).input('n', sql.NVarChar(200), input.name)
-        .query('INSERT INTO idoc.account (account_code, name, grouping_account_id) OUTPUT INSERTED.account_id AS id VALUES (@c, @n, @g)')).recordset[0].id as number;
+        .query('INSERT INTO idoc.account (account_code, name, parent_account_id, inherits_settings) OUTPUT INSERTED.account_id AS id VALUES (@c, @n, @g, 1)')).recordset[0].id as number;
       await this.audit(t, customerId, by, `Added account ${input.code} "${input.name}"`);
       return id;
     }, `Account code "${input.code}" is already in use`);
   }
 
   async updateAccount(accountId: number, input: { code: string; name: string; isDeleted: boolean }, by: string): Promise<void> {
-    const cur = (await this.pool.request().input('id', sql.Int, accountId).query('SELECT grouping_account_id AS g, account_code, name FROM idoc.account WHERE account_id = @id AND grouping_account_id IS NOT NULL')).recordset[0] as R | undefined;
+    const cur = (await this.pool.request().input('id', sql.Int, accountId).query('SELECT o.owner_account_id AS g, a.account_code, a.name FROM idoc.account a JOIN idoc.v_account_owner o ON o.account_id = a.account_id WHERE a.account_id = @id AND a.inherits_settings = 1')).recordset[0] as R | undefined;
     if (!cur) throw new NotFoundError('Account not found');
     await this.tx(async (t) => {
       await this.req(t).input('id', sql.Int, accountId).input('c', sql.NVarChar(100), input.code).input('n', sql.NVarChar(200), input.name).input('d', sql.Bit, input.isDeleted)

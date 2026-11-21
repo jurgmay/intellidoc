@@ -26,7 +26,7 @@ when a change takes effect. The Settings page is generated from that list, so th
 
 ### Customers
 
-A customer is an `idoc.account` with no grouping account; its sub-accounts point at it. Everything the importer reads
+Accounts form one tree through `parent_account_id`. A customer is an account that holds its own settings (`inherits_settings = 0`); a sub-account is an account that reads them from its parent, at any depth (`idoc.v_account_owner` gives the account that holds the settings). Everything the importer reads
 (flags, brands, envelopes, matching rules, batching and sequence keys) is edited here. Errors: 422 `{ errors: { field: message } }`,
 409 `{ error }` for duplicates or a record in use, 404 for an unknown id. Every change writes a readable line to `idoc.audit_log` in the same transaction.
 

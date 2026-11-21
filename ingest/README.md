@@ -24,7 +24,7 @@ in one transaction.
     await ingest(xml, xmlName, pdfPath, { ref, pdf: new CliPdfInspector(), repo });
 
 Behaviour worth knowing:
-- Account config (matching flag, batching key, rules, brands, envelopes) is read from the customer (grouping account);
+- Account config (matching flag, batching key, rules, brands, envelopes) is read from the account that holds the settings: the account itself, or the nearest ancestor that does not inherit (`idoc.v_account_owner`);
   the submitting account is kept on each pack. Batches and mailpieces belong to the customer.
 - Unknown paper and brand values arriving in the XML are created (paper `batch_name` defaults to the upper-cased name).
   Unknown accounts, stock codes, postal formats and postal services are errors and roll the whole job back.
@@ -176,3 +176,7 @@ An existing database needs the new sequence/column: re-run `initDevDb.ts --reset
 A customer can be given next month's job number in advance (Customers > Details > Pending job number). On the customer's rollover day (the 1st by default, 1 to 28, set on the same tab) it replaces the job number and the pending field is cleared; each move is written to the customer's History. `src/mssql/jobNumbers.ts` does the move. The watcher runs it every minute, and `runsheets` runs it before it reads a job number, so a run sheet made on the 1st already has the new number. It is safe to run repeatedly.
 
 This added three columns to `idoc.account` (`pending_mis_job_number`, `pending_job_number_from`, `job_number_rollover_day`) and removed `is_nhs` and `is_create_separate_batches`: reset the scratch database (`npm run db:reset`, or `npm run db:rebuild <folder>`).
+
+## Account tree
+
+Accounts form one tree through `parent_account_id`; `grouping_account_id` is gone. An account either holds its own settings (`inherits_settings = 0`, a customer) or reads them from its parent (`inherits_settings = 1`). The FileMaker import maps its two links like this: an account with a grouping customer inherits its settings, its parent is its parent (or the grouping customer when it has none), and where the two differ the parent wins (the import prints a warning). A loop in the parent links is cut with a warning. The schema changed, so reset the scratch database (`npm run db:rebuild <folder>`). See `docs/account-structure.md` for the full plan.

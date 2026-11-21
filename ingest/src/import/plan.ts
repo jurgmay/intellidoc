@@ -8,7 +8,9 @@ import { type Row, flag, json, lc, num } from './mer.js';
  * stock-control quantity (quantityInStock, quantityUsed, lastUsed, totalUsage, averageUsagePerMonth, minimumStockLevel).
  */
 export interface PlanAccount {
-  legacyId: string; code: string; name: string; parentLegacyId: string | null; groupingLegacyId: string | null;
+  legacyId: string; code: string; name: string; parentLegacyId: string | null;
+  /** true: the settings are read from the parent (resolved up the tree). false: this account holds its own (a customer). */
+  inheritsSettings: boolean;
   isAddressMatching: boolean; isArchiveMailpieces: boolean; isCreateOutputFiles: boolean;
   isSso: boolean; isSameDayService: boolean; isUseMrdf: boolean; isTesting: boolean; isDeleted: boolean;
   colourMode: number | null; misJobNumber: string | null; returnAddress: string | null;
@@ -16,6 +18,12 @@ export interface PlanAccount {
   emails: string[];
   matchRules: { isInclude: boolean; key: string; value: string | null }[];
   sequenceRules: { value: string; sequence: number }[];
+}
+/** The account that holds the settings for `a`: itself, or the nearest ancestor that does not inherit. */
+export function settingsOwner(byId: Map<string, PlanAccount>, a: PlanAccount): PlanAccount {
+  let cur = a;
+  for (let i = 0; i < 100 && cur.inheritsSettings && cur.parentLegacyId; i++) cur = byId.get(cur.parentLegacyId) ?? cur;
+  return cur;
 }
 export interface PlanBrand { legacyId: string; customerLegacyId: string; name: string }
 export interface PlanSize { code: string; widthMm: number | null; heightMm: number | null }
@@ -61,6 +69,7 @@ export function buildPlan(x: Exports): Plan {
   const byId = new Map(x.customers.map((r) => [lc(r['id']), r]));
   const codes = new Set<string>();
   const accounts: PlanAccount[] = [];
+  const groupingOf = new Map<string, string>();
   const envelopeIdSet = new Set<string>();
   for (const r of x.customers) {
     const legacyId = lc(r['id']); const code = (r['accountCode'] ?? '').trim();
@@ -71,6 +80,7 @@ export function buildPlan(x: Exports): Plan {
     let grouping: string | null = lc(r['id_groupingAccount']);
     if (!grouping || grouping === legacyId) grouping = null;
     else if (!byId.has(grouping)) { warnings.push(`Account ${code}: grouping account ${grouping} is not in the export; treated as its own customer`); grouping = null; }
+    if (grouping) groupingOf.set(legacyId, grouping);
     const parent = lc(r['id_parentAccount']);
     const am = json<{ addressMatching?: string[]; addressMatchingExclude?: { passthroughKey: string; passthroughValue: string }[] }>(r['addressMatchJSON']);
     const ps = json<{ passthroughKey?: string; sequences?: { passthroughValue: string; sequenceNumber: number }[] }>(r['packSequenceJSON']);
@@ -84,7 +94,7 @@ export function buildPlan(x: Exports): Plan {
       warnings.push(`Account ${code}: batching key "${batchingKey}" has a fixed value "${bt?.passthroughValue ?? r['batchingPassthroughValue']}"; the value is not imported (see notes)`);
     accounts.push({
       legacyId, code, name: (r['accountName'] ?? '').trim() || code,
-      parentLegacyId: parent && byId.has(parent) && parent !== legacyId ? parent : null, groupingLegacyId: grouping,
+      parentLegacyId: parent && byId.has(parent) && parent !== legacyId ? parent : null, inheritsSettings: grouping !== null,
       isAddressMatching: flag(r['isAddressMatching']), isArchiveMailpieces: flag(r['isArchiveMailpieces']),
       isCreateOutputFiles: flag(r['isCreateOutputFiles']),
       isSso: flag(r['isSSO']), isSameDayService: flag(r['isSameDayService']), isUseMrdf: flag(r['isUseMRDF']),
@@ -96,9 +106,26 @@ export function buildPlan(x: Exports): Plan {
     });
   }
   const accountIds = new Set(accounts.map((a) => a.legacyId));
+  // One tree. FileMaker had a parent and a grouping account; the parent wins, and an account that had a grouping customer inherits its settings.
+  const accById = new Map(accounts.map((a) => [a.legacyId, a]));
   for (const a of accounts) {
-    if (a.groupingLegacyId && !accountIds.has(a.groupingLegacyId)) a.groupingLegacyId = null;
     if (a.parentLegacyId && !accountIds.has(a.parentLegacyId)) a.parentLegacyId = null;
+    const g = groupingOf.get(a.legacyId);
+    if (g && !accountIds.has(g)) { a.inheritsSettings = false; continue; }
+    if (a.inheritsSettings && !a.parentLegacyId && g) a.parentLegacyId = g;
+  }
+  for (const a of accounts) {
+    // a loop in the parent links would make the tree unusable: cut it here
+    const seen = new Set<string>([a.legacyId]);
+    for (let n = a.parentLegacyId ? accById.get(a.parentLegacyId) : undefined; n; n = n.parentLegacyId ? accById.get(n.parentLegacyId) : undefined) {
+      if (seen.has(n.legacyId)) { warnings.push(`Account ${a.code}: the parent links form a loop; ${a.code} is made a top-level customer`); a.parentLegacyId = null; a.inheritsSettings = false; break; }
+      seen.add(n.legacyId);
+    }
+  }
+  for (const a of accounts) {
+    const g = groupingOf.get(a.legacyId);
+    if (g && a.inheritsSettings && settingsOwner(accById, a).legacyId !== g)
+      warnings.push(`Account ${a.code}: its parent is ${accById.get(a.parentLegacyId ?? '')?.code ?? '(none)'}, not its grouping customer ${accById.get(g)?.code}; the parent wins, so its settings now come from ${settingsOwner(accById, a).code}`);
   }
 
   // ---- brands -------------------------------------------------------------------------------------------------
@@ -200,9 +227,9 @@ export function buildPlan(x: Exports): Plan {
 }
 
 export function summarise(p: Plan): string[] {
-  const own = p.accounts.filter((a) => !a.groupingLegacyId).length;
+  const own = p.accounts.filter((a) => !a.inheritsSettings).length;
   const L = [
-    `Accounts   ${p.accounts.length} (${own} customers, ${p.accounts.length - own} sub-accounts, ${p.accounts.filter((a) => a.isDeleted).length} deleted)`,
+    `Accounts   ${p.accounts.length} (${own} customers, ${p.accounts.length - own} inheriting settings, ${p.accounts.filter((a) => a.isDeleted).length} deleted)`,
     `           ${p.accounts.reduce((n, a) => n + a.matchRules.length, 0)} address-match rules, ${p.accounts.reduce((n, a) => n + a.sequenceRules.length, 0)} pack-sequence rules, ${p.accounts.reduce((n, a) => n + a.emails.length, 0)} notification emails`,
     `Brands     ${p.brands.length}`,
     `Stock      ${p.stock.length} items (${p.stock.filter((s) => s.code === null).length} without a code, ${p.stock.filter((s) => s.code && !/^WH/i.test(s.code)).length} with a provisional non-WH code), ${p.sizes.length} envelope sizes`,

@@ -113,7 +113,7 @@ export class MssqlRepository implements Repository, PdfTracker {
     const d = { acct: new Dict(), key: new Dict(), val: new Dict(), idt: new Dict(), stock: new Dict(), src: new Dict(),
       addr: new Dict(), opt: new Dict(), paper: new Dict(), brand: new Dict(), fmt: new Dict(), svc: new Dict() };
 
-    // ---- accounts (customer = grouping account; submitting account kept on the pack)
+    // ---- accounts (customer = the account that holds the settings; submitting account kept on the pack)
     const accountId = (code: string): Promise<number> => d.acct.get(code, async () => {
       const a = await db.one<{ account_id: number }>('SELECT account_id FROM idoc.account WHERE account_code = @c AND is_deleted = 0', [['c', sql.NVarChar(100), code]]);
       if (!a) throw new ReferenceError_(`Unknown account ${code}`);

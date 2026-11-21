@@ -155,14 +155,16 @@ CREATE TABLE idoc.identifier_type (
 );
 GO
 
--- FileMaker 'Customers': both submitting accounts (match XML OwnerAccount) and the grouping account (the customer).
+-- FileMaker 'Customers': both submitting accounts (match XML OwnerAccount) and the customers that hold the settings.
+-- Accounts form ONE tree through parent_account_id. An account either holds its own settings (inherits_settings = 0, a 'customer')
+-- or reads them from its parent (inherits_settings = 1); idoc.v_account_owner gives the account that holds the settings for each account.
 CREATE TABLE idoc.account (
     account_id                  INT IDENTITY(1, 1) NOT NULL CONSTRAINT pk_account PRIMARY KEY,
     account_code               NVARCHAR(100)      NOT NULL,
     name                       NVARCHAR(200)      NOT NULL,
     parent_account_id          INT                NULL CONSTRAINT fk_account_parent REFERENCES idoc.account (account_id),
-    grouping_account_id        INT                NULL CONSTRAINT fk_account_grouping REFERENCES idoc.account (account_id), -- NULL = this IS the customer
-    -- Flags (read from the grouping account at ingest)
+    inherits_settings          BIT                NOT NULL CONSTRAINT df_account_inherits DEFAULT (0), -- 1 = settings come from the parent (resolved up the tree)
+    -- Flags (read from the settings owner at ingest)
     is_address_matching        BIT                NOT NULL CONSTRAINT df_account_match DEFAULT (0),
     is_archive_mailpieces      BIT                NOT NULL CONSTRAINT df_account_archive DEFAULT (0),
     is_create_output_files     BIT                NOT NULL CONSTRAINT df_account_output DEFAULT (0),
@@ -185,11 +187,23 @@ CREATE TABLE idoc.account (
     created_at                 DATETIME2(0)       NOT NULL CONSTRAINT df_account_created DEFAULT (SYSUTCDATETIME()),
     legacy_id                  UNIQUEIDENTIFIER   NULL,   -- FileMaker Customers.id (reference import only)
     CONSTRAINT uq_account_code UNIQUE (account_code),
+    CONSTRAINT ck_account_inherits CHECK (inherits_settings = 0 OR parent_account_id IS NOT NULL),
     CONSTRAINT ck_account_rollday CHECK (job_number_rollover_day BETWEEN 1 AND 28),
     CONSTRAINT ck_account_pending CHECK ((pending_mis_job_number IS NULL AND pending_job_number_from IS NULL) OR (pending_mis_job_number IS NOT NULL AND pending_job_number_from IS NOT NULL))
 );
 GO
 CREATE UNIQUE INDEX ux_account_legacy ON idoc.account (legacy_id) WHERE legacy_id IS NOT NULL;
+GO
+
+-- For every account, the account that holds its settings: itself, or the nearest ancestor that does not inherit.
+-- (The API refuses any parent change that would make a loop; a loop would stop this view at the recursion limit.)
+CREATE VIEW idoc.v_account_owner AS
+WITH up AS (
+    SELECT account_id, account_id AS node_id, inherits_settings AS inherits, parent_account_id AS next_id FROM idoc.account
+    UNION ALL
+    SELECT up.account_id, p.account_id, p.inherits_settings, p.parent_account_id
+    FROM up INNER JOIN idoc.account AS p ON p.account_id = up.next_id WHERE up.inherits = 1)
+SELECT account_id, node_id AS owner_account_id FROM up WHERE inherits = 0;
 GO
 
 CREATE TABLE idoc.account_notification_email (
@@ -300,7 +314,7 @@ GO
    =========================================================================== */
 CREATE TABLE idoc.job (
     job_id        BIGINT IDENTITY(1, 1) NOT NULL CONSTRAINT pk_job PRIMARY KEY,
-    account_id    INT                   NOT NULL CONSTRAINT fk_job_account REFERENCES idoc.account (account_id), -- grouping account
+    account_id    INT                   NOT NULL CONSTRAINT fk_job_account REFERENCES idoc.account (account_id), -- the customer (the account that holds the settings)
     base_name     NVARCHAR(260)         NOT NULL,   -- shared file stem of the .xml / .pdf pair
     xml_file_name NVARCHAR(260)         NOT NULL,
     pdf_file_name NVARCHAR(260)         NOT NULL,
@@ -456,7 +470,7 @@ CREATE TABLE idoc.pack (
     pack_id               BIGINT IDENTITY(1, 1) NOT NULL CONSTRAINT pk_pack PRIMARY KEY,
     pack_guid             UNIQUEIDENTIFIER      NOT NULL,   -- idempotency / duplicate key
     job_id                BIGINT                NOT NULL CONSTRAINT fk_pack_job REFERENCES idoc.job (job_id),
-    account_id            INT                   NOT NULL CONSTRAINT fk_pack_account REFERENCES idoc.account (account_id),            -- grouping account
+    account_id            INT                   NOT NULL CONSTRAINT fk_pack_account REFERENCES idoc.account (account_id),            -- the customer (the account that holds the settings)
     submitting_account_id INT                   NOT NULL CONSTRAINT fk_pack_submitting REFERENCES idoc.account (account_id),
     source_id             BIGINT                NOT NULL CONSTRAINT fk_pack_source REFERENCES idoc.source (source_id),
     address_id            BIGINT                NOT NULL CONSTRAINT fk_pack_address REFERENCES idoc.address (address_id),
