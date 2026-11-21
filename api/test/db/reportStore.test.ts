@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import sql from 'mssql';
-import { assertScratchDatabase, resetAndSeed } from '../../../ingest/src/mssql/devDb.js';
+import { assertScratchDatabase } from '../../../ingest/src/mssql/devDb.js';
+import { connect as connectIngest, resetAndSeed } from '../../../ingest/test/db/setup.js';
 import { ingest } from '../../../ingest/src/ingest.js';
 import { loadReferenceData } from '../../../ingest/src/mssql/reference.js';
 import { MssqlRepository } from '../../../ingest/src/mssql/repository.js';
@@ -11,7 +12,8 @@ import { MssqlReportStore } from '../../src/reports/mssqlStore.js';
 /** Runs against the scratch database named in INTELLIDOC_TEST_DB. It DROPS and recreates the idoc schema. */
 const cs = process.env['INTELLIDOC_TEST_DB'];
 describe.skipIf(!cs)('MssqlReportStore', { timeout: 120_000 }, () => {
-  let pool: sql.ConnectionPool; let store: MssqlReportStore; let repo: MssqlRepository;
+  // The ingest code has its own copy of the mssql package, so it gets its own connection (mixing the two breaks parameter types).
+  let pool: sql.ConnectionPool; let ipool: Awaited<ReturnType<typeof connectIngest>>; let store: MssqlReportStore; let repo: MssqlRepository;
   let invoicing: number; let today: string;
   const person = (first: string, surname: string, extra: Partial<PackSpec> = {}): PackSpec =>
     ({ first, surname, lines: [`${first} ${surname}`, '1 High Street', 'Town', 'AB1 2CD'], ...extra });
@@ -21,15 +23,15 @@ describe.skipIf(!cs)('MssqlReportStore', { timeout: 120_000 }, () => {
   beforeAll(async () => {
     pool = new sql.ConnectionPool(cs!); await pool.connect();
     await assertScratchDatabase(pool, /test|scratch|tmp/i);
-    await resetAndSeed(pool); store = new MssqlReportStore(pool); repo = new MssqlRepository(pool);
-    const ref = await loadReferenceData(pool);
+    ipool = await connectIngest(); await resetAndSeed(ipool); store = new MssqlReportStore(pool); repo = new MssqlRepository(ipool);
+    const ref = await loadReferenceData(ipool);
     const { xml, pages } = buildXml([person('Ann', 'Lee'), person('Ann', 'Lee'), person('Bob', 'Lee'), person('Cat', 'Lee', { brand: 'Other brand' })]);
     await ingest(xml, 'job-usage.xml', 'job-usage.pdf', { ref, pdf: new FakePdf(pages), repo });
     invoicing = await scalar(`SELECT TOP 1 invoicing_account_id AS n FROM idoc.mailpiece`);
     // the UK day the mailpieces were produced on, worked out independently of the view
     today = (await pool.request().query(`SELECT CONVERT(NVARCHAR(10), CAST(MIN(created_at) AT TIME ZONE N'UTC' AT TIME ZONE N'GMT Standard Time' AS DATE), 23) AS d FROM idoc.mailpiece`)).recordset[0].d;
   });
-  afterAll(async () => { await pool?.close(); });
+  afterAll(async () => { await pool?.close(); await ipool?.close(); });
 
   it('lists invoicing accounts that have produced something', async () => {
     expect((await store.invoicingAccounts()).map((a) => a.id)).toContain(invoicing);
