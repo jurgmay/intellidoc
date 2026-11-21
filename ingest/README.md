@@ -95,6 +95,8 @@ Flags: `--dry-run` (read and validate against the database, save nothing, leave 
     npm run watch              # real run; copy an xml+pdf pair into C:\IntelliDoc\watch\inbox
 
 Alternatively copy `.env.example` to `.env`, edit it, and use `npm run db:init:env` / `npm run watch:env` (Node 20.6+).
+
+To wipe the scratch database and rebuild it from the current schema (deletes everything in it): `npm run db:reset` (reads `.env`).
 Stop with Ctrl+C: the current file is finished first.
 
 `db:init` loads **test** reference data (placeholder stock weights, accounts `FEXCO`, `NATIONAL_GRID_PSR`). Real

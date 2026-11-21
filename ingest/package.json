@@ -12,6 +12,7 @@
     "db:init": "tsx src/initDevDb.ts",
     "watch:env": "tsx --env-file=.env src/watch.ts",
     "db:init:env": "tsx --env-file=.env src/initDevDb.ts",
+    "db:reset": "tsx --env-file=.env src/initDevDb.ts --reset",
     "import:ref": "tsx src/import/cli.ts",
     "import:ref:env": "tsx --env-file=.env src/import/cli.ts",
     "stock:codes": "tsx src/import/assignCodes.ts",
