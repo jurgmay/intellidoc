@@ -192,3 +192,7 @@ Accounts form one tree through `parent_account_id`; `grouping_account_id` is gon
 ## Mailpiece snapshot
 
 Each mailpiece records, as at production, its sub-account (id, code, name and path from the top of the tree), invoicing account (code and name), brand name and outer envelope stock code (`submitting_account_*`, `invoicing_account_*`, `brand_name`, `outer_stock_code` on `idoc.mailpiece`). They are written at ingest and never updated, so renaming or restructuring accounts later does not change past reports. The schema changed, so reset the scratch database (`npm run db:rebuild <folder>`).
+
+## Batch event log
+
+Every batch gets a `Created` row in `idoc.batch_event` when it is made. `MssqlRepository.recordBatchEvent(batchId, 'Printed' | 'Enclosed' | 'Despatched' | 'Cancelled', { by, note, at })` adds a later event and sets `batch.current_status` to it in one transaction; `batchEvents(batchId)` reads them oldest first. Nothing is ever updated or deleted, and a cancelled batch takes no more events.

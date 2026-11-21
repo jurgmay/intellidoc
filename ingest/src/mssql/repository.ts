@@ -3,6 +3,8 @@ import sql from 'mssql';
 import type { AwaitingJob, OverdueJob, PdfTracker, Repository } from '../repository.js';
 import type { Batch, IngestPack, IngestResult, Mailpiece } from '../types.js';
 
+export type BatchEventType = 'Created' | 'Printed' | 'Enclosed' | 'Despatched' | 'Cancelled';
+export interface BatchEvent { type: BatchEventType; at: Date; by: string | null; note: string | null }
 export class DuplicatePackError extends Error {}
 export class JobAlreadyExistsError extends Error {}
 export class ReferenceError_ extends Error {}
@@ -91,6 +93,40 @@ export class MssqlRepository implements Repository, PdfTracker {
   async markAlerted(jobId: number): Promise<void> {
     await this.pool.request().input('j', sql.BigInt, jobId)
       .query('UPDATE idoc.job SET pdf_last_alert_at = SYSUTCDATETIME(), pdf_alert_count = pdf_alert_count + 1 WHERE job_id = @j');
+  }
+
+  /**
+   * Record that something happened to a batch and move batch.current_status to it, in one transaction.
+   * Events are only ever added. A cancelled batch takes no further events, and a batch cannot go back to Created.
+   * `at` defaults to now (UTC).
+   */
+  async recordBatchEvent(batchId: number, type: BatchEventType, opts: { by?: string; note?: string; at?: Date } = {}): Promise<void> {
+    if (type === 'Created') throw new Error('Created is recorded when the batch is made');
+    const tx = new sql.Transaction(this.pool);
+    await tx.begin();
+    try {
+      const run = (text: string, inputs: Input[]) => {
+        const r = new sql.Request(tx);
+        for (const [n, t, v] of inputs) r.input(n, t, v);
+        return r.query(text);
+      };
+      const cur = (await run('SELECT current_status AS s FROM idoc.batch WITH (UPDLOCK, ROWLOCK) WHERE batch_id = @b', [['b', sql.BigInt, batchId]])).recordset[0] as { s: string } | undefined;
+      if (!cur) throw new Error(`Batch ${batchId} does not exist`);
+      if (cur.s === 'Cancelled') throw new Error(`Batch ${batchId} is cancelled`);
+      await run(`INSERT INTO idoc.batch_event (batch_id, event_type, occurred_at, recorded_by, note)
+                 VALUES (@b, @t, COALESCE(@at, SYSUTCDATETIME()), @by, @note);
+                 UPDATE idoc.batch SET current_status = @t WHERE batch_id = @b;`, [
+        ['b', sql.BigInt, batchId], ['t', sql.NVarChar(30), type], ['at', sql.DateTime2, opts.at ?? null],
+        ['by', sql.NVarChar(100), opts.by ?? null], ['note', sql.NVarChar(400), opts.note ?? null]]);
+      await tx.commit();
+    } catch (e) { await tx.rollback(); throw e; }
+  }
+
+  async batchEvents(batchId: number): Promise<BatchEvent[]> {
+    const r = await this.pool.request().input('b', sql.BigInt, batchId).query(
+      `SELECT event_type AS type, occurred_at AS at, recorded_by AS [by], note FROM idoc.batch_event WHERE batch_id = @b ORDER BY occurred_at, batch_event_id`);
+    return (r.recordset as { type: string; at: Date; by: string | null; note: string | null }[])
+      .map((x) => ({ type: x.type as BatchEventType, at: x.at, by: x.by, note: x.note }));
   }
 
   async saveJob(result: IngestResult): Promise<void> {
@@ -320,6 +356,7 @@ export class MssqlRepository implements Repository, PdfTracker {
       ['svc', sql.Int, await h.serviceId(b.postalService, b.postalFormat, b.postalServiceId)], ['fmt', sql.Int, await h.formatId(b.postalFormat)],
       ['paper', sql.Int, await h.paperId(b.paper)], ['bv', sql.NVarChar(400), b.batchingValue], ['route', sql.NVarChar(20), b.route],
       ['ish', sql.Char(64), insertSetHash], ['key', sql.Char(64), b.key], ['dept', sql.NVarChar(30), DEPT[b.enclosing]], ['n', sql.Int, b.mailpieceIds.length]]))!;
+    await db.exec(`INSERT INTO idoc.batch_event (batch_id, event_type) VALUES (@b, N'Created')`, [['b', sql.BigInt, row.id]]);
     for (const i of insertIds) {
       await db.exec('INSERT INTO idoc.batch_insert (batch_id, stock_item_id, quantity) VALUES (@b, @s, @q)', [['b', sql.BigInt, row.id], ['s', sql.Int, i.id], ['q', sql.Int, i.quantity]]);
     }
