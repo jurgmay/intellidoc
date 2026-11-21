@@ -3,6 +3,7 @@ import { buildApp } from './app.js';
 import { MemoryReportStore } from './reports/memoryStore.js';
 import { MemoryRecipientStore } from './recipients/memoryStore.js';
 import { MemoryCostingStore } from './costing/memoryStore.js';
+import { MemoryPostalStore } from './postal/memoryStore.js';
 import { MemoryCustomerStore } from './customers/memoryStore.js';
 import { MemorySettingsStore } from './settings/store.js';
 
@@ -74,6 +75,16 @@ reports.lines.set(106, usageDays.flatMap((day, i) => [
   { day, brand: 'Rendall & Rittner', format: 'Letter', service: '1st Class', mailpieces: 18 + ((i * 5) % 14), packs: 22 + i, sheets: 60 + i * 2 },
   { day, brand: 'Odevo', format: 'Large Letter', service: '2nd Class', mailpieces: 6 + (i % 5), packs: 6 + (i % 5), sheets: 30 + i },
 ]));
-const app = await buildApp({ settings: store, customers, costing, recipients, reports, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
+const postal = new MemoryPostalStore();
+postal.today = () => '2026-11-21';
+const rm = await postal.createProvider('Royal Mail', 'system'); const dpd = await postal.createProvider('DPD', 'system');
+const second = await postal.createService(rm, { formatId: 1, name: '2nd Class', serviceCode: 'STL2', isSignedFor: false, isTracked: false, isRecorded: false }, 'system');
+const first = await postal.createService(rm, { formatId: 1, name: '1st Class', serviceCode: 'STL1', isSignedFor: false, isTracked: false, isRecorded: false }, 'system');
+await postal.createService(dpd, { formatId: 3, name: 'Next Day', serviceCode: null, isSignedFor: true, isTracked: true, isRecorded: false }, 'system');
+for (const [svc, bands, cost, sell] of [[second, [[0, 100], [101, 250]], 0.61, 0.66], [first, [[0, 100]], 0.85, 0.9]] as const) {
+  for (const [mn, mx] of bands) { const id = await postal.createRate(svc, { minWeightG: mn, maxWeightG: mx, validFrom: '2025-04-01', validTo: '2026-03-31', cost: cost - 0.05, sellPrice: sell - 0.05 }, 'system'); postal.rates.get(id)!.usedBy = 4; }
+  for (const [mn, mx] of bands) { const id = await postal.createRate(svc, { minWeightG: mn, maxWeightG: mx, validFrom: '2026-04-01', validTo: null, cost, sellPrice: sell }, 'system'); postal.rates.get(id)!.usedBy = 12; }
+}
+const app = await buildApp({ settings: store, customers, costing, postal, recipients, reports, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
 await app.listen({ port: Number(process.env['API_PORT'] ?? 3001), host: '127.0.0.1' });
 console.log('Stub API (no database) on http://127.0.0.1:3001');

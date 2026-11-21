@@ -28,6 +28,7 @@ Behaviour worth knowing:
   the submitting account is kept on each pack. Batches and mailpieces belong to the customer.
 - Unknown paper and brand values arriving in the XML are created (paper `batch_name` defaults to the upper-cased name).
   Unknown accounts, stock codes, postal formats and postal services are errors and roll the whole job back.
+- An envelope setting is linked to one postal rate row, but ingest uses the row that prices the same service and weight band **today** (so a dated price change in the postal rate editor does not orphan the setting). The mailpiece records that row.
 - If a postal service name exists under several providers for the same format the save fails as ambiguous.
 - Writes are row by row inside the transaction (fine for hundreds/low thousands of packs); switch to table-valued
   parameters or bulk inserts if exports grow much larger.

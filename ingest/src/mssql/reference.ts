@@ -80,19 +80,24 @@ export async function loadReferenceData(pool: sql.ConnectionPool): Promise<Refer
     postal_rate_id: number; min_weight_g: number; max_weight_g: number; postal_service_id: number; provider_name: string; service_name: string; service_code: string | null; format_name: string; size: string; stock_code: string;
   }>(`
     SELECT ae.account_envelope_id, src.account_id AS account_id, src.depth, b.name AS brand, ae.delivery_band, ae.reference,
-           ae.postal_rate_id, r.min_weight_g, r.max_weight_g, r.postal_service_id,
+           r.postal_rate_id, r.min_weight_g, r.max_weight_g, r.postal_service_id,
            pp.name AS provider_name, ps.name AS service_name, ps.service_code, pf.name AS format_name, es.code AS size, si.stock_code
     FROM idoc.v_account_envelope_source AS src
     INNER JOIN idoc.account_envelope AS ae ON ae.account_id = src.source_account_id
     LEFT JOIN idoc.brand AS b ON b.brand_id = ae.brand_id
-    INNER JOIN idoc.postal_rate AS r ON r.postal_rate_id = ae.postal_rate_id
+    -- An envelope setting is linked to a weight band of a service. The row that prices that band today is the one used, so a dated price change
+    -- (the old row ends, a new row starts) needs no change to the envelope settings.
+    INNER JOIN idoc.postal_rate AS r0 ON r0.postal_rate_id = ae.postal_rate_id
+    CROSS APPLY (SELECT TOP 1 x.postal_rate_id, x.min_weight_g, x.max_weight_g, x.postal_service_id FROM idoc.postal_rate AS x
+                 WHERE x.postal_service_id = r0.postal_service_id AND x.min_weight_g = r0.min_weight_g AND x.max_weight_g = r0.max_weight_g
+                   AND x.valid_from <= CAST(SYSUTCDATETIME() AS DATE) AND (x.valid_to IS NULL OR x.valid_to >= CAST(SYSUTCDATETIME() AS DATE))
+                 ORDER BY x.valid_from DESC) AS r
     INNER JOIN idoc.postal_service AS ps ON ps.postal_service_id = r.postal_service_id
     INNER JOIN idoc.postal_provider AS pp ON pp.postal_provider_id = ps.postal_provider_id
     INNER JOIN idoc.postal_format AS pf ON pf.postal_format_id = ps.postal_format_id
     INNER JOIN idoc.stock_item AS si ON si.stock_item_id = ae.outer_stock_item_id
     INNER JOIN idoc.envelope_size AS es ON es.envelope_size_id = si.envelope_size_id
-    WHERE ae.is_deleted = 0
-      AND r.valid_from <= CAST(SYSUTCDATETIME() AS DATE) AND (r.valid_to IS NULL OR r.valid_to >= CAST(SYSUTCDATETIME() AS DATE))`);
+    WHERE ae.is_deleted = 0`);
 
   const out = new Map<string, AccountConfig>();
   for (const a of accounts) {
