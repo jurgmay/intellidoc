@@ -21,11 +21,11 @@ export async function loadReferenceData(pool: sql.ConnectionPool): Promise<Refer
     .map((f): PostalFormat => ({ name: f.name, rank: f.rank_order, maxWeightG: f.max_weight_g,
       maxThicknessMm: f.max_thickness_mm === null ? null : Number(f.max_thickness_mm), maxSheets: f.max_sheets }));
 
-  const stockRows = await q<{ stock_item_id: number; parent_stock_item_id: number | null; stock_code: string; weight_g: number; thickness_mm: number }>(
-    'SELECT stock_item_id, parent_stock_item_id, stock_code, CAST(weight_g AS FLOAT) AS weight_g, CAST(thickness_mm AS FLOAT) AS thickness_mm FROM idoc.stock_item WHERE stock_code IS NOT NULL');
+  const stockRows = await q<{ stock_item_id: number; parent_stock_item_id: number | null; stock_code: string; description: string; weight_g: number; thickness_mm: number }>(
+    'SELECT stock_item_id, parent_stock_item_id, stock_code, description, CAST(weight_g AS FLOAT) AS weight_g, CAST(thickness_mm AS FLOAT) AS thickness_mm FROM idoc.stock_item WHERE stock_code IS NOT NULL');
   const codeById = new Map(stockRows.map((r) => [r.stock_item_id, r.stock_code]));
   const stock = new Map<string, StockItem>();
-  for (const r of stockRows) stock.set(r.stock_code, { code: r.stock_code, weightG: Number(r.weight_g), thicknessMm: Number(r.thickness_mm), linked: [] });
+  for (const r of stockRows) stock.set(r.stock_code, { code: r.stock_code, weightG: Number(r.weight_g), thicknessMm: Number(r.thickness_mm), description: r.description, linked: [] });
   for (const r of stockRows) {
     if (r.parent_stock_item_id === null) continue;
     const parent = stock.get(codeById.get(r.parent_stock_item_id)!);
@@ -54,15 +54,16 @@ export async function loadReferenceData(pool: sql.ConnectionPool): Promise<Refer
   const seqRules = await q<{ account_id: number; passthrough_value: string; sequence_number: number }>('SELECT account_id, passthrough_value, sequence_number FROM idoc.pack_sequence_rule');
   const envRows = await q<{
     account_envelope_id: number; account_id: number; brand: string | null; delivery_band: string; reference: string | null;
-    postal_rate_id: number; min_weight_g: number; max_weight_g: number; postal_service_id: number; format_name: string; size: string; stock_code: string;
+    postal_rate_id: number; min_weight_g: number; max_weight_g: number; postal_service_id: number; provider_name: string; service_name: string; service_code: string | null; format_name: string; size: string; stock_code: string;
   }>(`
     SELECT ae.account_envelope_id, ae.account_id, b.name AS brand, ae.delivery_band, ae.reference,
            ae.postal_rate_id, r.min_weight_g, r.max_weight_g, r.postal_service_id,
-           pf.name AS format_name, es.code AS size, si.stock_code
+           pp.name AS provider_name, ps.name AS service_name, ps.service_code, pf.name AS format_name, es.code AS size, si.stock_code
     FROM idoc.account_envelope AS ae
     LEFT JOIN idoc.brand AS b ON b.brand_id = ae.brand_id
     INNER JOIN idoc.postal_rate AS r ON r.postal_rate_id = ae.postal_rate_id
     INNER JOIN idoc.postal_service AS ps ON ps.postal_service_id = r.postal_service_id
+    INNER JOIN idoc.postal_provider AS pp ON pp.postal_provider_id = ps.postal_provider_id
     INNER JOIN idoc.postal_format AS pf ON pf.postal_format_id = ps.postal_format_id
     INNER JOIN idoc.stock_item AS si ON si.stock_item_id = ae.outer_stock_item_id
     INNER JOIN idoc.envelope_size AS es ON es.envelope_size_id = si.envelope_size_id
@@ -87,6 +88,7 @@ export async function loadReferenceData(pool: sql.ConnectionPool): Promise<Refer
         brand: e.brand, reference: e.reference ?? '', postalFormat: e.format_name, size: e.size, stockCode: e.stock_code,
         deliveryBand: e.delivery_band, minWeightG: e.min_weight_g, maxWeightG: e.max_weight_g,
         accountEnvelopeId: e.account_envelope_id, postalRateId: e.postal_rate_id, postalServiceId: e.postal_service_id,
+        postalProvider: e.provider_name, postalServiceName: e.service_name, serviceCode: e.service_code,
       })),
     });
   }

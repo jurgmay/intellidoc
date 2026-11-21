@@ -75,6 +75,8 @@ export interface Mailpiece {
   accountEnvelopeId?: number;
   postalRateId?: number;
   postalServiceId?: number;
+  /** The configured envelope/rate option chosen (carries provider, service and weight band). */
+  option?: import('./reference.js').EnvelopeOption;
   weightG: number;
   thicknessMm: number;
   postalFormat: string;

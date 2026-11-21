@@ -111,7 +111,7 @@ export async function ingest(
           paper: ref.paperBatchNames.get(first.parsed.options.paper) ?? first.parsed.options.paper,
           batchingValue: first.batchingValue,
           route: routeFor(phys.sheets, phys.envelope.size, ref),
-          accountEnvelopeId: phys.envelope.accountEnvelopeId, postalRateId: phys.envelope.postalRateId, postalServiceId: phys.envelope.postalServiceId,
+          accountEnvelopeId: phys.envelope.accountEnvelopeId, postalRateId: phys.envelope.postalRateId, postalServiceId: phys.envelope.postalServiceId, option: phys.envelope,
         };
         mailpieces.push({ ...base, id: id++, batchKey: batchKey(base) });
       } catch (e) {

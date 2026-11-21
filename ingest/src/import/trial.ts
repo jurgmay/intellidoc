@@ -25,3 +25,22 @@ console.log('\nXML band vs our choice (n, weight is for the first of each group 
 const rows = new Map<string, { n: number; min: number; max: number }>();
 for (const m of r.mailpieces) { const k = `XML "${xmlBand.get(m.packs[0]!.parsed.guid)}" -> ${m.postalFormat} ${m.envelopeSize}`; const v = rows.get(k) ?? { n: 0, min: 1e9, max: 0 }; v.n++; v.min = Math.min(v.min, m.weightG); v.max = Math.max(v.max, m.weightG); rows.set(k, v); }
 for (const [k, v] of [...rows].sort()) console.log(`${String(v.n).padStart(4)}  ${k}  weight ${v.min}-${v.max}g`);
+
+// Optional: render run sheets for this trial. Batch codes here are temporary (1, 2, 3...).
+//   ... trial.ts <dir> <xml> <pdf> --runsheets <outDir> [logo.png]
+const rsAt = process.argv.indexOf('--runsheets');
+if (rsAt > 0) {
+  const { mkdir, writeFile } = await import('node:fs/promises');
+  const { join } = await import('node:path');
+  const { runSheetsFromIngest } = await import('../runsheet/data.js');
+  const { renderRunSheet, mergePdfs } = await import('../runsheet/pdf.js');
+  const outDir = process.argv[rsAt + 1] ?? 'runsheets';
+  const logoArg = process.argv[rsAt + 2];
+  const logo = logoArg ? new Uint8Array(await readFile(logoArg)) : undefined;
+  await mkdir(outDir, { recursive: true });
+  const sheets = runSheetsFromIngest(r, ref, { firstCode: 1 });
+  const parts: Uint8Array[] = [];
+  for (const s of sheets) { const pdf = await renderRunSheet(s, logo); await writeFile(join(outDir, s.fileName), pdf); parts.push(pdf); }
+  await writeFile(join(outDir, 'job.pdf'), await mergePdfs(parts));
+  console.log(`\nWrote ${sheets.length} run sheets and job.pdf to ${outDir}`);
+}

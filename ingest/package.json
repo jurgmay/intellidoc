@@ -15,9 +15,14 @@
     "import:ref": "tsx src/import/cli.ts",
     "import:ref:env": "tsx --env-file=.env src/import/cli.ts",
     "stock:codes": "tsx src/import/assignCodes.ts",
+    "runsheets": "tsx src/runsheet/cli.ts",
+    "runsheets:env": "tsx --env-file=.env src/runsheet/cli.ts",
     "stock:codes:env": "tsx --env-file=.env src/import/assignCodes.ts"
   },
   "dependencies": {
+    "@fontsource/poppins": "^5.3.0",
+    "@pdf-lib/fontkit": "^1.1.1",
+    "bwip-js": "^4.11.4",
     "mssql": "^12.8.0",
     "pdf-lib": "^1.17.1",
     "saxes": "^6.0.0"

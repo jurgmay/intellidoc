@@ -14,6 +14,7 @@ export interface StockItem {
   code: string;
   weightG: number;
   thicknessMm: number;
+  description?: string;
   /** Linked stock: child items that are always added with this one (insert-side only). */
   linked?: string[];
 }
@@ -32,6 +33,9 @@ export interface EnvelopeOption {
   accountEnvelopeId?: number;
   postalRateId?: number;
   postalServiceId?: number;
+  postalProvider?: string;
+  postalServiceName?: string;
+  serviceCode?: string | null;
 }
 
 export interface AccountConfig {

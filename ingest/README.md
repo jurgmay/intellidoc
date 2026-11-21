@@ -132,3 +132,18 @@ the issues, and a comparison with the delivery band the customer system wrote in
 ```
 npx tsx src/import/trial.ts C:\imports C:\samples\file.xml C:\samples\file.pdf
 ```
+
+## Run sheets
+
+One A4 run sheet per batch, plus one merged PDF per job (FileMaker: "Create Run Sheets" + "Merge Run Sheets").
+
+- **Batch code**: one global running number, from the SQL sequence `idoc.batch_code_seq`. To continue from FileMaker's current value:
+  `ALTER SEQUENCE idoc.batch_code_seq RESTART WITH <next number>;` The file name on the sheet is `<batch code>.pdf`.
+- **Real job** (after it has been ingested): `npx tsx --env-file=.env src/runsheet/cli.ts <jobId> <outDir> [logo.png]`
+  writes `<batchCode>.pdf` for each batch and `job-<jobId>.pdf` (all sheets merged).
+- **Trial, no database**: add `--runsheets <outDir> [logo.png]` to the trial command. Batch codes are temporary (1, 2, 3...).
+- Layout: Job details, Production details, Fulfilment details, and a DataMatrix of the batch code. The wording of "Print method" follows FileMaker.
+  Helvetica stands in for Poppins until the font files are supplied.
+- Not yet: large-print flag, batch comments, the separate insert page, spoil run sheets, e-mail and archive.
+
+An existing database needs the new sequence/column: re-run `initDevDb.ts --reset` and the reference import (a scratch DB has no jobs worth keeping).
