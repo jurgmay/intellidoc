@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type sql from 'mssql';
 import { connect, hasDb, resetAndSeed } from './setup.js';
-import { MssqlRepository, DuplicatePackError, ReferenceError_ } from '../../src/mssql/repository.js';
+import { MssqlRepository, DuplicatePackError, ProductionGateError, ReferenceError_ } from '../../src/mssql/repository.js';
 import { loadReferenceData } from '../../src/mssql/reference.js';
 import { ingest } from '../../src/ingest.js';
 import { loadAlertSettings, parseRecipients } from '../../src/mssql/alertSettings.js';
@@ -183,6 +183,42 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     await repo.recordBatchEvent(batchId, 'Cancelled', { note: 'customer withdrew' });
     await expect(repo.recordBatchEvent(batchId, 'Despatched')).rejects.toThrow(/cancelled/);
     expect((await repo.batchEvents(batchId)).map((e) => e.type)).toEqual(['Created', 'Printed', 'Enclosed', 'Cancelled']);
+  });
+
+  it('production gate: nothing is printed, enclosed or despatched until the job PDF has arrived', async () => {
+    const ref = await loadReferenceData(pool);
+    const { xml } = buildXml([person('Gail', 'Gate')]);
+    await ingest(xml, 'job-gate.xml', null, { ref, pdf: new FakePdf(0), repo }); // saved from the XML alone: Awaiting PDF
+    const jobId = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-gate'`);
+    const batchId = await scalar(`SELECT TOP 1 batch_id AS n FROM idoc.batch WHERE job_id = ${jobId}`);
+    const view = async () => (await pool.request().query(`SELECT job_status, current_status, hold_reason, can_print FROM idoc.v_batch_production WHERE batch_id = ${batchId}`)).recordset[0];
+    expect(await view()).toMatchObject({ job_status: 'Awaiting PDF', current_status: 'Created', hold_reason: 'Waiting for the PDF', can_print: false });
+
+    for (const t of ['Printed', 'Enclosed', 'Despatched'] as const) await expect(repo.recordBatchEvent(batchId, t)).rejects.toBeInstanceOf(ProductionGateError);
+    await expect(repo.recordBatchEvent(batchId, 'Printed')).rejects.toThrow(/job "job-gate" has not arrived/);
+    expect((await repo.batchEvents(batchId)).map((e) => e.type)).toEqual(['Created']);
+    // other writers are stopped by the database itself
+    await expect(pool.request().query(`INSERT INTO idoc.batch_event (batch_id, event_type) VALUES (${batchId}, N'Printed')`)).rejects.toThrow(/Production gate/);
+    await expect(pool.request().query(`UPDATE idoc.batch SET current_status = N'Printed' WHERE batch_id = ${batchId}`)).rejects.toThrow(/Production gate/);
+    expect(await view()).toMatchObject({ current_status: 'Created' });
+
+    await repo.markPdfReceived(jobId, 2);
+    expect(await view()).toMatchObject({ job_status: 'Received', hold_reason: null, can_print: true });
+    await repo.recordBatchEvent(batchId, 'Printed');
+    expect(await view()).toMatchObject({ current_status: 'Printed', can_print: false });
+  });
+
+  it('production gate: a rejected PDF holds the batch with the reason, and a held batch can still be cancelled', async () => {
+    const ref = await loadReferenceData(pool);
+    const { xml } = buildXml([person('Rex', 'Rejected')]);
+    await ingest(xml, 'job-rejected.xml', null, { ref, pdf: new FakePdf(0), repo });
+    const jobId = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-rejected'`);
+    const batchId = await scalar(`SELECT TOP 1 batch_id AS n FROM idoc.batch WHERE job_id = ${jobId}`);
+    await repo.markPdfRejected(jobId, 'Page count does not match');
+    expect((await pool.request().query(`SELECT hold_reason, can_print FROM idoc.v_batch_production WHERE batch_id = ${batchId}`)).recordset[0]).toMatchObject({ hold_reason: 'PDF rejected: Page count does not match', can_print: false });
+    await expect(repo.recordBatchEvent(batchId, 'Printed')).rejects.toThrow(/was rejected \(Page count does not match\)/);
+    await repo.recordBatchEvent(batchId, 'Cancelled', { note: 'bad PDF' });
+    expect((await repo.batchEvents(batchId)).map((e) => e.type)).toEqual(['Created', 'Cancelled']);
   });
 
   it('invoicing account: the batch and mailpieces record it, and the run sheet prints its job number', async () => {
