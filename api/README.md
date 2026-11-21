@@ -42,4 +42,4 @@ A customer is an `idoc.account` with no grouping account; its sub-accounts point
 | `POST /api/customers/:id/envelopes`, `PUT` / `DELETE /api/envelopes/:id` | envelope settings (delete is soft) |
 | `PUT /api/customers/:id/match-rules`, `/sequence-rules`, `/emails` | each replaces the whole list |
 
-Tests: `npm test`. The database test needs `INTELLIDOC_TEST_DB` (it drops and recreates the `idoc` schema).
+Tests: `npm test`. The database tests (`npm run test:db`) read `INTELLIDOC_TEST_DB` from `api/.env.test` (copy `.env.test.example`). They drop and recreate the `idoc` schema in that database, so point it at a test database, never at real data.

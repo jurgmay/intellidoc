@@ -19,3 +19,7 @@ watch/
 *.mer
 *.csv
 import-data/
+
+# Test databases: the tests drop and rebuild the idoc schema, so never point this at real data
+.env.test
+!.env.test.example

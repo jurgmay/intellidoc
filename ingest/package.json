@@ -7,7 +7,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "dry-run": "tsx src/cli.ts",
-    "test:db": "vitest run test/db",
+    "test:db": "node --env-file=.env.test node_modules/vitest/vitest.mjs run test/db",
     "watch": "tsx src/watch.ts",
     "db:init": "tsx src/initDevDb.ts",
     "watch:env": "tsx --env-file=.env src/watch.ts",
