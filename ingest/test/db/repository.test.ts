@@ -380,6 +380,24 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     expect(await priceJob(pool, jobC)).toEqual({ priced: 0, noModel: 0, unknownColours: 1 });
   });
 
+  it('a dated price change: envelope settings follow the row that prices their band today', async () => {
+    const before = await loadReferenceData(pool);
+    const option = [...before.accounts.values()].flatMap((a) => a.envelopes).find((e) => e.postalRateId !== undefined)!;
+    const oldId = option.postalRateId!;
+    await pool.request().query(`UPDATE idoc.postal_rate SET valid_to = DATEADD(DAY, -1, CAST(SYSUTCDATETIME() AS DATE)) WHERE postal_rate_id = ${oldId}`);
+    const newId = await scalar(`
+      INSERT INTO idoc.postal_rate (postal_service_id, min_weight_g, max_weight_g, valid_from, cost, sell_price) OUTPUT INSERTED.postal_rate_id AS n
+      SELECT postal_service_id, min_weight_g, max_weight_g, CAST(SYSUTCDATETIME() AS DATE), 1.5, 2 FROM idoc.postal_rate WHERE postal_rate_id = ${oldId}`);
+    try {
+      const after = await loadReferenceData(pool);
+      const same = [...after.accounts.values()].flatMap((a) => a.envelopes).find((e) => e.accountEnvelopeId === option.accountEnvelopeId)!;
+      expect(same.postalRateId).toBe(newId); // the setting still points at the old row, but the new row is the one in force
+      expect(same).toMatchObject({ minWeightG: option.minWeightG, maxWeightG: option.maxWeightG, postalServiceId: option.postalServiceId });
+    } finally {
+      await pool.request().query(`DELETE FROM idoc.postal_rate WHERE postal_rate_id = ${newId}; UPDATE idoc.postal_rate SET valid_to = NULL WHERE postal_rate_id = ${oldId}`);
+    }
+  });
+
   it('page colours: stored on the packs at ingest, and after the PDF arrives on the XML-first path', async () => {
     const ref = await loadReferenceData(pool);
     const rows = async (job: string) => (await pool.request().query(
