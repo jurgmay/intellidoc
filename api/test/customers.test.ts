@@ -9,7 +9,7 @@ let app: FastifyInstance;
 let store: MemoryCustomerStore;
 let acme: number;
 const flags = (over: Record<string, boolean> = {}) => ({ ...Object.fromEntries(FLAGS.map((f) => [f, false])), ...over });
-const details = (over: Record<string, unknown> = {}) => ({ code: 'ACME', name: 'Acme Ltd', misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, returnAddress: null, batchingKey: null, packSequenceKey: null, parentId: null, flags: flags(), ...over });
+const details = (over: Record<string, unknown> = {}) => ({ code: 'ACME', name: 'Acme Ltd', misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, returnAddress: null, batchingKey: null, packSequenceKey: null, parentId: null, flags: flags(), ...over });
 const env = (over: Record<string, unknown> = {}) => ({ brandId: null, deliveryBand: '2nd Class', postalRateId: 1, stockItemId: 10, reference: null, externalName: null, isOversticker: false, ...over });
 
 beforeEach(async () => {
@@ -271,5 +271,41 @@ describe('lookups', () => {
     expect(r.postalRates.length).toBeGreaterThan(0);
     expect(r.envelopeStock.length).toBeGreaterThan(0);
     expect(r.flagLabels.isAddressMatching).toBe('Address matching');
+  });
+});
+
+describe('invoicing account', () => {
+  it('defaults to the customer itself and offers the customer and its parents', async () => {
+    const child = store.seed({ code: 'CHILD', name: 'Child Co', parentId: acme });
+    const d = (await call('GET', `/api/customers/${child}`)).json();
+    expect(d.invoicing).toBeNull();
+    expect(d.invoicingOptions.map((o: { code: string }) => o.code)).toEqual(['CHILD', 'ACME']);
+  });
+  it('can be set to a parent, is written to the history, and can be cleared', async () => {
+    const child = store.seed({ code: 'CHILD', name: 'Child Co', parentId: acme });
+    const r = await call('PUT', `/api/customers/${child}`, details({ code: 'CHILD', name: 'Child Co', parentId: acme, invoicingAccountId: acme }));
+    expect(r.json().invoicing).toMatchObject({ id: acme, code: 'ACME' });
+    expect((await call('GET', `/api/customers/${child}/history`)).json().rows[0].summary).toBe('Invoicing account: (none) → "ACME"');
+    const cleared = await call('PUT', `/api/customers/${child}`, details({ code: 'CHILD', name: 'Child Co', parentId: acme, invoicingAccountId: null }));
+    expect(cleared.json().invoicing).toBeNull();
+  });
+  it('refuses an account that is neither the customer nor one of its parents', async () => {
+    const child = store.seed({ code: 'CHILD', name: 'Child Co', parentId: acme });
+    const other = store.seed({ code: 'OTHER', name: 'Other' });
+    const r = await call('PUT', `/api/customers/${child}`, details({ code: 'CHILD', name: 'Child Co', parentId: acme, invoicingAccountId: other }));
+    expect(r.statusCode).toBe(422);
+    expect(r.json().errors.invoicingAccountId).toMatch(/this customer or one of its parents/);
+  });
+  it('refuses a move that would leave the invoicing account out of the parent chain', async () => {
+    const child = store.seed({ code: 'CHILD', name: 'Child Co', parentId: acme, invoicingAccountId: acme });
+    const r = await call('PUT', `/api/customers/${child}`, details({ code: 'CHILD', name: 'Child Co', parentId: null, invoicingAccountId: acme }));
+    expect(r.statusCode).toBe(422);
+  });
+  it('must be given explicitly, so leaving it out cannot clear it', async () => {
+    const { invoicingAccountId: _omit, ...without } = details();
+    void _omit;
+    const r = await call('PUT', `/api/customers/${acme}`, without);
+    expect(r.statusCode).toBe(422);
+    expect(r.json().errors.invoicingAccountId).toBeDefined();
   });
 });

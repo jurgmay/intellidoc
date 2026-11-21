@@ -35,18 +35,23 @@ export async function loadReferenceData(pool: sql.ConnectionPool): Promise<Refer
   const anonymousAddressees = new Set((await q<{ normalised_text: string }>('SELECT normalised_text FROM idoc.anonymous_addressee')).map((r) => r.normalised_text));
   const paperBatchNames = new Map((await q<{ name: string; batch_name: string }>('SELECT name, batch_name FROM idoc.paper')).map((r) => [r.name, r.batch_name]));
 
-  // Accounts. Configuration (flags, rules, brands, envelopes) is read from the account that holds the settings (v_account_owner).
-  const accounts = await q<{ account_id: number; account_code: string; owner_account_id: number; is_address_matching: boolean; batching_key: string | null; seq_key: string | null }>(`
-    SELECT a.account_id, a.account_code, o.owner_account_id,
+  // Accounts. Configuration (flags, rules, brands, envelopes) is read from the account that holds the settings (v_account_owner). The batching boundary is the root of the tree; the invoicing account comes from v_account_invoicing.
+  const accounts = await q<{ account_id: number; account_code: string; owner_account_id: number; parent_account_id: number | null; invoicing_account_id: number; is_address_matching: boolean; batching_key: string | null; seq_key: string | null }>(`
+    SELECT a.account_id, a.account_code, o.owner_account_id, a.parent_account_id, iv.invoicing_account_id,
            c.is_address_matching, bk.name AS batching_key, sk.name AS seq_key
     FROM idoc.account AS a
     INNER JOIN idoc.v_account_owner AS o ON o.account_id = a.account_id
+    INNER JOIN idoc.v_account_invoicing AS iv ON iv.account_id = a.account_id
     INNER JOIN idoc.account AS c ON c.account_id = o.owner_account_id
     LEFT JOIN idoc.passthrough_key AS bk ON bk.passthrough_key_id = c.batching_key_id
     LEFT JOIN idoc.passthrough_key AS sk ON sk.passthrough_key_id = c.pack_sequence_key_id
     WHERE a.is_deleted = 0`);
   const customerOf = new Map(accounts.map((a) => [a.account_id, a.owner_account_id]));
-  const codeOf = new Map(accounts.map((a) => [a.account_id, a.account_code]));
+  // The whole tree (deleted accounts too), for the root of each account and for invoicing account codes.
+  const tree = await q<{ account_id: number; account_code: string; parent_account_id: number | null }>('SELECT account_id, account_code, parent_account_id FROM idoc.account');
+  const codeOf = new Map(tree.map((a) => [a.account_id, a.account_code]));
+  const parentOf = new Map(tree.map((a) => [a.account_id, a.parent_account_id]));
+  const rootOf = (id: number): number => { let cur = id; for (let i = 0; i < 100; i++) { const p = parentOf.get(cur); if (p === null || p === undefined) break; cur = p; } return cur; };
 
   const brands = await q<{ account_id: number; name: string }>('SELECT account_id, name FROM idoc.brand');
   const rules = await q<{ account_id: number; is_include: boolean; key_name: string; passthrough_value: string | null }>(`
@@ -78,7 +83,8 @@ export async function loadReferenceData(pool: sql.ConnectionPool): Promise<Refer
     const myRules = rules.filter((r) => r.account_id === cust);
     out.set(a.account_code, {
       code: a.account_code,
-      customerCode: codeOf.get(cust) ?? a.account_code,
+      customerCode: codeOf.get(rootOf(a.account_id)) ?? a.account_code,
+      invoicingCode: codeOf.get(a.invoicing_account_id) ?? a.account_code,
       brands: brands.filter((b) => b.account_id === cust).map((b) => b.name),
       batchingKey: a.batching_key,
       matchingEnabled: Boolean(a.is_address_matching),

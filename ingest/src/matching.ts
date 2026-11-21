@@ -20,7 +20,8 @@ export function matchKey(p: IngestPack, acct: AccountConfig): string {
   if (p.matchExclusion) return `X:${p.parsed.guid}`;
   const inc = acct.matchIncludeKeys.map((k) => `${k}=${p.parsed.passthrough[k] ?? ''}`);
   return [
-    p.address.hash, p.customerCode, p.brand ?? '', p.parsed.options.envelopeCode,
+    // Packs from different sub-accounts never share an envelope, and never across invoicing accounts (the opt-in to relax the first is a later step).
+    p.address.hash, p.customerCode, p.invoicingCode, p.accountCode, p.brand ?? '', p.parsed.options.envelopeCode,
     p.parsed.options.deliveryMethod, p.parsed.options.paper, p.batchingValue, ...inc,
   ].join('\u001f');
 }

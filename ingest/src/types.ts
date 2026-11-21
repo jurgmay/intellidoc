@@ -48,8 +48,10 @@ export interface IngestPack {
   address: NormalisedAddress;
   /** Submitting account (XML OwnerAccount). */
   accountCode: string;
-  /** Customer = the account that holds the settings; this is what batches and mailpieces belong to. */
+  /** Customer = the root of the account tree; this is what jobs, batches and mailpieces belong to. */
   customerCode: string;
+  /** The account invoiced for this pack, and whose job number is printed on the run sheet. */
+  invoicingCode: string;
   brand: string | null;
   brandReference: string;
   /** Position inside a merged envelope (account pack-sequence rule); 99 = unlisted. */
@@ -66,8 +68,10 @@ export interface Mailpiece {
   id: number;
   addressHash: string;
   packs: IngestPack[];
-  /** Customer (the account that holds the settings) code. */
+  /** Customer (root of the account tree) code. */
   accountCode: string;
+  /** Invoicing account code (part of the batch identity). */
+  invoicingCode: string;
   brand: string | null;
   sheets: number;
   insertCodes: { code: string; quantity: number }[];
@@ -92,6 +96,7 @@ export interface Mailpiece {
 export interface Batch {
   key: string;
   accountCode: string;
+  invoicingCode: string;
   brand: string | null;
   envelopeCode: string;
   envelopeSize: string;

@@ -70,9 +70,10 @@ export class MssqlCustomerStore implements CustomerStore {
 
   async get(id: number): Promise<CustomerDetail> {
     const q = (text: string) => this.pool.request().input('id', sql.Int, id).query(text);
-    const [c, accts, brands, envs, match, seq, emails, kids] = await Promise.all([
-      q(`SELECT a.*, bk.name AS batching_key, sk.name AS pack_sequence_key, par.account_id AS p_id, par.account_code AS p_code, par.name AS p_name FROM idoc.account a
+    const [c, accts, brands, envs, match, seq, emails, kids, invOpts] = await Promise.all([
+      q(`SELECT a.*, bk.name AS batching_key, sk.name AS pack_sequence_key, par.account_id AS p_id, par.account_code AS p_code, par.name AS p_name, inv.account_id AS i_id, inv.account_code AS i_code, inv.name AS i_name FROM idoc.account a
          LEFT JOIN idoc.account par ON par.account_id = a.parent_account_id
+         LEFT JOIN idoc.account inv ON inv.account_id = a.invoicing_account_id
          LEFT JOIN idoc.passthrough_key bk ON bk.passthrough_key_id = a.batching_key_id
          LEFT JOIN idoc.passthrough_key sk ON sk.passthrough_key_id = a.pack_sequence_key_id
          WHERE a.account_id = @id AND a.inherits_settings = 0`),
@@ -99,6 +100,11 @@ export class MssqlCustomerStore implements CustomerStore {
       q('SELECT passthrough_value, sequence_number FROM idoc.pack_sequence_rule WHERE account_id = @id ORDER BY sequence_number, passthrough_value'),
       q('SELECT email FROM idoc.account_notification_email WHERE account_id = @id ORDER BY email'),
       q('SELECT account_id, account_code, name, is_deleted FROM idoc.account WHERE parent_account_id = @id AND inherits_settings = 0 ORDER BY name'),
+      q(`WITH up AS (
+           SELECT account_id, account_code, name, parent_account_id, 0 AS depth FROM idoc.account WHERE account_id = @id
+           UNION ALL
+           SELECT a.account_id, a.account_code, a.name, a.parent_account_id, up.depth + 1 FROM idoc.account a JOIN up ON a.account_id = up.parent_account_id)
+         SELECT account_id, account_code, name FROM up ORDER BY depth OPTION (MAXRECURSION 100)`),
     ]);
     const a = c.recordset[0] as R | undefined;
     if (!a) throw new NotFoundError('Customer not found');
@@ -110,6 +116,8 @@ export class MssqlCustomerStore implements CustomerStore {
       pendingFrom: a.pending_job_number_from ? (a.pending_job_number_from as Date).toISOString().slice(0, 10) : null, returnAddress: a.return_address, colourMode: a.colour_mode ?? null, flags,
       batchingKey: a.batching_key, packSequenceKey: a.pack_sequence_key,
       parent: a.p_id ? { id: a.p_id, code: a.p_code, name: a.p_name } : null,
+      invoicing: a.i_id ? { id: a.i_id, code: a.i_code, name: a.i_name } : null,
+      invoicingOptions: (invOpts.recordset as R[]).map((r) => ({ id: r.account_id, code: r.account_code, name: r.name })),
       children: (kids.recordset as R[]).map((r) => ({ id: r.account_id, code: r.account_code, name: r.name, isDeleted: !!r.is_deleted })),
       accounts: (accts.recordset as R[]).map((r) => ({ id: r.account_id, code: r.account_code, name: r.name, isDeleted: !!r.is_deleted })),
       brands: (brands.recordset as R[]).map((r) => ({ id: r.brand_id, name: r.name, usage: r.usage })),
@@ -157,6 +165,7 @@ export class MssqlCustomerStore implements CustomerStore {
   async updateDetails(id: number, input: CustomerDetailsInput, by: string): Promise<void> {
     const old = await this.get(id);
     const parentCode = await this.checkParent(id, input.parentId);
+    const invoicingCode = await this.checkInvoicing(id, input.parentId, input.invoicingAccountId);
     // A new pending number (or a new rollover day) starts on the next occurrence of the rollover day after today (London); an unchanged one keeps its date.
     const pendingFrom = input.pendingJobNumber === null ? null
       : input.pendingJobNumber === old.pendingJobNumber && input.jobNumberRolloverDay === old.jobNumberRolloverDay ? old.pendingFrom
@@ -164,15 +173,32 @@ export class MssqlCustomerStore implements CustomerStore {
             SELECT CONVERT(CHAR(10), CASE WHEN c > d THEN c ELSE DATEADD(MONTH, 1, c) END, 23) AS f
             FROM (SELECT d, DATEFROMPARTS(YEAR(d), MONTH(d), @day) AS c
                   FROM (SELECT CAST(SYSDATETIMEOFFSET() AT TIME ZONE 'GMT Standard Time' AS DATE) AS d) t) x`)).recordset[0].f as string;
-    const lines = describeDetailsChange(old, input, parentCode, pendingFrom);
+    const lines = describeDetailsChange(old, input, parentCode, pendingFrom, invoicingCode);
     await this.tx(async (t) => {
-      const req = this.req(t).input('id', sql.Int, id).input('par', sql.Int, input.parentId).input('code', sql.NVarChar(100), input.code).input('name', sql.NVarChar(200), input.name)
+      const req = this.req(t).input('id', sql.Int, id).input('par', sql.Int, input.parentId).input('inv', sql.Int, input.invoicingAccountId).input('code', sql.NVarChar(100), input.code).input('name', sql.NVarChar(200), input.name)
         .input('mis', sql.NVarChar(50), input.misJobNumber).input('pmis', sql.NVarChar(50), input.pendingJobNumber).input('rday', sql.TinyInt, input.jobNumberRolloverDay).input('pfrom', sql.NVarChar(10), pendingFrom).input('ret', sql.NVarChar(500), input.returnAddress)
         .input('bk', sql.Int, await this.keyId(t, input.batchingKey)).input('sk', sql.Int, await this.keyId(t, input.packSequenceKey));
       const sets = FLAGS.map((f) => { req.input(f, sql.Bit, input.flags[f]); return `${FLAG_COLUMNS[f]} = @${f}`; });
-      await req.query(`UPDATE idoc.account SET parent_account_id = @par, account_code = @code, name = @name, mis_job_number = @mis, pending_mis_job_number = @pmis, pending_job_number_from = CAST(@pfrom AS DATE), job_number_rollover_day = @rday, return_address = @ret, batching_key_id = @bk, pack_sequence_key_id = @sk, ${sets.join(', ')} WHERE account_id = @id`);
+      await req.query(`UPDATE idoc.account SET parent_account_id = @par, invoicing_account_id = @inv, account_code = @code, name = @name, mis_job_number = @mis, pending_mis_job_number = @pmis, pending_job_number_from = CAST(@pfrom AS DATE), job_number_rollover_day = @rday, return_address = @ret, batching_key_id = @bk, pack_sequence_key_id = @sk, ${sets.join(', ')} WHERE account_id = @id`);
       for (const l of lines) await this.audit(t, id, by, l);
     }, `Account code "${input.code}" is already in use`);
+  }
+
+  /** The invoicing account must be this customer or one of its ancestors (as they will be after this save). Returns its code, or null for the default. */
+  private async checkInvoicing(id: number, newParentId: number | null, invoicingId: number | null): Promise<string | null> {
+    if (invoicingId === null) return null;
+    const r = await this.pool.request().input('i', sql.Int, invoicingId).input('id', sql.Int, id).input('p', sql.Int, newParentId).query(`
+      WITH up AS (
+        SELECT account_id, account_code, parent_account_id FROM idoc.account WHERE account_id = @p
+        UNION ALL
+        SELECT a.account_id, a.account_code, a.parent_account_id FROM idoc.account a JOIN up ON a.account_id = up.parent_account_id)
+      SELECT account_code FROM up WHERE account_id = @i
+      UNION ALL
+      SELECT account_code FROM idoc.account WHERE account_id = @id AND account_id = @i
+      OPTION (MAXRECURSION 100)`);
+    const row = r.recordset[0] as R | undefined;
+    if (!row) throw new ValidationError({ invoicingAccountId: 'The invoicing account must be this customer or one of its parents' });
+    return row.account_code as string;
   }
 
   /** A parent must be another customer, never this customer or one of its descendants. Returns the parent's code. */

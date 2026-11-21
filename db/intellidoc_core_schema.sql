@@ -164,6 +164,9 @@ CREATE TABLE idoc.account (
     name                       NVARCHAR(200)      NOT NULL,
     parent_account_id          INT                NULL CONSTRAINT fk_account_parent REFERENCES idoc.account (account_id),
     inherits_settings          BIT                NOT NULL CONSTRAINT df_account_inherits DEFAULT (0), -- 1 = settings come from the parent (resolved up the tree)
+    -- The account that is invoiced for this account's mail and whose job number is printed on the run sheet. Must be this account or an
+    -- ancestor (checked by the API and the import). NULL = the account that holds the settings. See idoc.v_account_invoicing.
+    invoicing_account_id       INT                NULL CONSTRAINT fk_account_invoicing REFERENCES idoc.account (account_id),
     -- Flags (read from the settings owner at ingest)
     is_address_matching        BIT                NOT NULL CONSTRAINT df_account_match DEFAULT (0),
     is_archive_mailpieces      BIT                NOT NULL CONSTRAINT df_account_archive DEFAULT (0),
@@ -204,6 +207,12 @@ WITH up AS (
     SELECT up.account_id, p.account_id, p.inherits_settings, p.parent_account_id
     FROM up INNER JOIN idoc.account AS p ON p.account_id = up.next_id WHERE up.inherits = 1)
 SELECT account_id, node_id AS owner_account_id FROM up WHERE inherits = 0;
+GO
+
+-- For every account, the account that is invoiced for its mail (its own choice, else the account that holds the settings).
+CREATE VIEW idoc.v_account_invoicing AS
+SELECT a.account_id, COALESCE(a.invoicing_account_id, o.owner_account_id) AS invoicing_account_id
+FROM idoc.account AS a INNER JOIN idoc.v_account_owner AS o ON o.account_id = a.account_id;
 GO
 
 CREATE TABLE idoc.account_notification_email (
@@ -314,7 +323,7 @@ GO
    =========================================================================== */
 CREATE TABLE idoc.job (
     job_id        BIGINT IDENTITY(1, 1) NOT NULL CONSTRAINT pk_job PRIMARY KEY,
-    account_id    INT                   NOT NULL CONSTRAINT fk_job_account REFERENCES idoc.account (account_id), -- the customer (the account that holds the settings)
+    account_id    INT                   NOT NULL CONSTRAINT fk_job_account REFERENCES idoc.account (account_id), -- the root of the account tree (the batching boundary)
     base_name     NVARCHAR(260)         NOT NULL,   -- shared file stem of the .xml / .pdf pair
     xml_file_name NVARCHAR(260)         NOT NULL,
     pdf_file_name NVARCHAR(260)         NOT NULL,
@@ -401,6 +410,7 @@ CREATE TABLE idoc.batch (
     job_id                  BIGINT                NOT NULL CONSTRAINT fk_batch_job REFERENCES idoc.job (job_id),
     account_id              INT                   NOT NULL CONSTRAINT fk_batch_account REFERENCES idoc.account (account_id),
     brand_id                INT                   NULL CONSTRAINT fk_batch_brand REFERENCES idoc.brand (brand_id),
+    invoicing_account_id    INT                   NOT NULL CONSTRAINT fk_batch_invoicing REFERENCES idoc.account (account_id), -- part of the batch key: one run sheet, one job number
     outer_stock_item_id     INT                   NOT NULL CONSTRAINT fk_batch_envelope REFERENCES idoc.stock_item (stock_item_id),
     postal_service_id       INT                   NOT NULL CONSTRAINT fk_batch_service REFERENCES idoc.postal_service (postal_service_id),
     postal_format_id        INT                   NOT NULL CONSTRAINT fk_batch_format REFERENCES idoc.postal_format (postal_format_id),
@@ -442,6 +452,7 @@ CREATE TABLE idoc.mailpiece (
     address_id           BIGINT                NOT NULL CONSTRAINT fk_mp_address REFERENCES idoc.address (address_id),
     batch_id             BIGINT                NULL CONSTRAINT fk_mp_batch REFERENCES idoc.batch (batch_id),
     brand_id             INT                   NULL CONSTRAINT fk_mp_brand REFERENCES idoc.brand (brand_id),
+    invoicing_account_id INT                   NOT NULL CONSTRAINT fk_mp_invoicing REFERENCES idoc.account (account_id), -- as at production
     account_envelope_id  INT                   NULL CONSTRAINT fk_mp_envelope REFERENCES idoc.account_envelope (account_envelope_id),
     postal_format_id     INT                   NULL CONSTRAINT fk_mp_format REFERENCES idoc.postal_format (postal_format_id),
     postal_rate_id       INT                   NULL CONSTRAINT fk_mp_rate REFERENCES idoc.postal_rate (postal_rate_id),
@@ -470,7 +481,7 @@ CREATE TABLE idoc.pack (
     pack_id               BIGINT IDENTITY(1, 1) NOT NULL CONSTRAINT pk_pack PRIMARY KEY,
     pack_guid             UNIQUEIDENTIFIER      NOT NULL,   -- idempotency / duplicate key
     job_id                BIGINT                NOT NULL CONSTRAINT fk_pack_job REFERENCES idoc.job (job_id),
-    account_id            INT                   NOT NULL CONSTRAINT fk_pack_account REFERENCES idoc.account (account_id),            -- the customer (the account that holds the settings)
+    account_id            INT                   NOT NULL CONSTRAINT fk_pack_account REFERENCES idoc.account (account_id),            -- the root of the account tree (the batching boundary)
     submitting_account_id INT                   NOT NULL CONSTRAINT fk_pack_submitting REFERENCES idoc.account (account_id),
     source_id             BIGINT                NOT NULL CONSTRAINT fk_pack_source REFERENCES idoc.source (source_id),
     address_id            BIGINT                NOT NULL CONSTRAINT fk_pack_address REFERENCES idoc.address (address_id),

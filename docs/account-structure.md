@@ -44,6 +44,15 @@ The user decides which envelopes an account may use (its effective list). The im
 
 ## 5. Invoicing
 
+**Built (step 4):**
+- `account.invoicing_account_id` is the invoicing account (NULL = the account that holds the settings, so nothing changes for existing customers). `idoc.v_account_invoicing` gives the effective one. The API and the import check that it is the account itself or an ancestor.
+- The **job number, name and return address on the run sheet come from the invoicing account**. A job number belongs to an invoicing account and applies to all its sub-accounts.
+- **Invoicing accounts never share a batch**: the invoicing account is part of the batch key (and recorded on each batch and mailpiece). Production batching is otherwise unaffected by who is invoiced.
+- The batching boundary is now the **root of the tree**: jobs, batches, mailpieces and packs belong to the root.
+- Packs from different sub-accounts are not merged into one envelope by default (the sub-account and the invoicing account are in the match key). The opt-in setting in section 3a is still to be built.
+- The FileMaker import reads `id_invoicingAccount` (name assumed) and falls back, with a warning, when it is not an ancestor.
+- Editing the job number and return address of a sub-account that is itself an invoicing account is not on the screens yet.
+
 - Each account has an **invoicing account** link. It must be the account itself or one of its ancestors. Moving an account re-checks it.
 - Many accounts may share one invoicing account (B-hive's 150+ sub-accounts into one invoice). Odevo is never an invoicing account.
 - Usage is calculated per invoicing account, brand and day, which feeds the PDF bar chart. Brand is always known at import (passthrough data, or derived from the envelope description).
@@ -71,10 +80,10 @@ The user decides which envelopes an account may use (its effective list). The im
 
 ## 8. Order of work
 
-1. Audit the schema (this document, section 7).
-2. Tree and migration; retire grouping.
+1. Audit the schema (this document, section 7). **Done.**
+2. Tree and migration; retire grouping. **Done.**
 3. Inheritance modes: schema, resolver, importer, UI.
-4. Invoicing account link and validation.
+4. Invoicing account link and validation. **Done** (see section 5), apart from the opt-in merge setting (3a) and editing job numbers on sub-accounts.
 5. Snapshot fields, batch event log and recipient search.
 6. Reporting.
 

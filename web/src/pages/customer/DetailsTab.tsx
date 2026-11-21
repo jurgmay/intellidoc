@@ -26,14 +26,16 @@ export function DetailsTab({ detail, lookups, patchDetails }: TabProps) {
   const [ret, setRet] = useState(detail.returnAddress ?? '');
   const [flags, setFlags] = useState(detail.flags);
   const [parentId, setParentId] = useState<string | null>(detail.parent ? String(detail.parent.id) : null);
+  const [invoicingId, setInvoicingId] = useState<string>(detail.invoicing ? String(detail.invoicing.id) : '');
+  const parentChanged = parentId !== (detail.parent ? String(detail.parent.id) : null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
-  const dirty = code !== detail.code || name !== detail.name || mis !== (detail.misJobNumber ?? '') || pending !== (detail.pendingJobNumber ?? '') || rollDay !== detail.jobNumberRolloverDay || ret !== (detail.returnAddress ?? '') || FLAGS.some((f) => flags[f] !== detail.flags[f]) || parentId !== (detail.parent ? String(detail.parent.id) : null);
+  const dirty = code !== detail.code || name !== detail.name || mis !== (detail.misJobNumber ?? '') || pending !== (detail.pendingJobNumber ?? '') || rollDay !== detail.jobNumberRolloverDay || invoicingId !== (detail.invoicing ? String(detail.invoicing.id) : '') || ret !== (detail.returnAddress ?? '') || FLAGS.some((f) => flags[f] !== detail.flags[f]) || parentId !== (detail.parent ? String(detail.parent.id) : null);
 
   const save = async () => {
     setSaving(true);
-    try { await patchDetails({ code: code.trim(), name: name.trim(), misJobNumber: orNull(mis), pendingJobNumber: orNull(pending), jobNumberRolloverDay: rollDay, returnAddress: orNull(ret), flags, parentId: parentId === null ? null : Number(parentId) }); setErrors({}); }
+    try { await patchDetails({ code: code.trim(), name: name.trim(), misJobNumber: orNull(mis), pendingJobNumber: orNull(pending), jobNumberRolloverDay: rollDay, invoicingAccountId: invoicingId === '' || parentChanged ? null : Number(invoicingId), returnAddress: orNull(ret), flags, parentId: parentId === null ? null : Number(parentId) }); setErrors({}); }
     catch (e) { setErrors((e as { fieldErrors?: Record<string, string> }).fieldErrors ?? {}); }
     finally { setSaving(false); }
   };
@@ -52,6 +54,9 @@ export function DetailsTab({ detail, lookups, patchDetails }: TabProps) {
             value={rollDay} onChange={(v) => setRollDay(typeof v === 'number' ? v : 1)} error={errors['jobNumberRolloverDay']} />
           <Select label="Parent customer" description="Where this customer sits in a hierarchy. It keeps its own settings; this only organises the list." searchable clearable placeholder="None (top level)"
             data={lookups.customers.filter((c) => c.id !== detail.id).map((c) => ({ value: String(c.id), label: `${c.name} (${c.code})` }))} value={parentId} onChange={setParentId} error={errors['parentId']} />
+          <Select label="Invoicing account" allowDeselect={false} disabled={parentChanged}
+            description={parentChanged ? 'Save the new parent first, then choose the invoicing account.' : 'The account that is invoiced for this customer\'s mail. Its job number is printed on the run sheet, and its mail is never batched with another invoicing account\'s.'}
+            data={detail.invoicingOptions.map((o, i) => ({ value: i === 0 ? '' : String(o.id), label: i === 0 ? `${o.name} (this customer)` : `${o.name} (${o.code})` }))} value={invoicingId} onChange={(v) => setInvoicingId(v ?? '')} error={errors['invoicingAccountId']} />
           <Textarea label="Return address" autosize minRows={3} value={ret} onChange={(e) => setRet(e.currentTarget.value)} error={errors['returnAddress']} />
         </SimpleGrid>
       </Paper>

@@ -10,7 +10,7 @@ export const FLAG_LABELS: Record<FlagKey, string> = {
 const show = (v: string | null): string => (v === null || v === '' ? '(none)' : `"${v}"`);
 
 /** One readable sentence per change to the customer record; empty when nothing changed. */
-export function describeDetailsChange(old: CustomerDetail, next: CustomerDetailsInput, newParentCode: string | null, newPendingFrom: string | null): string[] {
+export function describeDetailsChange(old: CustomerDetail, next: CustomerDetailsInput, newParentCode: string | null, newPendingFrom: string | null, newInvoicingCode: string | null = null): string[] {
   const out: string[] = [];
   const text = (label: string, a: string | null, b: string | null): void => { if ((a ?? null) !== (b ?? null)) out.push(`${label}: ${show(a)} → ${show(b)}`); };
   text('Account code', old.code, next.code);
@@ -22,6 +22,7 @@ export function describeDetailsChange(old: CustomerDetail, next: CustomerDetails
   }
   text('Return address', old.returnAddress, next.returnAddress);
   text('Parent', old.parent?.code ?? null, newParentCode);
+  text('Invoicing account', old.invoicing?.code ?? null, newInvoicingCode);
   text('Batching key', old.batchingKey, next.batchingKey);
   text('Pack sequence key', old.packSequenceKey, next.packSequenceKey);
   for (const f of FLAGS) if (old.flags[f] !== next.flags[f]) out.push(`${FLAG_LABELS[f]}: ${old.flags[f] ? 'on' : 'off'} → ${next.flags[f] ? 'on' : 'off'}`);

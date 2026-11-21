@@ -16,7 +16,7 @@ export async function loadRunSheetInputs(pool: sql.ConnectionPool, jobId: number
     FROM idoc.batch AS b
     INNER JOIN idoc.job AS j ON j.job_id = b.job_id
     LEFT JOIN idoc.brand AS br ON br.brand_id = b.brand_id
-    INNER JOIN idoc.account AS c ON c.account_id = b.account_id
+    INNER JOIN idoc.account AS c ON c.account_id = b.invoicing_account_id -- the invoicing account holds the job number, name and return address
     INNER JOIN idoc.postal_format AS pf ON pf.postal_format_id = b.postal_format_id
     INNER JOIN idoc.stock_item AS si ON si.stock_item_id = b.outer_stock_item_id
     INNER JOIN idoc.postal_service AS ps ON ps.postal_service_id = b.postal_service_id

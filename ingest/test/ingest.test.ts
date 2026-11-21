@@ -203,3 +203,34 @@ describe('file validation', () => {
     expect(r.packs[0]!.address.lines).toHaveLength(8);
   });
 });
+
+describe('account tree: batching boundary and invoicing account', () => {
+  /** Three sub-accounts under one root (FEXCO): A and B are invoiced to FEXCO, C is invoiced to itself. */
+  const tree = () => {
+    const ref = fixtureReference(); const base = ref.accounts.get('FEXCO')!;
+    for (const [code, invoicing] of [['FEXCO_A', 'FEXCO'], ['FEXCO_B', 'FEXCO'], ['FEXCO_C', 'FEXCO_C']] as const)
+      ref.accounts.set(code, { ...base, code, customerCode: 'FEXCO', invoicingCode: invoicing });
+    return ref;
+  };
+  const one = (account: string, n: string): PackSpec => ({ account, first: 'P', surname: n, lines: [`P ${n}`, '1 Rd', 'AB1 2CD'] });
+
+  it('sub-accounts under one root with the same invoicing account share a batch', async () => {
+    const r = await run([one('FEXCO_A', 'X1'), one('FEXCO_B', 'X2')], { ref: tree() });
+    expect(r.batches).toHaveLength(1);
+    expect(r.batches[0]).toMatchObject({ accountCode: 'FEXCO', invoicingCode: 'FEXCO' });
+  });
+  it('different invoicing accounts never share a batch, even with the same envelope and brand', async () => {
+    const r = await run([one('FEXCO_A', 'X1'), one('FEXCO_C', 'X2')], { ref: tree() });
+    expect(r.batches.map((b) => b.invoicingCode).sort()).toEqual(['FEXCO', 'FEXCO_C']);
+    expect(new Set(r.mailpieces.map((m) => m.batchKey)).size).toBe(2);
+  });
+  it('the same recipient in two sub-accounts is not merged by default, even under one invoicing account', async () => {
+    const r = await run([one('FEXCO_A', 'SAME'), one('FEXCO_B', 'SAME')], { ref: tree() });
+    expect(r.mailpieces).toHaveLength(2);
+    expect(r.batches).toHaveLength(1);
+  });
+  it('the same recipient in one sub-account still merges', async () => {
+    const r = await run([one('FEXCO_A', 'SAME'), one('FEXCO_A', 'SAME')], { ref: tree() });
+    expect(r.mailpieces).toHaveLength(1);
+  });
+});
