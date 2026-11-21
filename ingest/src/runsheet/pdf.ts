@@ -127,7 +127,7 @@ export async function renderRunSheet(data: RunSheetData, logoPng?: Uint8Array): 
   };
 
   section('Job details', [
-    { label: 'Imprint Job Number', values: [data.jobNumber] },
+    { label: 'Job number', values: [data.jobNumber] },
     { label: 'Batch code', values: [data.batchCode] },
     { label: 'File name', values: [data.fileName] },
     { label: 'Date submitted', values: [data.dateSubmitted] },

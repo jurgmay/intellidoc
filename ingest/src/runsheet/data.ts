@@ -81,9 +81,16 @@ export function postalServiceText(name: string, code: string | null): string {
   return code ? `${name} (${code})` : name;
 }
 
+/** "UINSURE" -> "Uinsure". Only an all-capitals name is changed, so "McDonald" or "BBC Studios" are left alone. */
+export function titleCase(name: string): string {
+  const t = name.trim();
+  if (t === '' || t !== t.toUpperCase() || t === t.toLowerCase()) return t;
+  return t.toLowerCase().replace(/(^|[\s(\-'/])([a-z])/g, (_m, sep: string, c: string) => sep + c.toUpperCase());
+}
+
 /** FileMaker's print file name: "77440 - IntelliDoc - Uinsure - 81899 - Batch 16 of 23.pdf". */
 export function fileNameFor(i: RunSheetInput): string {
-  const raw = [i.jobNumber, 'IntelliDoc', i.customerName, String(i.batchCode), `Batch ${i.batchNumber} of ${i.batchTotal}`].filter((x) => x !== '').join(' - ');
+  const raw = [i.jobNumber, 'IntelliDoc', titleCase(i.customerName), String(i.batchCode), `Batch ${i.batchNumber} of ${i.batchTotal}`].filter((x) => x !== '').join(' - ');
   return `${raw.replace(/[\\/:*?"<>|]/g, '-')}.pdf`;
 }
 
@@ -94,7 +101,7 @@ export function buildRunSheet(i: RunSheetInput): RunSheetData {
     brand: i.brand,
     fileName: fileNameFor(i),
     jobNumber: i.jobNumber,
-    customerName: i.customerName,
+    customerName: titleCase(i.customerName),
     dateSubmitted: i.submitted.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/London' }),
     printMethod: printMethod(i.paper, i.isDuplex, i.colour, i.isLargePrint),
     totalMailpieces: i.mailpieces,

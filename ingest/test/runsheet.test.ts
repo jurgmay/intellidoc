@@ -37,6 +37,17 @@ describe('run sheet data', () => {
   });
 });
 
+describe('title case', () => {
+  it('converts all-capitals names only', async () => {
+    const { titleCase } = await import('../src/runsheet/data.js');
+    expect(titleCase('UINSURE')).toBe('Uinsure');
+    expect(titleCase('LEEDS BUILDING SOCIETY')).toBe('Leeds Building Society');
+    expect(titleCase('McDonald Homes')).toBe('McDonald Homes');
+    expect(titleCase('BBC')).toBe('Bbc');
+    expect(buildRunSheet({ ...input, customerName: 'UINSURE' }).customerName).toBe('Uinsure');
+  });
+});
+
 describe('run sheet pdf', () => {
   it('renders one A4 page, and merging keeps every page', async () => {
     const a = await renderRunSheet(buildRunSheet(input));
