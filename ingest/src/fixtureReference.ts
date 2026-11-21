@@ -21,11 +21,11 @@ export function fixtureReference(): ReferenceData {
     { brand, reference, postalFormat: 'Medium Parcel', size: 'C4', stockCode: c4 },
   ];
   const fexco: AccountConfig = {
-    code: 'FEXCO', customerCode: 'FEXCO', brands: ['Remus', 'Crabtree'], batchingKey: null, matchingEnabled: true, matchIncludeKeys: [], matchExclude: [],
+    code: 'FEXCO', customerCode: 'FEXCO', invoicingCode: 'FEXCO', brands: ['Remus', 'Crabtree'], batchingKey: null, matchingEnabled: true, matchIncludeKeys: [], matchExclude: [],
     envelopes: [...env('Remus', 'Remus', 'WH21518', 'C4-REMUS'), ...env('Crabtree', 'Crabtree', 'WH21519', 'C4-CRABTREE')],
   };
   const ng: AccountConfig = {
-    code: 'NATIONAL_GRID_PSR', customerCode: 'NATIONAL_GRID_PSR', brands: ['Pegasus', 'Lamby'], batchingKey: null, matchingEnabled: true, matchIncludeKeys: [], matchExclude: [],
+    code: 'NATIONAL_GRID_PSR', customerCode: 'NATIONAL_GRID_PSR', invoicingCode: 'NATIONAL_GRID_PSR', brands: ['Pegasus', 'Lamby'], batchingKey: null, matchingEnabled: true, matchIncludeKeys: [], matchExclude: [],
     envelopes: [...env('Pegasus', 'Pegasus', 'WH06113', 'C4-PEGASUS'), ...env('Lamby', 'Lamby', 'WH20066', 'C4-LAMBY')],
   };
   return {

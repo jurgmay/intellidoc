@@ -224,7 +224,7 @@ export class MssqlRepository implements Repository, PdfTracker {
 
     // ---- batches
     const batchDbId = new Map<string, number>(); // batch key -> batch_id
-    for (const b of r.batches) batchDbId.set(b.key, await this.insertBatch(db, jobId, customerId, b, { brandId, stockId, formatId, serviceId, paperId }));
+    for (const b of r.batches) batchDbId.set(b.key, await this.insertBatch(db, jobId, customerId, b, { accountId, brandId, stockId, formatId, serviceId, paperId }));
 
     // ---- mailpieces (before packs: packs reference them through the same-recipient FK)
     const mpDbId = new Map<number, number>();
@@ -232,11 +232,11 @@ export class MssqlRepository implements Repository, PdfTracker {
       const first = m.packs[0]!;
       const batch = r.batches.find((b) => b.key === m.batchKey)!;
       const row = (await db.one<{ id: number }>(`
-        INSERT INTO idoc.mailpiece (job_id, account_id, address_id, batch_id, brand_id, account_envelope_id, postal_format_id, postal_rate_id,
+        INSERT INTO idoc.mailpiece (job_id, account_id, invoicing_account_id, address_id, batch_id, brand_id, account_envelope_id, postal_format_id, postal_rate_id,
                                     delivery_band, pack_count, page_count, sheet_count, weight_g, thickness_mm, enclosing_route, match_key)
         OUTPUT INSERTED.mailpiece_id AS id
-        VALUES (@job, @acct, @addr, @batch, @brand, @ae, @fmt, @rate, @band, @pc, @pg, @sh, @w, @t, @route, @mk)`, [
-        ['job', sql.BigInt, jobId], ['acct', sql.Int, customerId], ['addr', sql.BigInt, await addressId(first)], ['batch', sql.BigInt, batchDbId.get(batch.key)],
+        VALUES (@job, @acct, @inv, @addr, @batch, @brand, @ae, @fmt, @rate, @band, @pc, @pg, @sh, @w, @t, @route, @mk)`, [
+        ['job', sql.BigInt, jobId], ['acct', sql.Int, customerId], ['inv', sql.Int, await accountId(m.invoicingCode)], ['addr', sql.BigInt, await addressId(first)], ['batch', sql.BigInt, batchDbId.get(batch.key)],
         ['brand', sql.Int, await brandId(m.brand)], ['ae', sql.Int, m.accountEnvelopeId ?? null], ['fmt', sql.Int, await formatId(m.postalFormat)],
         ['rate', sql.Int, m.postalRateId ?? null], ['band', sql.NVarChar(50), m.postalService],
         ['pc', sql.Int, m.packs.length], ['pg', sql.Int, m.packs.reduce((n, p) => n + p.parsed.pageCount, 0)], ['sh', sql.Int, m.sheets],
@@ -286,17 +286,17 @@ export class MssqlRepository implements Repository, PdfTracker {
   }
 
   private async insertBatch(db: Db, jobId: number, customerId: number, b: Batch, h: {
-    brandId: (n: string | null) => Promise<number | null>; stockId: (c: string) => Promise<number>;
+    accountId: (code: string) => Promise<number>; brandId: (n: string | null) => Promise<number | null>; stockId: (c: string) => Promise<number>;
     formatId: (n: string) => Promise<number>; serviceId: (n: string, f: string, known?: number) => Promise<number>; paperId: (n: string) => Promise<number>;
   }): Promise<number> {
     const insertIds = await Promise.all(b.inserts.map(async (i) => ({ id: await h.stockId(i.code), quantity: i.quantity })));
     const insertSetHash = sha(insertIds.length ? insertIds.map((i) => `${i.id}x${i.quantity}`).sort().join(',') : 'NO INSERTS');
     const row = (await db.one<{ id: number }>(`
-      INSERT INTO idoc.batch (job_id, account_id, brand_id, outer_stock_item_id, postal_service_id, postal_format_id, paper_id, batching_value,
+      INSERT INTO idoc.batch (job_id, account_id, invoicing_account_id, brand_id, outer_stock_item_id, postal_service_id, postal_format_id, paper_id, batching_value,
                               enclosing_route, insert_set_hash, batch_key, fulfilment_department, mailpiece_count)
       OUTPUT INSERTED.batch_id AS id
-      VALUES (@job, @acct, @brand, @env, @svc, @fmt, @paper, @bv, @route, @ish, @key, @dept, @n)`, [
-      ['job', sql.BigInt, jobId], ['acct', sql.Int, customerId], ['brand', sql.Int, await h.brandId(b.brand)], ['env', sql.Int, await h.stockId(b.envelopeCode)],
+      VALUES (@job, @acct, @inv, @brand, @env, @svc, @fmt, @paper, @bv, @route, @ish, @key, @dept, @n)`, [
+      ['job', sql.BigInt, jobId], ['acct', sql.Int, customerId], ['inv', sql.Int, await h.accountId(b.invoicingCode)], ['brand', sql.Int, await h.brandId(b.brand)], ['env', sql.Int, await h.stockId(b.envelopeCode)],
       ['svc', sql.Int, await h.serviceId(b.postalService, b.postalFormat, b.postalServiceId)], ['fmt', sql.Int, await h.formatId(b.postalFormat)],
       ['paper', sql.Int, await h.paperId(b.paper)], ['bv', sql.NVarChar(400), b.batchingValue], ['route', sql.NVarChar(20), b.route],
       ['ish', sql.Char(64), insertSetHash], ['key', sql.Char(64), b.key], ['dept', sql.NVarChar(30), DEPT[b.enclosing]], ['n', sql.Int, b.mailpieceIds.length]]))!;

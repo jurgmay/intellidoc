@@ -26,7 +26,7 @@ describe('weight bands', () => {
   const ll = (max: number, code: string): EnvelopeOption => ({ brand: null, reference: '', postalFormat: 'Large Letter', size: 'C4', stockCode: code, deliveryBand: '2nd Class', minWeightG: 0, maxWeightG: max });
   // overlapping "up to" bands, as imported (all start at 0), deliberately listed out of order
   const account: AccountConfig = {
-    code: 'X', customerCode: 'X', brands: [], batchingKey: null, matchingEnabled: false, matchIncludeKeys: [], matchExclude: [],
+    code: 'X', invoicingCode: 'X', customerCode: 'X', brands: [], batchingKey: null, matchingEnabled: false, matchIncludeKeys: [], matchExclude: [],
     envelopes: [ll(750, 'C4-REMUS'), ll(250, 'C4-REMUS'), ll(100, 'C4-REMUS'), ll(500, 'C4-REMUS'),
       { brand: null, reference: '', postalFormat: 'Letter', size: 'C5', stockCode: 'WH21518', deliveryBand: '2nd Class', minWeightG: 0, maxWeightG: 100 }],
   };

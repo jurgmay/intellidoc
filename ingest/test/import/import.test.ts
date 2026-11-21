@@ -109,3 +109,19 @@ describe('business decisions', () => {
     expect(p.warnings.some((w) => /not in the stock export/.test(w))).toBe(false);
   });
 });
+
+describe('invoicing account in the import', () => {
+  const inv = (o: Record<string, string>) => buildPlan({ customers: [...customers, cust({ id: 'bbbbbbbb-0000-0000-0000-000000000001', accountCode: 'INV_OK', accountName: 'ok', id_parentAccount: A, id_groupingAccount: A, ...o })], brands: [], stock: [], envelopes: [] });
+  it('keeps an invoicing account that is an ancestor', () => {
+    const p = inv({ id_invoicingAccount: A });
+    expect(p.accounts.find((a) => a.code === 'INV_OK')!.invoicingLegacyId).toBe(A);
+  });
+  it('falls back to the default, with a warning, when it is not the account or an ancestor', () => {
+    const p = inv({ id_invoicingAccount: C });
+    expect(p.accounts.find((a) => a.code === 'INV_OK')!.invoicingLegacyId).toBeNull();
+    expect(p.warnings.some((w) => /INV_OK.*invoicing account.*not the account or one of its ancestors/.test(w))).toBe(true);
+  });
+  it('leaves the default when the export has no invoicing field', () => {
+    expect(inv({}).accounts.find((a) => a.code === 'INV_OK')!.invoicingLegacyId).toBeNull();
+  });
+});

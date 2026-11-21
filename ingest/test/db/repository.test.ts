@@ -33,7 +33,8 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     expect(ref.postalFormats.map((f) => f.name)).toEqual(['Letter', 'Large Letter', 'Small Parcel', 'Medium Parcel']);
     expect(ref.stock.get('INSERT-PARENT')?.linked).toEqual(['INSERT-CHILD']);
     const fexco = ref.accounts.get('FEXCO')!;
-    expect(fexco.customerCode).toBe('FEXCO_CUSTOMER');
+    expect(fexco.customerCode).toBe('FEXCO_CUSTOMER'); // the root of the tree
+    expect(fexco.invoicingCode).toBe('FEXCO_CUSTOMER'); // default: the account that holds the settings
     expect(fexco.matchingEnabled).toBe(true); // read from the customer, not the submitting account
     expect(fexco.envelopes.length).toBeGreaterThan(0);
     expect(ref.anonymousAddressees.has('THEOCCUPIER')).toBe(true);
@@ -55,6 +56,26 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     // requested (XML) vs actual settings are both kept and can be compared
     expect(await scalar(`SELECT COUNT(*) AS n FROM idoc.v_pack_requested_vs_actual WHERE job_id = ${jobId} AND requested_format = N'Letter' AND actual_format = N'Letter' AND format_changed = 0`)).toBe(3);
     expect(await scalar('SELECT COUNT(*) AS n FROM idoc.v_rule_violations')).toBe(0);
+  });
+
+  it('invoicing account: the batch and mailpieces record it, and the run sheet prints its job number', async () => {
+    await pool.request().query(`UPDATE idoc.account SET mis_job_number = N'1111' WHERE account_code = N'FEXCO_CUSTOMER'; UPDATE idoc.account SET mis_job_number = N'2222' WHERE account_code = N'FEXCO'`);
+    try {
+      let r = await load([person('Ed', 'Fox')], 'job-inv-default.xml');
+      expect(r.persisted).toBe(true);
+      let jobId = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-inv-default'`);
+      expect((await loadRunSheetInputs(pool, jobId))[0]!.jobNumber).toBe('1111');
+      expect(await scalar(`SELECT COUNT(*) AS n FROM idoc.batch b JOIN idoc.account i ON i.account_id = b.invoicing_account_id WHERE b.job_id = ${jobId} AND i.account_code = N'FEXCO_CUSTOMER'`)).toBe(1);
+      // the sub-account is now invoiced in its own right
+      await pool.request().query(`UPDATE idoc.account SET invoicing_account_id = account_id WHERE account_code = N'FEXCO'`);
+      r = await load([person('Gus', 'Fox')], 'job-inv-own.xml');
+      expect(r.persisted).toBe(true);
+      jobId = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-inv-own'`);
+      expect((await loadRunSheetInputs(pool, jobId))[0]!.jobNumber).toBe('2222');
+      expect(await scalar(`SELECT COUNT(*) AS n FROM idoc.mailpiece m JOIN idoc.account i ON i.account_id = m.invoicing_account_id WHERE m.job_id = ${jobId} AND i.account_code = N'FEXCO'`)).toBe(1);
+    } finally {
+      await pool.request().query(`UPDATE idoc.account SET mis_job_number = NULL, invoicing_account_id = NULL WHERE account_code IN (N'FEXCO_CUSTOMER', N'FEXCO')`);
+    }
   });
 
   it('gives every batch its own global batch code and the run sheet loader finds the data', async () => {

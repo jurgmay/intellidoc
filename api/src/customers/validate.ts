@@ -54,6 +54,10 @@ export function parseDetails(body: Body): CustomerDetailsInput {
   let parentId: number | null = null;
   if (pid === undefined) errs['parentId'] = 'Parent must be given (use null for none)';
   else if (pid !== null) { if (typeof pid !== 'number' || !Number.isInteger(pid) || pid < 1) errs['parentId'] = 'Parent is not valid'; else parentId = pid; }
+  const iid = body?.['invoicingAccountId'];
+  let invoicingAccountId: number | null = null;
+  if (iid === undefined) errs['invoicingAccountId'] = 'Invoicing account must be given (use null for the customer itself)';
+  else if (iid !== null) { if (typeof iid !== 'number' || !Number.isInteger(iid) || iid < 1) errs['invoicingAccountId'] = 'Invoicing account is not valid'; else invoicingAccountId = iid; }
   const flagsRaw = (body?.['flags'] ?? {}) as Record<string, unknown>;
   const flags = {} as Record<FlagKey, boolean>;
   for (const f of FLAGS) {
@@ -61,7 +65,7 @@ export function parseDetails(body: Body): CustomerDetailsInput {
     flags[f] = flagsRaw[f] === true;
   }
   done(errs);
-  return { code: code!, name: name!, misJobNumber, pendingJobNumber, jobNumberRolloverDay: day as number, returnAddress, flags, batchingKey, packSequenceKey, parentId };
+  return { code: code!, name: name!, misJobNumber, pendingJobNumber, jobNumberRolloverDay: day as number, returnAddress, flags, batchingKey, packSequenceKey, parentId, invoicingAccountId };
 }
 
 export function parseBrandName(body: Body): string {

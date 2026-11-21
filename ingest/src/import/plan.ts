@@ -11,6 +11,8 @@ export interface PlanAccount {
   legacyId: string; code: string; name: string; parentLegacyId: string | null;
   /** true: the settings are read from the parent (resolved up the tree). false: this account holds its own (a customer). */
   inheritsSettings: boolean;
+  /** The account invoiced for this account's mail: itself or an ancestor. null = the account that holds the settings. */
+  invoicingLegacyId: string | null;
   isAddressMatching: boolean; isArchiveMailpieces: boolean; isCreateOutputFiles: boolean;
   isSso: boolean; isSameDayService: boolean; isUseMrdf: boolean; isTesting: boolean; isDeleted: boolean;
   colourMode: number | null; misJobNumber: string | null; returnAddress: string | null;
@@ -23,6 +25,12 @@ export interface PlanAccount {
 export function settingsOwner(byId: Map<string, PlanAccount>, a: PlanAccount): PlanAccount {
   let cur = a;
   for (let i = 0; i < 100 && cur.inheritsSettings && cur.parentLegacyId; i++) cur = byId.get(cur.parentLegacyId) ?? cur;
+  return cur;
+}
+/** The top of the tree this account sits in: the batching boundary. */
+export function rootOf(byId: Map<string, PlanAccount>, a: PlanAccount): PlanAccount {
+  let cur = a;
+  for (let i = 0; i < 100 && cur.parentLegacyId; i++) cur = byId.get(cur.parentLegacyId) ?? cur;
   return cur;
 }
 export interface PlanBrand { legacyId: string; customerLegacyId: string; name: string }
@@ -82,6 +90,9 @@ export function buildPlan(x: Exports): Plan {
     else if (!byId.has(grouping)) { warnings.push(`Account ${code}: grouping account ${grouping} is not in the export; treated as its own customer`); grouping = null; }
     if (grouping) groupingOf.set(legacyId, grouping);
     const parent = lc(r['id_parentAccount']);
+    // The FileMaker field name is assumed to be id_invoicingAccount; an export without it simply leaves every account on its default.
+    const invoicingRaw = lc(r['id_invoicingAccount']);
+    const invoicing = invoicingRaw && invoicingRaw !== legacyId ? invoicingRaw : null;
     const am = json<{ addressMatching?: string[]; addressMatchingExclude?: { passthroughKey: string; passthroughValue: string }[] }>(r['addressMatchJSON']);
     const ps = json<{ passthroughKey?: string; sequences?: { passthroughValue: string; sequenceNumber: number }[] }>(r['packSequenceJSON']);
     const bt = json<{ passthroughKey?: string; passthroughValue?: string }>(r['batchingJSON']);
@@ -94,7 +105,7 @@ export function buildPlan(x: Exports): Plan {
       warnings.push(`Account ${code}: batching key "${batchingKey}" has a fixed value "${bt?.passthroughValue ?? r['batchingPassthroughValue']}"; the value is not imported (see notes)`);
     accounts.push({
       legacyId, code, name: (r['accountName'] ?? '').trim() || code,
-      parentLegacyId: parent && byId.has(parent) && parent !== legacyId ? parent : null, inheritsSettings: grouping !== null,
+      parentLegacyId: parent && byId.has(parent) && parent !== legacyId ? parent : null, inheritsSettings: grouping !== null, invoicingLegacyId: invoicing,
       isAddressMatching: flag(r['isAddressMatching']), isArchiveMailpieces: flag(r['isArchiveMailpieces']),
       isCreateOutputFiles: flag(r['isCreateOutputFiles']),
       isSso: flag(r['isSSO']), isSameDayService: flag(r['isSameDayService']), isUseMrdf: flag(r['isUseMRDF']),
@@ -120,6 +131,16 @@ export function buildPlan(x: Exports): Plan {
     for (let n = a.parentLegacyId ? accById.get(a.parentLegacyId) : undefined; n; n = n.parentLegacyId ? accById.get(n.parentLegacyId) : undefined) {
       if (seen.has(n.legacyId)) { warnings.push(`Account ${a.code}: the parent links form a loop; ${a.code} is made a top-level customer`); a.parentLegacyId = null; a.inheritsSettings = false; break; }
       seen.add(n.legacyId);
+    }
+  }
+  // The invoicing account must be the account itself or one of its ancestors.
+  for (const a of accounts) {
+    if (!a.invoicingLegacyId) continue;
+    const chain = new Set<string>();
+    for (let n = a.parentLegacyId ? accById.get(a.parentLegacyId) : undefined; n && !chain.has(n.legacyId); n = n.parentLegacyId ? accById.get(n.parentLegacyId) : undefined) chain.add(n.legacyId);
+    if (!chain.has(a.invoicingLegacyId)) {
+      warnings.push(`Account ${a.code}: its invoicing account ${accById.get(a.invoicingLegacyId)?.code ?? a.invoicingLegacyId} is not the account or one of its ancestors; the default is used instead`);
+      a.invoicingLegacyId = null;
     }
   }
   for (const a of accounts) {

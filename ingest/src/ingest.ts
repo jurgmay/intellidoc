@@ -70,7 +70,7 @@ export async function ingest(
     const brand = deriveBrand(p, acct, text.brand, reference);
     const seqKey = acct.packSequence ? p.passthrough[acct.packSequence.key] : undefined;
     const ip: IngestPack = {
-      parsed: p, address, accountCode: acct.code, customerCode: acct.customerCode, brand, brandReference: reference,
+      parsed: p, address, accountCode: acct.code, customerCode: acct.customerCode, invoicingCode: acct.invoicingCode, brand, brandReference: reference,
       sheets: p.options.duplex ? Math.ceil(p.pageCount / 2) : p.pageCount,
       matchExclusion: exclusionFor(p, address, acct, ref),
       batchingValue: acct.batchingKey ? (p.passthrough[acct.batchingKey] ?? '') : '',
@@ -106,7 +106,7 @@ export async function ingest(
         const phys = choosePhysical(g, insertCodes, acct, first.brand, first.brandReference, { code: first.parsed.options.envelopeCode, value: first.parsed.options.envelopeValue }, first.parsed.options.deliveryMethod, ref);
         if (phys.fallback) for (const p of g) issues.push({ severity: 'warning', packGuid: p.parsed.guid, message: `No configured envelope fits; used the selected envelope ${phys.envelope.stockCode} (${phys.postalFormat}, ${phys.weightG}g)` });
         const base = {
-          addressHash: first.address.hash, packs: g, accountCode: first.customerCode, brand: first.brand,
+          addressHash: first.address.hash, packs: g, accountCode: first.customerCode, invoicingCode: first.invoicingCode, brand: first.brand,
           sheets: phys.sheets, insertCodes, weightG: phys.weightG, thicknessMm: phys.thicknessMm,
           postalFormat: phys.postalFormat, envelopeCode: phys.envelope.stockCode, envelopeSize: phys.envelope.size,
           postalService: first.parsed.options.deliveryMethod,

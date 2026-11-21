@@ -28,6 +28,10 @@ export interface CustomerDetail {
   flags: Record<FlagKey, boolean>;
   batchingKey: string | null; packSequenceKey: string | null;
   parent: ParentView | null; children: ChildView[];
+  /** The account invoiced for this customer's mail and whose job number is printed on run sheets: the customer itself or an ancestor. null = the customer itself. */
+  invoicing: ParentView | null;
+  /** The accounts that can be chosen: this customer first, then each ancestor up the tree. */
+  invoicingOptions: ParentView[];
   accounts: AccountView[]; brands: BrandView[]; envelopes: EnvelopeView[];
   matchRules: MatchRule[]; sequenceRules: SequenceRule[]; emails: string[];
 }
@@ -38,6 +42,8 @@ export interface CustomerDetailsInput {
   flags: Record<FlagKey, boolean>; batchingKey: string | null; packSequenceKey: string | null;
   /** null = top of its hierarchy. Must be another customer, and never itself or one of its own descendants. */
   parentId: number | null;
+  /** null = the customer itself. Otherwise must be the customer or one of its ancestors. */
+  invoicingAccountId: number | null;
 }
 export interface EnvelopeInput {
   brandId: number | null; deliveryBand: string; postalRateId: number; stockItemId: number; reference: string | null; externalName: string | null; isOversticker: boolean;

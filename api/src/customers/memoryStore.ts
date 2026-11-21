@@ -5,8 +5,8 @@ import type {
 } from './types.js';
 import { FLAGS } from './types.js';
 
-interface Cust extends Omit<CustomerDetail, 'accounts' | 'brands' | 'envelopes' | 'parent' | 'children' | 'pendingJobNumber' | 'pendingFrom'> {
-  parentId: number | null; pendingJobNumber: string | null; pendingFrom: string | null; jobNumberRolloverDay: number;
+interface Cust extends Omit<CustomerDetail, 'accounts' | 'brands' | 'envelopes' | 'parent' | 'children' | 'pendingJobNumber' | 'pendingFrom' | 'invoicing' | 'invoicingOptions'> {
+  parentId: number | null; invoicingAccountId: number | null; pendingJobNumber: string | null; pendingFrom: string | null; jobNumberRolloverDay: number;
 }
 
 /** The next date after today (YYYY-MM-DD) that falls on the given day of the month (1-28). */
@@ -52,7 +52,7 @@ export class MemoryCustomerStore implements CustomerStore {
 
   seed(c: { code: string; name: string } & Partial<Cust>): number {
     const id = this.nextId();
-    this.customers.set(id, { id, parentId: null, misJobNumber: null, pendingJobNumber: null, pendingFrom: null, jobNumberRolloverDay: 1, returnAddress: null, colourMode: null, flags: noFlags(), batchingKey: null, packSequenceKey: null, matchRules: [], sequenceRules: [], emails: [], ...c });
+    this.customers.set(id, { id, parentId: null, invoicingAccountId: null, misJobNumber: null, pendingJobNumber: null, pendingFrom: null, jobNumberRolloverDay: 1, returnAddress: null, colourMode: null, flags: noFlags(), batchingKey: null, packSequenceKey: null, matchRules: [], sequenceRules: [], emails: [], ...c });
     return id;
   }
 
@@ -82,10 +82,13 @@ export class MemoryCustomerStore implements CustomerStore {
   }
 
   async get(id: number): Promise<CustomerDetail> {
-    const { parentId, ...c } = this.cust(id);
+    const { parentId, invoicingAccountId, ...c } = this.cust(id);
     const par = parentId === null ? undefined : this.customers.get(parentId);
+    const view = (x: { id: number; code: string; name: string }) => ({ id: x.id, code: x.code, name: x.name });
+    const options = this.invoicingOptions(id);
     return {
       ...c, flags: { ...c.flags },
+      invoicing: invoicingAccountId === null ? null : options.find((o) => o.id === invoicingAccountId) ?? null, invoicingOptions: options.map(view),
       parent: par ? { id: par.id, code: par.code, name: par.name } : null,
       children: [...this.customers.values()].filter((x) => x.parentId === id).sort((a, b) => a.name.localeCompare(b.name)).map((x) => ({ id: x.id, code: x.code, name: x.name, isDeleted: x.flags.isDeleted })),
       accounts: this.accounts.filter((a) => a.customerId === id).map(({ id: i, code, name, isDeleted }) => ({ id: i, code, name, isDeleted })),
@@ -113,13 +116,28 @@ export class MemoryCustomerStore implements CustomerStore {
     const old = await this.get(id);
     if (this.codeTaken(input.code, id)) throw new ConflictError(`Account code "${input.code}" is already in use`);
     this.checkParent(id, input.parentId);
+    const invoicing = this.checkInvoicing(id, input.parentId, input.invoicingAccountId);
     // A new pending number (or a new rollover day) starts on the next occurrence of the rollover day; an unchanged one keeps its date.
     const pendingFrom = input.pendingJobNumber === null ? null
       : input.pendingJobNumber === old.pendingJobNumber && input.jobNumberRolloverDay === old.jobNumberRolloverDay ? old.pendingFrom
         : nextRollover(this.today(), input.jobNumberRolloverDay);
-    const lines = describeDetailsChange(old, input, input.parentId === null ? null : this.cust(input.parentId).code, pendingFrom);
+    const lines = describeDetailsChange(old, input, input.parentId === null ? null : this.cust(input.parentId).code, pendingFrom, invoicing);
     Object.assign(this.cust(id), input, { pendingFrom });
     for (const l of lines) this.log(id, by, l);
+  }
+
+  /** This customer, then each ancestor up the tree (using `parentId` for this customer when it is being changed). */
+  private invoicingOptions(id: number, parentId: number | null | undefined = undefined): (Cust & { id: number })[] {
+    const out: Cust[] = []; const first = this.cust(id); out.push(first);
+    for (let at = parentId === undefined ? first.parentId : parentId, n = 0; at !== null && n < 1000; at = this.customers.get(at)?.parentId ?? null, n++) { const c = this.customers.get(at); if (c) out.push(c); }
+    return out;
+  }
+
+  private checkInvoicing(id: number, parentId: number | null, invoicingId: number | null): string | null {
+    if (invoicingId === null) return null;
+    const c = this.invoicingOptions(id, parentId).find((o) => o.id === invoicingId);
+    if (!c) throw new ValidationError({ invoicingAccountId: 'The invoicing account must be this customer or one of its parents' });
+    return c.code;
   }
 
   /** A parent must be another customer, and must not be this customer or one of its descendants. */

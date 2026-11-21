@@ -41,8 +41,10 @@ export interface EnvelopeOption {
 export interface AccountConfig {
   /** Submitting account code (XML OwnerAccount). */
   code: string;
-  /** Customer (the account that holds the settings) code; equals code when the account is its own customer. */
+  /** Customer code: the root of the account tree, which is the batching boundary. Equals code for a root account. */
   customerCode: string;
+  /** The account invoiced for this account's mail (itself, or an ancestor). */
+  invoicingCode: string;
   /** Passthrough key + value -> position inside a merged envelope. */
   packSequence?: { key: string; rules: Map<string, number> };
   brands: string[];
