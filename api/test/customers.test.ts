@@ -4,6 +4,7 @@ import { buildApp } from '../src/app.js';
 import { MemoryReportStore } from '../src/reports/memoryStore.js';
 import { MemoryRecipientStore } from '../src/recipients/memoryStore.js';
 import { MemoryCustomerStore } from '../src/customers/memoryStore.js';
+import { MemoryRepriceStore } from '../src/reprice/memoryStore.js';
 import { MemoryPostalStore } from '../src/postal/memoryStore.js';
 import { MemoryCostingStore } from '../src/costing/memoryStore.js';
 import { FLAGS } from '../src/customers/types.js';
@@ -20,7 +21,7 @@ beforeEach(async () => {
   store = new MemoryCustomerStore();
   acme = store.seed({ code: 'ACME', name: 'Acme Ltd' });
   store.seed({ code: 'NWB', name: 'Northwest Bank', misJobNumber: '24102' });
-  app = await buildApp({ settings: new MemorySettingsStore(), customers: store, costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), recipients: new MemoryRecipientStore(), reports: new MemoryReportStore() });
+  app = await buildApp({ settings: new MemorySettingsStore(), customers: store, costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: new MemoryRecipientStore(), reports: new MemoryReportStore() });
 });
 
 const call = (method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, payload?: unknown) => app.inject({ method, url, payload: payload as object });

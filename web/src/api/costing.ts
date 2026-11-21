@@ -31,3 +31,9 @@ export const getModel = (id: number) => api<ModelDetail>(`/api/costing-models/${
 export const saveModel = (id: number, body: ModelInput) => api<ModelDetail>(`/api/costing-models/${id}`, { method: 'PUT', body });
 export const deleteModel = (id: number) => api<unknown>(`/api/costing-models/${id}`, { method: 'DELETE' });
 export const getCostingLookups = () => api<CostingLookups>('/api/costing/lookups');
+
+export interface RepriceInput { from: string | null; to: string | null; overwrite: boolean }
+export interface RepricePreview { inScope: number; alreadyPriced: number; wouldPrice: number; noModel: number; unknownColours: number }
+export interface RepriceResult { priced: number; noModel: number; unknownColours: number }
+export const previewReprice = (customerId: number, body: RepriceInput) => api<RepricePreview>(`/api/customers/${customerId}/reprice/preview`, { method: 'POST', body });
+export const runReprice = (customerId: number, body: RepriceInput) => api<RepriceResult>(`/api/customers/${customerId}/reprice`, { method: 'POST', body });

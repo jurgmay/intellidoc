@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
+import { MemoryRepriceStore } from '../src/reprice/memoryStore.js';
 import { MemoryPostalStore } from '../src/postal/memoryStore.js';
 import { MemoryCostingStore } from '../src/costing/memoryStore.js';
 import { describeModelChange } from '../src/costing/describe.js';
@@ -21,7 +22,7 @@ beforeEach(async () => {
   store.customers.set(TOP, { id: TOP, code: 'TOP', name: 'Top', mode: 'OWN', inheritsAll: false, parentId: null });
   store.envelopeStock = [{ id: 10, code: 'C5', description: 'C5 window', size: 'C5' }, { id: 11, code: 'C4', description: 'C4 window', size: 'C4' }];
   store.postalRates = [{ id: 1, label: 'RM 2nd letter', format: 'Letter', cost: 0.6, sell: 0.65 }, { id: 2, label: 'RM 1st letter', format: 'Letter', cost: 0.8, sell: 0.9 }];
-  app = await buildApp({ settings: new MemorySettingsStore(), customers: new MemoryCustomerStore(), costing: store, postal: new MemoryPostalStore(), recipients: new MemoryRecipientStore(), reports: new MemoryReportStore() });
+  app = await buildApp({ settings: new MemorySettingsStore(), customers: new MemoryCustomerStore(), costing: store, postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: new MemoryRecipientStore(), reports: new MemoryReportStore() });
 });
 const body = (over: Record<string, unknown> = {}) => ({ name: '2026', validFrom: '2026-01-01', validTo: null, isActive: true, copyFromId: null, ...over });
 const post = (customer: number, b: unknown) => app.inject({ method: 'POST', url: `/api/customers/${customer}/costing-models`, payload: b as object });

@@ -3,6 +3,7 @@ import { buildApp } from './app.js';
 import { MemoryReportStore } from './reports/memoryStore.js';
 import { MemoryRecipientStore } from './recipients/memoryStore.js';
 import { MemoryCostingStore } from './costing/memoryStore.js';
+import { MemoryRepriceStore } from './reprice/memoryStore.js';
 import { MemoryPostalStore } from './postal/memoryStore.js';
 import { MemoryCustomerStore } from './customers/memoryStore.js';
 import { MemorySettingsStore } from './settings/store.js';
@@ -85,6 +86,9 @@ for (const [svc, bands, cost, sell] of [[second, [[0, 100], [101, 250]], 0.61, 0
   for (const [mn, mx] of bands) { const id = await postal.createRate(svc, { minWeightG: mn, maxWeightG: mx, validFrom: '2025-04-01', validTo: '2026-03-31', cost: cost - 0.05, sellPrice: sell - 0.05 }, 'system'); postal.rates.get(id)!.usedBy = 4; }
   for (const [mn, mx] of bands) { const id = await postal.createRate(svc, { minWeightG: mn, maxWeightG: mx, validFrom: '2026-04-01', validTo: null, cost, sellPrice: sell }, 'system'); postal.rates.get(id)!.usedBy = 12; }
 }
-const app = await buildApp({ settings: store, customers, costing, postal, recipients, reports, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
+const reprice = new MemoryRepriceStore();
+for (const id of [acme, odevo, highline]) reprice.customers.add(id);
+reprice.counts = { inScope: 412, alreadyPriced: 380, wouldPrice: 31, noModel: 1, unknownColours: 0 };
+const app = await buildApp({ settings: store, customers, costing, postal, reprice, recipients, reports, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
 await app.listen({ port: Number(process.env['API_PORT'] ?? 3001), host: '127.0.0.1' });
 console.log('Stub API (no database) on http://127.0.0.1:3001');
