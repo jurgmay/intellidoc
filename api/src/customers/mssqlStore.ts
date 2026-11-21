@@ -1,6 +1,6 @@
 import sql from 'mssql';
 import { ConflictError, NotFoundError, ValidationError } from '../errors.js';
-import { describeDetailsChange, describeEnvelope, describeEnvelopesMode, describeMatchRules, describeSequenceRules } from './describe.js';
+import { describeBecameCustomer, describeBecameSubAccount, describeDetailsChange, describeEnvelope, describeEnvelopesMode, describeLeftAsCustomer, describeMatchRules, describeSequenceRules, describeSubAccountOf, noChildCustomers } from './describe.js';
 import {
   FLAGS, type AuditEntry, type CustomerDetail, type CustomerDetailsInput, type CustomerRow, type CustomerStore, type EnvelopeInput, type EnvelopesMode, type FlagKey, type InheritedEnvelopeView, type Lookups, type MatchRule, type SequenceRule,
 } from './types.js';
@@ -171,6 +171,33 @@ export class MssqlCustomerStore implements CustomerStore {
     await this.tx(async (t) => {
       await this.req(t).input('id', sql.Int, customerId).input('m', sql.NVarChar(10), mode).query('UPDATE idoc.account SET envelopes_mode = @m WHERE account_id = @id');
       await this.audit(t, customerId, by, describeEnvelopesMode(cur.envelopes_mode as EnvelopesMode, mode));
+    });
+  }
+
+  async makeSubAccount(customerId: number, by: string): Promise<void> {
+    await this.mustBeCustomer(undefined, customerId);
+    const cur = (await this.pool.request().input('id', sql.Int, customerId).query(`
+      SELECT a.account_code, a.name, par.account_code AS parent_code, a.parent_account_id FROM idoc.account a LEFT JOIN idoc.account par ON par.account_id = a.parent_account_id WHERE a.account_id = @id`)).recordset[0] as R;
+    if (cur.parent_account_id === null) throw new ValidationError({ parentId: 'Choose a parent customer on the Details tab first. A sub-account takes its settings from its parent.' });
+    const kids = (await this.pool.request().input('id', sql.Int, customerId).query('SELECT name FROM idoc.account WHERE parent_account_id = @id AND inherits_settings = 0 AND is_deleted = 0 ORDER BY name')).recordset as R[];
+    if (kids.length > 0) throw new ValidationError({ parentId: noChildCustomers(kids.map((k) => k.name as string)) });
+    await this.tx(async (t) => {
+      await this.req(t).input('id', sql.Int, customerId).query('UPDATE idoc.account SET inherits_settings = 1 WHERE account_id = @id');
+      const owner = (await this.req(t).input('id', sql.Int, customerId).query('SELECT o.owner_account_id AS id FROM idoc.v_account_owner o WHERE o.account_id = @id')).recordset[0] as R;
+      const ownerCode = (await this.req(t).input('o', sql.Int, owner.id).query('SELECT account_code FROM idoc.account WHERE account_id = @o')).recordset[0].account_code as string;
+      await this.audit(t, customerId, by, describeBecameSubAccount(cur.parent_code, ownerCode));
+      if (owner.id !== customerId) await this.audit(t, owner.id, by, describeSubAccountOf(cur.account_code, cur.name));
+    });
+  }
+
+  async makeCustomer(accountId: number, by: string): Promise<void> {
+    const cur = (await this.pool.request().input('id', sql.Int, accountId).query(`
+      SELECT a.account_code, a.name, o.owner_account_id AS owner FROM idoc.account a JOIN idoc.v_account_owner o ON o.account_id = a.account_id WHERE a.account_id = @id AND a.inherits_settings = 1`)).recordset[0] as R | undefined;
+    if (!cur) throw new NotFoundError('Account not found');
+    await this.tx(async (t) => {
+      await this.req(t).input('id', sql.Int, accountId).query('UPDATE idoc.account SET inherits_settings = 0 WHERE account_id = @id');
+      await this.audit(t, accountId, by, describeBecameCustomer(cur.account_code, cur.name));
+      await this.audit(t, cur.owner, by, describeLeftAsCustomer(cur.account_code, cur.name));
     });
   }
 

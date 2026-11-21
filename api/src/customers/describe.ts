@@ -42,3 +42,9 @@ export const describeSequenceRules = (rules: SequenceRule[]): string =>
   rules.length === 0 ? 'none' : [...rules].sort((a, b) => a.number - b.number).map((r) => `${r.number}. ${r.value}`).join('; ');
 
 export const describeEnvelopeInput = (e: EnvelopeInput): string => `band ${e.deliveryBand}, reference ${show(e.reference)}`;
+
+export const describeBecameSubAccount = (parentCode: string, ownerCode: string): string => `Became a sub-account of ${parentCode}: settings now come from ${ownerCode}`;
+export const describeBecameCustomer = (code: string, name: string): string => `Account ${code} "${name}" now holds its own settings, as a customer`;
+export const describeSubAccountOf = (code: string, name: string): string => `Account ${code} "${name}" became a sub-account of this customer`;
+export const describeLeftAsCustomer = (code: string, name: string): string => `Account ${code} "${name}" left, to hold its own settings as a customer`;
+export const noChildCustomers = (names: string[]): string => `${names.length} customer${names.length === 1 ? ' is' : 's are'} placed under this one (${names.slice(0, 3).join(', ')}${names.length > 3 ? ', …' : ''}). Move ${names.length === 1 ? 'it' : 'them'} to another parent first.`;

@@ -1,5 +1,5 @@
 import { ConflictError, NotFoundError, ValidationError } from '../errors.js';
-import { describeDetailsChange, describeEnvelope, describeEnvelopesMode, describeMatchRules, describeSequenceRules } from './describe.js';
+import { describeBecameCustomer, describeBecameSubAccount, describeDetailsChange, describeEnvelope, describeEnvelopesMode, describeLeftAsCustomer, describeMatchRules, describeSequenceRules, describeSubAccountOf, noChildCustomers } from './describe.js';
 import type {
   AuditEntry, CustomerDetail, CustomerDetailsInput, CustomerRow, CustomerStore, EnvelopeInput, EnvelopesMode, EnvelopeView, InheritedEnvelopeView, FlagKey, Lookups, MatchRule, SequenceRule,
 } from './types.js';
@@ -16,7 +16,8 @@ export function nextRollover(today: string, rollDay: number): string {
   if (d < rollDay) return `${y}-${pad(m)}-${pad(rollDay)}`;
   return m === 12 ? `${y + 1}-01-${pad(rollDay)}` : `${y}-${pad(m + 1)}-${pad(rollDay)}`;
 }
-interface Acct { id: number; customerId: number; code: string; name: string; isDeleted: boolean }
+/** `rehomedFrom`: the customer this account belonged to before that customer became a sub-account (so that undoing it can give the account back). */
+interface Acct { id: number; customerId: number; code: string; name: string; isDeleted: boolean; rehomedFrom?: number }
 interface Brand { id: number; customerId: number; name: string }
 interface Env extends EnvelopeInput { id: number; customerId: number; isDeleted: boolean }
 
@@ -25,6 +26,8 @@ const noFlags = (): Record<FlagKey, boolean> => Object.fromEntries(FLAGS.map((f)
 /** For tests and the stub server. Mirrors the rules the SQL store enforces. */
 export class MemoryCustomerStore implements CustomerStore {
   customers = new Map<number, Cust>();
+  /** Customers that became sub-accounts. Their own settings are kept, so that undoing it brings them back. */
+  converted = new Map<number, Cust>();
   accounts: Acct[] = [];
   brands: Brand[] = [];
   envelopes: Env[] = [];
@@ -52,8 +55,11 @@ export class MemoryCustomerStore implements CustomerStore {
 
   seed(c: { code: string; name: string } & Partial<Cust>): number {
     const id = this.nextId();
-    this.customers.set(id, { id, parentId: null, envelopesMode: 'OWN', invoicingAccountId: null, misJobNumber: null, pendingJobNumber: null, pendingFrom: null, jobNumberRolloverDay: 1, returnAddress: null, colourMode: null, flags: noFlags(), batchingKey: null, packSequenceKey: null, matchRules: [], sequenceRules: [], emails: [], ...c });
+    this.put(id, c);
     return id;
+  }
+  private put(id: number, c: { code: string; name: string } & Partial<Cust>): void {
+    this.customers.set(id, { id, parentId: null, envelopesMode: 'OWN', invoicingAccountId: null, misJobNumber: null, pendingJobNumber: null, pendingFrom: null, jobNumberRolloverDay: 1, returnAddress: null, colourMode: null, flags: noFlags(), batchingKey: null, packSequenceKey: null, matchRules: [], sequenceRules: [], emails: [], ...c });
   }
 
   private cust(id: number): Cust { const c = this.customers.get(id); if (!c) throw new NotFoundError('Customer not found'); return c; }
@@ -135,6 +141,32 @@ export class MemoryCustomerStore implements CustomerStore {
     if (c.envelopesMode === mode) return;
     const was = c.envelopesMode; c.envelopesMode = mode;
     this.log(customerId, by, describeEnvelopesMode(was, mode));
+  }
+
+  async makeSubAccount(customerId: number, by: string): Promise<void> {
+    const c = this.cust(customerId);
+    const owner = c.parentId === null ? undefined : this.customers.get(c.parentId);
+    if (!owner) throw new ValidationError({ parentId: 'Choose a parent customer on the Details tab first. A sub-account takes its settings from its parent.' });
+    const kids = [...this.customers.values()].filter((x) => x.parentId === customerId && !x.flags.isDeleted);
+    if (kids.length > 0) throw new ValidationError({ parentId: noChildCustomers(kids.map((k) => k.name)) });
+    this.customers.delete(customerId); this.converted.set(customerId, c);
+    for (const a of this.accounts) if (a.customerId === customerId) { a.customerId = owner.id; a.rehomedFrom = customerId; }
+    this.accounts.push({ id: customerId, customerId: owner.id, code: c.code, name: c.name, isDeleted: c.flags.isDeleted });
+    this.log(customerId, by, describeBecameSubAccount(owner.code, owner.code));
+    this.log(owner.id, by, describeSubAccountOf(c.code, c.name));
+  }
+
+  async makeCustomer(accountId: number, by: string): Promise<void> {
+    const a = this.accounts.find((x) => x.id === accountId);
+    if (!a) throw new NotFoundError('Account not found');
+    const owner = a.customerId;
+    const kept = this.converted.get(accountId);
+    this.accounts = this.accounts.filter((x) => x !== a);
+    if (kept) { this.converted.delete(accountId); this.customers.set(accountId, kept); }
+    else this.put(accountId, { code: a.code, name: a.name, parentId: owner, flags: { ...noFlags(), isDeleted: a.isDeleted } });
+    for (const x of this.accounts) if (x.rehomedFrom === accountId) { x.customerId = accountId; delete x.rehomedFrom; }
+    this.log(accountId, by, describeBecameCustomer(a.code, a.name));
+    this.log(owner, by, describeLeftAsCustomer(a.code, a.name));
   }
 
   async lookups(): Promise<Lookups> { return { ...this.lookupData, customers: this.customersLookup() }; }

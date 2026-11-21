@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Anchor, Badge, Button, Group, Modal, Paper, Stack, Table, Text, TextInput } from '@mantine/core';
+import { Link, useNavigate } from 'react-router-dom';
+import { Anchor, Badge, Button, Divider, Group, Modal, Paper, Stack, Table, Text, TextInput } from '@mantine/core';
 import { IconPlus } from '@tabler/icons-react';
-import { addAccount, updateAccount, type AccountView } from '../../api/customers';
+import { addAccount, makeCustomer, updateAccount, type AccountView } from '../../api/customers';
 import { run, type TabProps } from './shared';
 
 export function AccountsTab({ detail, reload }: TabProps) {
+  const navigate = useNavigate();
   const [editing, setEditing] = useState<AccountView | 'new' | null>(null);
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
@@ -15,6 +16,11 @@ export function AccountsTab({ detail, reload }: TabProps) {
   const save = async () => {
     const res = await run(() => (editing === 'new' ? addAccount(detail.id, code.trim(), name.trim()) : updateAccount((editing as AccountView).id, code.trim(), name.trim(), false)), 'Account saved');
     if (res.ok) { setEditing(null); await reload(); } else setErrors(res.fieldErrors ?? {});
+  };
+  const giveOwnSettings = async () => {
+    const a = editing as AccountView;
+    const res = await run(() => makeCustomer(a.id), `${a.name} now holds its own settings`);
+    if (res.ok) { setEditing(null); navigate(`/customers/${a.id}`); }
   };
   const setDeleted = async (a: AccountView, isDeleted: boolean) => {
     const res = await run(() => updateAccount(a.id, a.code, a.name, isDeleted), isDeleted ? `${a.code} removed` : `${a.code} restored`);
@@ -75,6 +81,14 @@ export function AccountsTab({ detail, reload }: TabProps) {
           <TextInput label="Account code" value={code} onChange={(e) => setCode(e.currentTarget.value)} error={errors['code']} data-autofocus />
           <TextInput label="Name" value={name} onChange={(e) => setName(e.currentTarget.value)} error={errors['name']} />
           <Group justify="flex-end"><Button variant="default" onClick={() => setEditing(null)}>Cancel</Button><Button onClick={save}>Save</Button></Group>
+          {editing !== null && editing !== 'new' && (
+            <>
+              <Divider />
+              <Text size="sm" fw={600}>Its own settings</Text>
+              <Text size="sm" c="dimmed">Make this account a customer in its own right, with its own brands, envelopes and rules. A customer that was a sub-account before gets its old settings back. Its invoicing account becomes itself unless you choose another on its Details tab.</Text>
+              <Group><Button variant="default" onClick={giveOwnSettings}>Give it its own settings</Button></Group>
+            </>
+          )}
         </Stack>
       </Modal>
       </Stack>
