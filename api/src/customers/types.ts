@@ -1,7 +1,7 @@
 export interface CustomerRow {
   id: number; code: string; name: string; misJobNumber: string | null; pendingJobNumber: string | null;
   isAddressMatching: boolean; isTesting: boolean; isDeleted: boolean;
-  /** The hierarchy parent (not the same as the grouping account that holds the settings). */
+  /** The hierarchy parent: where this customer sits in the tree. It keeps its own settings. */
   parentId: number | null; parentCode: string | null;
   accountCount: number; brandCount: number; envelopeCount: number;
 }

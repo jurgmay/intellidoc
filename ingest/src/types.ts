@@ -48,7 +48,7 @@ export interface IngestPack {
   address: NormalisedAddress;
   /** Submitting account (XML OwnerAccount). */
   accountCode: string;
-  /** Customer = grouping account; this is what batches and mailpieces belong to. */
+  /** Customer = the account that holds the settings; this is what batches and mailpieces belong to. */
   customerCode: string;
   brand: string | null;
   brandReference: string;
@@ -66,7 +66,7 @@ export interface Mailpiece {
   id: number;
   addressHash: string;
   packs: IngestPack[];
-  /** Customer (grouping account) code. */
+  /** Customer (the account that holds the settings) code. */
   accountCode: string;
   brand: string | null;
   sheets: number;

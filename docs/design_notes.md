@@ -24,7 +24,7 @@ Companion to `intellidoc_core_schema.sql`. Everything here is derived from the F
 1. Pair `name.xml` with `name.pdf`; reject if either is missing. Validate `Version="6"`.
 2. Parse with a streaming XML parser. Check the page ranges are contiguous, the page sum equals the PDF page count, and the PDF page count equals the last `EndPage`.
 3. For each `Pack`, skip if `pack_guid` already exists (idempotent re-send).
-4. Resolve accounts: `Source@OwnerAccount` matches `account.account_code`, and the customer is the grouping account.
+4. Resolve accounts: `Source@OwnerAccount` matches `account.account_code`, and the customer is the account that holds the settings (itself, or the nearest ancestor that does not inherit).
 5. Store the address (section 3), the option set (dedupe), passthrough as key and value dictionaries, identifiers as (type, value), and inserts by stock code. An unknown insert code is an ingest error, not a silent drop.
 6. Analyse the PDF per pack for colour, mono and blank pages. Splitting is by page range with a streaming tool, because files can be 68 MB or more.
 

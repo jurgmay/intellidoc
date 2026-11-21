@@ -41,7 +41,7 @@ export interface EnvelopeOption {
 export interface AccountConfig {
   /** Submitting account code (XML OwnerAccount). */
   code: string;
-  /** Customer (grouping account) code; equals code when the account is its own customer. */
+  /** Customer (the account that holds the settings) code; equals code when the account is its own customer. */
   customerCode: string;
   /** Passthrough key + value -> position inside a merged envelope. */
   packSequence?: { key: string; rules: Map<string, number> };

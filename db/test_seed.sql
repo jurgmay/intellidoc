@@ -29,10 +29,10 @@ INSERT INTO idoc.postal_rate (postal_service_id, min_weight_g, max_weight_g, val
 SELECT ps.postal_service_id, 0, f.max_weight_g, '2020-01-01'
 FROM idoc.postal_service AS ps INNER JOIN idoc.postal_format AS f ON f.postal_format_id = ps.postal_format_id;
 
--- Customers (grouping accounts) and the submitting account FEXCO that belongs to FEXCO_CUSTOMER
+-- Customers and the sub-account FEXCO, which inherits FEXCO_CUSTOMER's settings
 INSERT INTO idoc.account (account_code, name, is_address_matching) VALUES (N'FEXCO_CUSTOMER', N'Fexco (customer)', 1), (N'NATIONAL_GRID_PSR', N'National Grid PSR', 1);
-INSERT INTO idoc.account (account_code, name, grouping_account_id, is_address_matching)
-SELECT N'FEXCO', N'Fexco (submitting)', account_id, 0 FROM idoc.account WHERE account_code = N'FEXCO_CUSTOMER';
+INSERT INTO idoc.account (account_code, name, parent_account_id, inherits_settings, is_address_matching)
+SELECT N'FEXCO', N'Fexco (submitting)', account_id, 1, 0 FROM idoc.account WHERE account_code = N'FEXCO_CUSTOMER';
 
 INSERT INTO idoc.brand (account_id, name)
 SELECT a.account_id, b.name

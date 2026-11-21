@@ -82,8 +82,8 @@ async function run(db: Db, plan: Plan): Promise<ApplyCounts> {
   }
   for (const a of plan.accounts) {
     const id = acc.get(a.legacyId)!;
-    await db.exec('UPDATE idoc.account SET parent_account_id = @p, grouping_account_id = @g WHERE account_id = @a',
-      [['p', sql.Int, a.parentLegacyId ? acc.get(a.parentLegacyId) : null], ['g', sql.Int, a.groupingLegacyId ? acc.get(a.groupingLegacyId) : null], ['a', sql.Int, id]]);
+    await db.exec('UPDATE idoc.account SET parent_account_id = @p, inherits_settings = @g WHERE account_id = @a',
+      [['p', sql.Int, a.parentLegacyId ? acc.get(a.parentLegacyId) : null], ['g', sql.Bit, a.inheritsSettings && a.parentLegacyId !== null], ['a', sql.Int, id]]);
     for (const t of ['address_match_rule', 'pack_sequence_rule', 'account_notification_email']) await db.exec(`DELETE FROM idoc.${t} WHERE account_id = @a`, [['a', sql.Int, id]]);
     let seq = 0;
     for (const m of a.matchRules) await db.exec('INSERT INTO idoc.address_match_rule (account_id, sequence_no, is_include, passthrough_key_id, passthrough_value) VALUES (@a, @s, @i, @k, @v)',

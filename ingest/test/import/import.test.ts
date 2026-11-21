@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseMer } from '../../src/import/mer.js';
-import { buildPlan } from '../../src/import/plan.js';
+import { buildPlan, settingsOwner } from '../../src/import/plan.js';
 
 const A = 'aaaaaaaa-0000-0000-0000-000000000001', B = 'aaaaaaaa-0000-0000-0000-000000000002', C = 'aaaaaaaa-0000-0000-0000-000000000003';
 const BR = 'bbbbbbbb-0000-0000-0000-000000000001';
@@ -14,6 +14,11 @@ const customers = [
     packSequenceJSON: JSON.stringify({ passthroughKey: 'DocType', sequences: [{ passthroughValue: 'Invoice', sequenceNumber: 1 }] }),
     envelopesJSON: JSON.stringify({ x: { y: [{ id: E1, stockCode: 'WH1' }, { id: E3, stockCode: 'WH1' }] } }) }),
   cust({ id: B, accountCode: 'ACME_SUB', accountName: 'Acme sub', id_parentAccount: A, id_groupingAccount: A }),
+  cust({ id: 'aaaaaaaa-0000-0000-0000-000000000004', accountCode: 'NO_PARENT', accountName: 'Grouping only', id_groupingAccount: A }),
+  cust({ id: 'aaaaaaaa-0000-0000-0000-000000000005', accountCode: 'DEEP', accountName: 'Two levels down', id_parentAccount: B, id_groupingAccount: A }),
+  cust({ id: 'aaaaaaaa-0000-0000-0000-000000000006', accountCode: 'ELSEWHERE', accountName: 'Parent differs', id_parentAccount: C, id_groupingAccount: A }),
+  cust({ id: 'aaaaaaaa-0000-0000-0000-000000000007', accountCode: 'LOOP_1', accountName: 'Loop 1', id_parentAccount: 'aaaaaaaa-0000-0000-0000-000000000008' }),
+  cust({ id: 'aaaaaaaa-0000-0000-0000-000000000008', accountCode: 'LOOP_2', accountName: 'Loop 2', id_parentAccount: 'aaaaaaaa-0000-0000-0000-000000000007' }),
   cust({ id: C, accountCode: 'ORPHAN', accountName: 'Orphan', id_groupingAccount: 'ffffffff-0000-0000-0000-00000000dead', isDeleted: '1' }),
 ];
 const stockRow = (o: Record<string, string>) => ({ id: '', id_parent: '', id_customer: A, id_brand: '', stockCode: '', type: 'Outer Envelope', description: 'C5 Envelope', isEnvelope: '1', isInsert: '0',
@@ -37,11 +42,29 @@ describe('parseMer', () => {
 describe('buildPlan', () => {
   const plan = buildPlan({ customers, brands: [{ id: BR, id_customer: A, name: 'Bront�' }, { id: 'x', id_customer: 'nope', name: 'Lost' }], stock, envelopes });
 
-  it('builds the account hierarchy and treats a dangling grouping account as its own customer', () => {
-    expect(plan.accounts.find((a) => a.code === 'ACME')!.groupingLegacyId).toBeNull();
-    expect(plan.accounts.find((a) => a.code === 'ACME_SUB')).toMatchObject({ groupingLegacyId: A, parentLegacyId: A });
-    expect(plan.accounts.find((a) => a.code === 'ORPHAN')).toMatchObject({ groupingLegacyId: null, isDeleted: true });
+  const acct = (code: string) => plan.accounts.find((a) => a.code === code)!;
+  it('builds one tree and treats a dangling grouping account as its own customer', () => {
+    expect(acct('ACME')).toMatchObject({ inheritsSettings: false, parentLegacyId: null });
+    expect(acct('ACME_SUB')).toMatchObject({ inheritsSettings: true, parentLegacyId: A });
+    expect(acct('ORPHAN')).toMatchObject({ inheritsSettings: false, isDeleted: true });
     expect(plan.warnings.some((w) => /ORPHAN.*not in the export/.test(w))).toBe(true);
+  });
+  it('uses the grouping customer as the parent when there is no parent', () => {
+    expect(acct('NO_PARENT')).toMatchObject({ inheritsSettings: true, parentLegacyId: A });
+  });
+  it('finds the settings owner up a multi-level tree', () => {
+    const byId = new Map(plan.accounts.map((a) => [a.legacyId, a]));
+    expect(settingsOwner(byId, acct('DEEP')).code).toBe('ACME');
+    expect(settingsOwner(byId, acct('ACME')).code).toBe('ACME');
+  });
+  it('lets the parent win when it differs from the grouping customer, with a warning', () => {
+    expect(acct('ELSEWHERE')).toMatchObject({ parentLegacyId: C, inheritsSettings: true });
+    expect(plan.warnings.some((w) => /ELSEWHERE.*parent wins/.test(w))).toBe(true);
+  });
+  it('cuts a loop in the parent links', () => {
+    expect(plan.warnings.some((w) => /LOOP_[12].*loop/.test(w))).toBe(true);
+    const roots = ['LOOP_1', 'LOOP_2'].filter((c) => acct(c).parentLegacyId === null);
+    expect(roots.length).toBeGreaterThanOrEqual(1);
   });
   it('reads rules and de-duplicates notification emails', () => {
     const a = plan.accounts.find((x) => x.code === 'ACME')!;

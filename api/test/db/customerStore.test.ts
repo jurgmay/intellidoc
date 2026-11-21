@@ -57,6 +57,21 @@ describe.skipIf(!cs)('MssqlCustomerStore', { timeout: 120_000 }, () => {
     expect((await store.get(id)).accounts).toEqual([{ id: sub, code: 'PARENT-1', name: 'Sub one', isDeleted: true }]);
   });
 
+  it('one tree: sub-accounts at any depth belong to the customer that holds the settings', async () => {
+    const id = await store.create({ code: 'TREE', name: 'Tree' }, 'tester');
+    const sub = await store.addAccount(id, { code: 'TREE-1', name: 'Level one' }, 'tester');
+    // a sub-account two levels down, as the importer would create it (parent is another sub-account, still inheriting)
+    await pool.request().input('p', sub).query(`INSERT INTO idoc.account (account_code, name, parent_account_id, inherits_settings) VALUES (N'TREE-2', N'Level two', @p, 1)`);
+    const owners = (await pool.request().query(`SELECT a.account_code AS code, o.account_code AS owner FROM idoc.v_account_owner v JOIN idoc.account a ON a.account_id = v.account_id JOIN idoc.account o ON o.account_id = v.owner_account_id WHERE a.account_code LIKE N'TREE%' ORDER BY a.account_code`)).recordset;
+    expect(owners).toEqual([{ code: 'TREE', owner: 'TREE' }, { code: 'TREE-1', owner: 'TREE' }, { code: 'TREE-2', owner: 'TREE' }]);
+    expect((await store.get(id)).accounts.map((a) => a.code)).toEqual(['TREE-1', 'TREE-2']);
+    expect((await store.list('TREE', false)).find((c) => c.code === 'TREE')!.accountCount).toBe(2);
+  });
+
+  it('an account can only inherit settings from a parent', async () => {
+    await expect(pool.request().query(`INSERT INTO idoc.account (account_code, name, inherits_settings) VALUES (N'NO-PARENT', N'No parent', 1)`)).rejects.toThrow(/ck_account_inherits/);
+  });
+
   it('brands: unique per customer, cannot be deleted while an envelope setting uses them', async () => {
     const id = await store.create({ code: 'BR', name: 'Brands' }, 'tester');
     const b = await store.addBrand(id, 'Home', 'tester');

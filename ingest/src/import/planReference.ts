@@ -1,5 +1,5 @@
 import { DEFAULT_ANONYMOUS, type AccountConfig, type EnvelopeOption, type ReferenceData } from '../reference.js';
-import type { Plan } from './plan.js';
+import { settingsOwner, type Plan } from './plan.js';
 
 /**
  * Builds the ingest's reference data straight from an import plan (no database), so a real XML/PDF pair can be
@@ -24,7 +24,7 @@ export function referenceFromPlan(plan: Plan): ReferenceData {
   const accById = new Map(plan.accounts.map((a) => [a.legacyId, a]));
   const accounts = new Map<string, AccountConfig>();
   for (const a of plan.accounts) {
-    const cust = accById.get(a.groupingLegacyId ?? a.legacyId) ?? a;
+    const cust = settingsOwner(accById, a);
     accounts.set(a.code, {
       code: a.code, customerCode: cust.code, brands: plan.brands.filter((b) => b.customerLegacyId === cust.legacyId).map((b) => b.name),
       batchingKey: cust.batchingKey, matchingEnabled: cust.isAddressMatching,
