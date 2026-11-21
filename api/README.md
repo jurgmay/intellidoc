@@ -24,4 +24,22 @@ when a change takes effect. The Settings page is generated from that list, so th
 | `GET /api/settings/audit?limit=50` | the change log |
 | `PUT /api/settings/batch-code` | `{ "next": 5000 }`; only upwards, never onto a number already used |
 
+### Customers
+
+A customer is an `idoc.account` with no grouping account; its sub-accounts point at it. Everything the importer reads
+(flags, brands, envelopes, matching rules, batching and sequence keys) is edited here. Errors: 422 `{ errors: { field: message } }`,
+409 `{ error }` for duplicates or a record in use, 404 for an unknown id. Every change writes a readable line to `idoc.audit_log` in the same transaction.
+
+| Endpoint | |
+|---|---|
+| `GET /api/customers?search=&deleted=1` | list with account, brand and envelope counts |
+| `POST /api/customers` | `{ code, name }` |
+| `GET` / `PUT /api/customers/:id` | the whole customer; PUT saves code, name, MIS job number, return address, flags, batching key, pack sequence key |
+| `GET /api/customers/lookups` | passthrough keys, delivery bands, postal rates, envelope stock, flag labels |
+| `GET /api/customers/:id/history` | the change history |
+| `POST /api/customers/:id/accounts`, `PUT /api/accounts/:id` | sub-accounts (removing one is a soft delete) |
+| `POST /api/customers/:id/brands`, `PUT` / `DELETE /api/brands/:id` | brands; one in use cannot be deleted |
+| `POST /api/customers/:id/envelopes`, `PUT` / `DELETE /api/envelopes/:id` | envelope settings (delete is soft) |
+| `PUT /api/customers/:id/match-rules`, `/sequence-rules`, `/emails` | each replaces the whole list |
+
 Tests: `npm test`. The database test needs `INTELLIDOC_TEST_DB` (it drops and recreates the `idoc` schema).

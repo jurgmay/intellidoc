@@ -125,6 +125,19 @@ CREATE TABLE idoc.postal_rate (
 );
 GO
 
+/* Changes made from the web app to customers (and, later, other records): one readable line each. */
+CREATE TABLE idoc.audit_log (
+    audit_id    BIGINT IDENTITY(1, 1) NOT NULL CONSTRAINT pk_audit_log PRIMARY KEY,
+    changed_at  DATETIME2(0)   NOT NULL CONSTRAINT df_audit_log_at DEFAULT (SYSUTCDATETIME()),
+    changed_by  NVARCHAR(200)  NOT NULL,
+    entity      NVARCHAR(50)   NOT NULL,   -- 'customer'
+    entity_id   BIGINT         NOT NULL,   -- e.g. the customer's account_id
+    summary     NVARCHAR(1000) NOT NULL
+);
+GO
+CREATE INDEX ix_audit_log_entity ON idoc.audit_log (entity, entity_id, audit_id);
+GO
+
 /* ===========================================================================
    3. ACCOUNTS, BRANDS, STOCK
    =========================================================================== */

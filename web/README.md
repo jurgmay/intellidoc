@@ -10,4 +10,4 @@ React + Vite + Mantine (Poppins and the Intellidoc blues, as on the run sheet).
 
 For a quick look without a database, run `npm run dev:stub` in `api/` and `npm run dev` here.
 
-Pages so far: **Settings** (with a change log). Next: Customers.
+Pages so far: **Settings** (with a change log) and **Customers** (details, accounts, brands, envelopes, matching and batching, notifications, history). Next: the Settings reference lists (paper, postal services and rates, anonymous addressees).

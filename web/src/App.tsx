@@ -1,9 +1,11 @@
 import { AppShell, Group, Image, NavLink, Text } from '@mantine/core';
-import { IconSettings } from '@tabler/icons-react';
+import { IconSettings, IconUsers } from '@tabler/icons-react';
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { CustomerPage } from './pages/CustomerPage';
+import { CustomersPage } from './pages/CustomersPage';
 import { SettingsPage } from './pages/SettingsPage';
 
-const NAV = [{ to: '/settings', label: 'Settings', icon: IconSettings }];
+const NAV = [{ to: '/customers', label: 'Customers', icon: IconUsers }, { to: '/settings', label: 'Settings', icon: IconSettings }];
 
 export function App() {
   const { pathname } = useLocation();
@@ -22,7 +24,9 @@ export function App() {
       </AppShell.Navbar>
       <AppShell.Main>
         <Routes>
-          <Route path="/" element={<Navigate to="/settings" replace />} />
+          <Route path="/" element={<Navigate to="/customers" replace />} />
+          <Route path="/customers" element={<CustomersPage />} />
+          <Route path="/customers/:id" element={<CustomerPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Text>Page not found.</Text>} />
         </Routes>
