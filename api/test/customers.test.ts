@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
+import { MemoryReportStore } from '../src/reports/memoryStore.js';
 import { MemoryRecipientStore } from '../src/recipients/memoryStore.js';
 import { MemoryCustomerStore } from '../src/customers/memoryStore.js';
 import { FLAGS } from '../src/customers/types.js';
@@ -17,7 +18,7 @@ beforeEach(async () => {
   store = new MemoryCustomerStore();
   acme = store.seed({ code: 'ACME', name: 'Acme Ltd' });
   store.seed({ code: 'NWB', name: 'Northwest Bank', misJobNumber: '24102' });
-  app = await buildApp({ settings: new MemorySettingsStore(), customers: store, recipients: new MemoryRecipientStore() });
+  app = await buildApp({ settings: new MemorySettingsStore(), customers: store, recipients: new MemoryRecipientStore(), reports: new MemoryReportStore() });
 });
 
 const call = (method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, payload?: unknown) => app.inject({ method, url, payload: payload as object });

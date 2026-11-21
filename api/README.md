@@ -51,3 +51,7 @@ Tests: `npm test`. The database tests (`npm run test:db`) read `INTELLIDOC_TEST_
 ## Recipient search
 
 `GET /api/recipients/scopes` lists the accounts a search can be scoped to. `GET /api/recipients/search?accountId=…` needs an account and searches that account and everything below it. Optional: `name` (contains, first address line), `address` (contains, other lines and postcode), `reference` (exact, or prefix with a trailing `*`), `referenceKey` (limit `reference` to one passthrough name), `from` and `to` (release dates, YYYY-MM-DD, inclusive) and `limit` (1 to 500, default 100). At least one of name, address, reference or a date is required, and text terms need 2 or more characters. The reply is `{ scope, rows, truncated }`.
+
+## Usage report
+
+`GET /api/reports/invoicing-accounts` lists the invoicing accounts that have produced anything. `GET /api/reports/usage?invoicingAccountId=…&from=YYYY-MM-DD&to=YYYY-MM-DD` returns the daily usage for one invoicing account (at most 366 days), and `GET /api/reports/usage.pdf` with the same parameters returns it as a PDF. The numbers come from the view `idoc.v_usage_daily`, so the view has to exist: rebuild the scratch DB (`npm run db:rebuild <folder>` in `ingest`) after pulling this change.
