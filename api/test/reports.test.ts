@@ -3,6 +3,7 @@ import { PDFDocument } from 'pdf-lib';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { MemoryCustomerStore } from '../src/customers/memoryStore.js';
+import { MemoryCostingStore } from '../src/costing/memoryStore.js';
 import { MemoryRecipientStore } from '../src/recipients/memoryStore.js';
 import { buildUsageReport, eachDay } from '../src/reports/aggregate.js';
 import { MemoryReportStore } from '../src/reports/memoryStore.js';
@@ -21,7 +22,7 @@ beforeEach(async () => {
     L('2026-11-02', 'Home', 'Letter', '2nd Class', 10, 12, 30), L('2026-11-02', 'Business', 'Letter', '1st Class', 4), L('2026-11-02', 'Home', 'Large Letter', '2nd Class', 1),
     L('2026-11-04', 'Home', 'Letter', '2nd Class', 7), L('2026-11-30', 'Home', 'Letter', '2nd Class', 99), // outside the range asked for below
   ]);
-  app = await buildApp({ settings: new MemorySettingsStore(), customers: new MemoryCustomerStore(), recipients: new MemoryRecipientStore(), reports: store });
+  app = await buildApp({ settings: new MemorySettingsStore(), customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), recipients: new MemoryRecipientStore(), reports: store });
 });
 const get = (qs: string) => app.inject({ method: 'GET', url: `/api/reports/usage?${qs}` });
 
