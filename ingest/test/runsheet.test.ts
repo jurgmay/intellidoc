@@ -47,3 +47,10 @@ describe('run sheet pdf', () => {
     expect((await PDFDocument.load(await mergePdfs([a, b]))).getPageCount()).toBe(2);
   });
 });
+
+describe('postal badge', () => {
+  it('uses the world icon only when the service name says international', () => {
+    expect(buildRunSheet(input).isInternational).toBe(false);
+    expect(buildRunSheet({ ...input, postalServiceName: 'Royal Mail International Standard' }).isInternational).toBe(true);
+  });
+});

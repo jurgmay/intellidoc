@@ -33,6 +33,6 @@ export async function writeRunSheets(jobId: number, outDir: string, logoPath?: s
 }
 
 const [jobArg, outArg, logoArg] = process.argv.slice(2);
-if (!jobArg || !outArg) { console.error('Usage: tsx src/runsheet/cli.ts <jobId> <outDir> [logo.png]'); process.exit(2); }
+if (!jobArg || !outArg) { console.error('Usage: tsx src/runsheet/cli.ts <jobId> <outDir> [logo.png (default: assets/intellidoc-logo.png)]'); process.exit(2); }
 const files = await writeRunSheets(Number(jobArg), outArg, logoArg);
 console.log(`Wrote ${files.length} files to ${outArg}`);

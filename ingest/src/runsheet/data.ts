@@ -17,6 +17,8 @@ export interface RunSheetData {
   inserts: string[];
   postalProvider: string;
   postalService: string;
+  /** UK flag vs world icon: true when the postal service name contains "international". */
+  isInternational: boolean;
   postalFormat: string;
   weightBands: string[];
   returnAddress: string | null;
@@ -102,6 +104,7 @@ export function buildRunSheet(i: RunSheetInput): RunSheetData {
     inserts: i.inserts.map((x) => `${x.code} : ${x.description}${x.quantity > 1 ? ` (x${x.quantity})` : ''}`),
     postalProvider: i.postalProvider,
     postalService: postalServiceText(i.postalServiceName, i.serviceCode),
+    isInternational: /international/i.test(i.postalServiceName),
     postalFormat: i.postalFormat,
     weightBands: weightBandLines(i.weightBandsG),
     returnAddress: i.returnAddress ? i.returnAddress.replace(/[\r\n\u000b¶]+/g, ', ') : null,
