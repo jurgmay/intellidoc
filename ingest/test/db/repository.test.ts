@@ -160,6 +160,31 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     await expect(mode(`emails_mode = N'SOMETIMES'`)).rejects.toThrow(/ck_account_modes/);
   });
 
+  it('batch event log: every batch starts with Created, later events move the status, cancelled is final', async () => {
+    await load([person('Eve', 'Events')], 'job-events.xml');
+    const batchId = await scalar(`SELECT TOP 1 b.batch_id AS n FROM idoc.batch b JOIN idoc.job j ON j.job_id = b.job_id WHERE j.base_name = N'job-events'`);
+    expect((await repo.batchEvents(batchId)).map((e) => e.type)).toEqual(['Created']);
+    expect(await scalar(`SELECT COUNT(*) AS n FROM idoc.batch b WHERE NOT EXISTS (SELECT 1 FROM idoc.batch_event e WHERE e.batch_id = b.batch_id AND e.event_type = N'Created')`)).toBe(0);
+
+    await repo.recordBatchEvent(batchId, 'Printed', { by: 'press', at: new Date('2026-11-20T09:00:00Z') });
+    await repo.recordBatchEvent(batchId, 'Enclosed', { by: 'hand room', note: 'two trays' });
+    const events = await repo.batchEvents(batchId);
+    expect(events.map((e) => e.type)).toEqual(['Created', 'Printed', 'Enclosed']);
+    expect(events[1]).toMatchObject({ by: 'press', note: null });
+    expect(events[2]).toMatchObject({ by: 'hand room', note: 'two trays' });
+    expect((await pool.request().query(`SELECT current_status AS s FROM idoc.batch WHERE batch_id = ${batchId}`)).recordset[0].s).toBe('Enclosed');
+
+    await expect(repo.recordBatchEvent(batchId, 'Created')).rejects.toThrow(/Created/);
+    await expect(repo.recordBatchEvent(999999999, 'Printed')).rejects.toThrow(/does not exist/);
+    // an event type outside the list is refused by the database too
+    await expect(pool.request().query(`INSERT INTO idoc.batch_event (batch_id, event_type) VALUES (${batchId}, N'Lost')`)).rejects.toThrow(/ck_batch_event_type/);
+    await expect(pool.request().query(`UPDATE idoc.batch SET current_status = N'Lost' WHERE batch_id = ${batchId}`)).rejects.toThrow(/ck_batch_status/);
+
+    await repo.recordBatchEvent(batchId, 'Cancelled', { note: 'customer withdrew' });
+    await expect(repo.recordBatchEvent(batchId, 'Despatched')).rejects.toThrow(/cancelled/);
+    expect((await repo.batchEvents(batchId)).map((e) => e.type)).toEqual(['Created', 'Printed', 'Enclosed', 'Cancelled']);
+  });
+
   it('invoicing account: the batch and mailpieces record it, and the run sheet prints its job number', async () => {
     await pool.request().query(`UPDATE idoc.account SET mis_job_number = N'1111' WHERE account_code = N'FEXCO_CUSTOMER'; UPDATE idoc.account SET mis_job_number = N'2222' WHERE account_code = N'FEXCO'`);
     try {

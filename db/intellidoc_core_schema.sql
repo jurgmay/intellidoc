@@ -464,6 +464,7 @@ CREATE TABLE idoc.batch (
     created_at              DATETIME2(0)          NOT NULL CONSTRAINT df_batch_created DEFAULT (SYSUTCDATETIME()),
     CONSTRAINT uq_batch_key UNIQUE (job_id, batch_key),
     CONSTRAINT uq_batch_code UNIQUE (batch_code),
+    CONSTRAINT ck_batch_status CHECK (current_status IN (N'Created', N'Printed', N'Enclosed', N'Despatched', N'Cancelled')),
     CONSTRAINT ck_batch_route CHECK (enclosing_route IN (N'RECEPTION', N'MACHINE_CANDIDATE', N'HAND')),
     CONSTRAINT ck_batch_department CHECK (fulfilment_department IN (N'Reception', N'Machine enclosing', N'Hand enclosing')),
     -- Only a MACHINE_CANDIDATE batch can ever be machine enclosed; the count threshold is checked in v_rule_violations
@@ -473,6 +474,20 @@ CREATE TABLE idoc.batch (
         OR (enclosing_route <> N'RECEPTION' AND fulfilment_department <> N'Reception')
     )
 );
+GO
+
+-- One row per thing that happened to a batch, oldest first. batch.current_status always equals the latest event_type
+-- (idoc.batch_event is written together with it, see MssqlRepository.recordBatchEvent). Rows are never updated or deleted.
+CREATE TABLE idoc.batch_event (
+    batch_event_id BIGINT IDENTITY(1, 1) NOT NULL CONSTRAINT pk_batch_event PRIMARY KEY,
+    batch_id       BIGINT        NOT NULL CONSTRAINT fk_batch_event_batch REFERENCES idoc.batch (batch_id),
+    event_type     NVARCHAR(30)  NOT NULL,
+    occurred_at    DATETIME2(0)  NOT NULL CONSTRAINT df_batch_event_at DEFAULT (SYSUTCDATETIME()),
+    recorded_by    NVARCHAR(100) NULL,    -- user or system that recorded it (NULL = the ingest watcher)
+    note           NVARCHAR(400) NULL,
+    CONSTRAINT ck_batch_event_type CHECK (event_type IN (N'Created', N'Printed', N'Enclosed', N'Despatched', N'Cancelled'))
+);
+CREATE INDEX ix_batch_event_batch ON idoc.batch_event (batch_id, occurred_at, batch_event_id);
 GO
 
 CREATE TABLE idoc.batch_insert (

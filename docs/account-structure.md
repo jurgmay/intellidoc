@@ -64,7 +64,9 @@ The user decides which envelopes an account may use (its effective list). The im
 - Each mailpiece keeps its own record, with links to its child packs where address matching was used.
 - Anything reporting needs is a **snapshot taken at production time** (account, account path, invoicing account, brand name, envelope), so later restructuring never changes past reports.
 
-**Built (step 5, snapshot fields):** each mailpiece stores, as at production, its sub-account (`submitting_account_id`, which is live, plus `submitting_account_code`, `submitting_account_name` and `submitting_account_path`, the account names from the top of the tree separated by ` > `), the invoicing account (`invoicing_account_id`, `invoicing_account_code`, `invoicing_account_name`), `brand_name` and `outer_stock_code`. All packs of a mailpiece share one sub-account because packs from different sub-accounts are never merged. Renaming or moving an account, renaming a brand or recoding an envelope afterwards does not change them. The batch event log and recipient search are still to come.
+**Built (step 5, snapshot fields):** each mailpiece stores, as at production, its sub-account (`submitting_account_id`, which is live, plus `submitting_account_code`, `submitting_account_name` and `submitting_account_path`, the account names from the top of the tree separated by ` > `), the invoicing account (`invoicing_account_id`, `invoicing_account_code`, `invoicing_account_name`), `brand_name` and `outer_stock_code`. All packs of a mailpiece share one sub-account because packs from different sub-accounts are never merged. Renaming or moving an account, renaming a brand or recoding an envelope afterwards does not change them. 
+
+**Built (step 5, batch event log):** `idoc.batch_event` holds one row per thing that happened to a batch: `Created` (written when the batch is made), then `Printed`, `Enclosed`, `Despatched` or `Cancelled`, each with a UTC time, who recorded it (empty for the ingest watcher) and an optional note. `batch.current_status` is always the latest event, and both are written in one transaction by `MssqlRepository.recordBatchEvent`, which also refuses a second `Created`, an unknown batch and any event after `Cancelled`. Events are only added, never changed. Both columns are checked in the database (`ck_batch_event_type`, `ck_batch_status`). There is no screen or API for it yet, and the production gate (only 'Received' jobs go to printing) is separate. Recipient search is still to come.
 - Production timestamps are kept for reporting and auditing.
 - "Everything sent to this recipient" (debt collection) must be fast and exact. Two searches are needed: by printed name and address, and by passthrough metadata (Tenant Reference, Property Reference, Document Type and so on). Reference values are matched exactly or by prefix; whether name and address also need partial (contains) matching is still to be decided.
 
@@ -77,7 +79,7 @@ The user decides which envelopes an account may use (its effective list). The im
 | Account in the tree at production time | Only live foreign keys. | Snapshot account code, name and path text. |
 | Brand | `brand_id` on batch, mailpiece and pack (live). | Renaming a brand changes history. Snapshot the name. |
 | Envelope | `batch.outer_stock_item_id` is a snapshot. `mailpiece.account_envelope_id` points at a live, editable row. | Snapshot the stock code on the mailpiece. |
-| Production timestamps | `created_at` and `current_status` on batch, `is_enclosed` bit on mailpiece. | No event history (printed, enclosed, despatched). Add a batch event log. |
+| Production timestamps | `created_at` and `current_status` on batch, `is_enclosed` bit on mailpiece. | No event history (printed, enclosed, despatched). **Done:** `idoc.batch_event`. |
 | Child packs | `pack.mailpiece_id` with a foreign key that forces one recipient. | None. |
 | Recipient search | `address_line` text, `address_hash`, `pack_identifier`. Name guesses on pack are unreliable. | Need indexes (or full text) for name, postcode and identifier searches, and an agreed definition of "recipient". |
 | Settings inheritance | Settings are read from the grouping account only. | Mode columns per group, an effective-settings resolver, the importer using it. |
@@ -88,7 +90,7 @@ The user decides which envelopes an account may use (its effective list). The im
 2. Tree and migration; retire grouping. **Done.**
 3. Inheritance modes: schema, resolver, importer, UI. **Done** for envelopes, brands, matching, pack sequence and notification e-mails; costing to follow.
 4. Invoicing account link and validation. **Done** (see section 5), apart from editing job numbers on sub-accounts, which is not needed for B-hive. The opt-in merge setting (3a) will not be built.
-5. Snapshot fields (**done**), batch event log and recipient search.
+5. Snapshot fields (**done**), batch event log (**done**) and recipient search.
 6. Reporting.
 
 ## 9. Decisions on the open questions
