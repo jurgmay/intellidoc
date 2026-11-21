@@ -12,7 +12,7 @@ Agreed with the business on 21 Nov 2026. This is a specification. Nothing in it 
 - One tree through `parent_account_id`, any depth (Odevo > Vegner Group > B-hive Partners > 150+ sub-accounts). `grouping_account_id` is retired.
 - The **root** of a tree is the batching boundary: "customer" in the batch uniqueness rule means the root. Sub-accounts under one root that resolve to the same envelope, brand, inserts and so on batch together.
 - An account cannot be moved under its own descendant.
-- Migration: each sub-account that has a grouping customer becomes a child of that customer, with every setting group set to inherit. Behaviour is unchanged on day one. Where `parent_account_id` and `grouping_account_id` disagree for an account, that needs a decision before migrating (query to be run on the scratch and live data).
+- Migration: each sub-account that has a grouping customer becomes a child of that customer, with every setting group set to inherit. Behaviour is unchanged on day one. Where `parent_account_id` and `grouping_account_id` disagree for an account, **the parent wins**.
 
 ## 3. Inheritance per setting group
 
@@ -32,6 +32,12 @@ Each account has a mode for each setting group.
 - The importer reads the effective settings only, resolved once per run. The UI shows the effective result and where each item comes from.
 - Examples: Somerset Council Planning and Housing use inherit + extras for envelopes (the generic envelope from the parent plus their own). Brands and matching rules are normally own.
 
+## 3a. Merging packs from different sub-accounts
+
+- By default two sub-accounts never share an envelope (the account is part of the match key).
+- It can be switched on by a setting on an account, which applies to everything below it, like the inherited setting groups. Packs then merge only between accounts under that node **that have the same invoicing account**.
+- Because of that rule a merged mailpiece always has exactly one invoicing account. (If the rule is ever relaxed, the mailpiece is billed to the nearest invoicing account above all the accounts involved.)
+
 ## 4. Envelope choice
 
 The user decides which envelopes an account may use (its effective list). The imported data names the envelope by WH stock code (`Envelope@Code`), and the importer changes size (for example C5 to C4) when the weight bands or sheet counts require it. Brand, passthrough and weight-band rules apply over the effective list as they do today.
@@ -47,7 +53,7 @@ The user decides which envelopes an account may use (its effective list). The im
 - Each mailpiece keeps its own record, with links to its child packs where address matching was used.
 - Anything reporting needs is a **snapshot taken at production time** (account, account path, invoicing account, brand name, envelope), so later restructuring never changes past reports.
 - Production timestamps are kept for reporting and auditing.
-- "Everything sent to this recipient" (debt collection) must be fast and exact, so recipient and identifiers need searchable storage.
+- "Everything sent to this recipient" (debt collection) must be fast and exact. Two searches are needed: by printed name and address, and by passthrough metadata (Tenant Reference, Property Reference, Document Type and so on). Reference values are matched exactly or by prefix; whether name and address also need partial (contains) matching is still to be decided.
 
 ## 7. Audit of the current schema against section 6
 
@@ -72,8 +78,10 @@ The user decides which envelopes an account may use (its effective list). The im
 5. Snapshot fields, batch event log and recipient search.
 6. Reporting.
 
-## 9. Open questions
+## 9. Decisions on the open questions
 
-1. Can address matching merge packs from different sub-accounts under one root into one mailpiece (it can today)? If yes, which account is billed for the mailpiece? If no, the account becomes part of the match key.
-2. What is "recipient" for debt-collection searches: the normalised addressee and address, a customer reference from `pack_identifier`, or both?
-3. Where `parent_account_id` and `grouping_account_id` disagree in live data, which wins?
+1. Cross-sub-account merging: allowed but off by default; see section 3a.
+2. "Recipient" means both the printed name and address, and the passthrough metadata.
+3. Parent wins where parent and grouping disagree.
+
+Still open: whether name and address searches need partial (contains) matching.
