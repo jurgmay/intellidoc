@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Alert, Autocomplete, Badge, Button, Group, Modal, Paper, Select, Stack, Switch, Table, Text, TextInput } from '@mantine/core';
 import { IconPlus } from '@tabler/icons-react';
-import { addEnvelope, deleteEnvelope, setEnvelopesMode, updateEnvelope, type EnvelopeInput, type EnvelopesMode, type EnvelopeView } from '../../api/customers';
+import { addEnvelope, deleteEnvelope, updateEnvelope, type EnvelopeInput, type EnvelopeView } from '../../api/customers';
+import { ModeSelect } from './ModeSelect';
 import { orNull, run, type TabProps } from './shared';
 
 interface Form { brandId: string | null; deliveryBand: string; postalRateId: string | null; stockItemId: string | null; reference: string; externalName: string; isOversticker: boolean }
@@ -38,13 +39,7 @@ export function EnvelopesTab({ detail, lookups, reload }: TabProps) {
     if (res.ok) await reload();
   };
 
-  const mode = detail.envelopesMode;
-  const hasParent = detail.parent !== null;
-  const changeMode = async (m: string | null) => {
-    if (m === null || m === mode) return;
-    const res = await run(() => setEnvelopesMode(detail.id, m as EnvelopesMode), 'Envelope list changed');
-    if (res.ok) await reload();
-  };
+  const mode = detail.modes.envelopes;
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }));
   const stockLabel = (s: { code: string | null; description: string; size: string | null }) => `${s.code ?? 'no code'} – ${s.description}${s.size ? ` (${s.size})` : ''}`;
   // Keep the saved choice visible even if it is no longer in the current lists.
@@ -53,12 +48,10 @@ export function EnvelopesTab({ detail, lookups, reload }: TabProps) {
 
   return (
     <Stack>
-      <Paper withBorder p="md">
-        <Select label="Where the envelope list comes from" allowDeselect={false} disabled={!hasParent} maw={420} value={mode} onChange={changeMode}
-          data={[{ value: 'OWN', label: 'This customer\'s own list' }, { value: 'INHERIT', label: 'The parent\'s list' }, { value: 'EXTEND', label: 'The parent\'s list plus this customer\'s own' }]}
-          description={hasParent ? `The parent is ${detail.parent!.name} (${detail.parent!.code}). A setting here with the same brand, delivery band, service and reference replaces the parent's.` : 'Choose a parent customer on the Details tab to take envelopes from it.'} />
+      <ModeSelect detail={detail} setting="envelopes" label="Where the envelope list comes from" noun="list" reload={reload}
+        hint="A setting here with the same brand, delivery band, service and reference replaces the parent's.">
         {mode === 'INHERIT' && detail.envelopes.length > 0 && <Alert color="yellow" variant="light" mt="sm">This customer's own envelope settings are kept but not used while it takes the parent's list.</Alert>}
-      </Paper>
+      </ModeSelect>
       <Group justify="space-between" align="flex-start">
         <Text size="sm" c="dimmed" maw={760}>
           Which outer envelope is used for each brand, delivery band and postal service weight band. When a mailpiece is weighed, the importer picks the setting whose weight band covers it. A setting with no brand is used for packs that have no brand.

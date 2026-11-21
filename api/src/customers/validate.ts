@@ -1,6 +1,6 @@
 import { ValidationError } from '../errors.js';
 import { parseEmails } from '../settings/catalogue.js';
-import { ENVELOPE_MODES, type EnvelopesMode, FLAGS, type CustomerDetailsInput, type EnvelopeInput, type FlagKey, type MatchRule, type SequenceRule } from './types.js';
+import { INHERIT_MODES, SETTINGS, type InheritMode, type SettingKey, FLAGS, type CustomerDetailsInput, type EnvelopeInput, type FlagKey, type MatchRule, type SequenceRule } from './types.js';
 
 const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 type Body = Record<string, unknown> | null | undefined;
@@ -75,10 +75,11 @@ export function parseBrandName(body: Body): string {
   return name!;
 }
 
-export function parseEnvelopesMode(body: Body): EnvelopesMode {
-  const m = body?.['mode'];
-  if (typeof m !== 'string' || !(ENVELOPE_MODES as readonly string[]).includes(m)) throw new ValidationError({ mode: 'Mode must be OWN, INHERIT or EXTEND' });
-  return m as EnvelopesMode;
+export function parseInheritance(body: Body): { setting: SettingKey; mode: InheritMode } {
+  const st = body?.['setting']; const m = body?.['mode'];
+  if (typeof st !== 'string' || !(SETTINGS as readonly string[]).includes(st)) throw new ValidationError({ setting: `Setting must be one of ${SETTINGS.join(', ')}` });
+  if (typeof m !== 'string' || !(INHERIT_MODES as readonly string[]).includes(m)) throw new ValidationError({ mode: 'Mode must be OWN, INHERIT or EXTEND' });
+  return { setting: st as SettingKey, mode: m as InheritMode };
 }
 
 export function parseEnvelope(body: Body): EnvelopeInput {

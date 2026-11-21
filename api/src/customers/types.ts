@@ -13,12 +13,27 @@ export interface EnvelopeView {
   id: number; brandId: number | null; brandName: string | null; deliveryBand: string; postalRateId: number; rateLabel: string;
   stockItemId: number; stockCode: string | null; stockDescription: string; reference: string | null; externalName: string | null; isOversticker: boolean;
 }
-/** Where a customer's envelope list comes from: its own rows, its parent's list, or the parent's list plus its own. */
-export const ENVELOPE_MODES = ['OWN', 'INHERIT', 'EXTEND'] as const;
-export type EnvelopesMode = (typeof ENVELOPE_MODES)[number];
+/** Where a group of settings comes from: its own rows, its parent's, or the parent's plus its own. */
+export const INHERIT_MODES = ['OWN', 'INHERIT', 'EXTEND'] as const;
+export type InheritMode = (typeof INHERIT_MODES)[number];
+/** The groups that can each take their own choice. matching = address matching on/off, batching key and matching rules; sequence = pack sequence key and rules. */
+export const SETTINGS = ['envelopes', 'brands', 'matching', 'sequence', 'emails'] as const;
+export type SettingKey = (typeof SETTINGS)[number];
+export type Modes = Record<SettingKey, InheritMode>;
 export interface InheritedEnvelopeView extends EnvelopeView { from: ParentView }
 export interface MatchRule { isInclude: boolean; key: string; value: string | null }
 export interface SequenceRule { value: string; number: number }
+/** Settings that come from the parent customers, read only here. A nearer entry (this customer's own, or a nearer parent's) that has the same key replaces a further one. */
+export interface InheritedSettings {
+  brands: { name: string; from: ParentView }[];
+  matchRules: (MatchRule & { from: ParentView })[];
+  sequenceRules: (SequenceRule & { from: ParentView })[];
+  emails: { email: string; from: ParentView }[];
+  /** The single values, when this customer takes them from a parent (matching mode INHERIT); otherwise null. */
+  matching: { isAddressMatching: boolean; batchingKey: string | null; from: ParentView } | null;
+  /** Likewise for the pack sequence key (sequence mode INHERIT). */
+  sequence: { key: string | null; from: ParentView } | null;
+}
 
 export const FLAGS = ['isAddressMatching', 'isArchiveMailpieces', 'isCreateOutputFiles', 'isSso', 'isSameDayService', 'isUseMrdf', 'isTesting', 'isDeleted'] as const;
 export type FlagKey = (typeof FLAGS)[number];
@@ -37,10 +52,12 @@ export interface CustomerDetail {
   /** The accounts that can be chosen: this customer first, then each ancestor up the tree. */
   invoicingOptions: ParentView[];
   accounts: AccountView[]; brands: BrandView[]; envelopes: EnvelopeView[];
-  envelopesMode: EnvelopesMode;
+  /** Where each group of settings comes from. All OWN when there is no parent. */
+  modes: Modes;
   /** Envelope settings that come from the parent customers (read only here), nearest first; one that this customer also has is left out. */
   inheritedEnvelopes: InheritedEnvelopeView[];
   matchRules: MatchRule[]; sequenceRules: SequenceRule[]; emails: string[];
+  inherited: InheritedSettings;
 }
 
 /** What can be edited on the customer record itself. */
@@ -79,7 +96,7 @@ export interface CustomerStore {
   addEnvelope(customerId: number, input: EnvelopeInput, by: string): Promise<number>;
   updateEnvelope(envelopeId: number, input: EnvelopeInput, by: string): Promise<void>;
   deleteEnvelope(envelopeId: number, by: string): Promise<void>;
-  setEnvelopesMode(customerId: number, mode: EnvelopesMode, by: string): Promise<void>;
+  setMode(customerId: number, setting: SettingKey, mode: InheritMode, by: string): Promise<void>;
   /** The customer stops holding its own settings and takes everything from its parent, like any other sub-account. Its own settings are kept, but not used. */
   makeSubAccount(customerId: number, by: string): Promise<void>;
   /** The reverse: a sub-account holds its own settings again, as a customer. */

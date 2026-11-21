@@ -167,6 +167,13 @@ CREATE TABLE idoc.account (
     -- Where this account's envelope list comes from (only for accounts that hold their own settings; an inheriting account follows its parent):
     --   OWN = its own rows only, INHERIT = the parent's effective list, EXTEND = the parent's effective list plus its own rows. See idoc.v_account_envelope_source.
     envelopes_mode             NVARCHAR(10)       NOT NULL CONSTRAINT df_account_envmode DEFAULT (N'OWN'),
+    -- The same choice for the other settings groups. brands = the brand list; matching = address matching on/off, batching key and matching rules;
+    -- sequence = pack sequence key and rules; emails = notification addresses. For the single values (the on/off, the keys) INHERIT takes the
+    -- parent's; OWN and EXTEND keep this account's own. Lists add up under EXTEND.
+    brands_mode                NVARCHAR(10)       NOT NULL CONSTRAINT df_account_brandsmode DEFAULT (N'OWN'),
+    matching_mode              NVARCHAR(10)       NOT NULL CONSTRAINT df_account_matchmode DEFAULT (N'OWN'),
+    sequence_mode              NVARCHAR(10)       NOT NULL CONSTRAINT df_account_seqmode DEFAULT (N'OWN'),
+    emails_mode                NVARCHAR(10)       NOT NULL CONSTRAINT df_account_emailsmode DEFAULT (N'OWN'),
     -- The account that is invoiced for this account's mail and whose job number is printed on the run sheet. Must be this account or an
     -- ancestor (checked by the API and the import). NULL = the account that holds the settings. See idoc.v_account_invoicing.
     invoicing_account_id       INT                NULL CONSTRAINT fk_account_invoicing REFERENCES idoc.account (account_id),
@@ -195,6 +202,8 @@ CREATE TABLE idoc.account (
     CONSTRAINT uq_account_code UNIQUE (account_code),
     CONSTRAINT ck_account_inherits CHECK (inherits_settings = 0 OR parent_account_id IS NOT NULL),
     CONSTRAINT ck_account_envmode CHECK (envelopes_mode IN (N'OWN', N'INHERIT', N'EXTEND') AND (envelopes_mode = N'OWN' OR parent_account_id IS NOT NULL)),
+    CONSTRAINT ck_account_modes CHECK (brands_mode IN (N'OWN', N'INHERIT', N'EXTEND') AND matching_mode IN (N'OWN', N'INHERIT', N'EXTEND') AND sequence_mode IN (N'OWN', N'INHERIT', N'EXTEND') AND emails_mode IN (N'OWN', N'INHERIT', N'EXTEND')
+        AND (parent_account_id IS NOT NULL OR (brands_mode = N'OWN' AND matching_mode = N'OWN' AND sequence_mode = N'OWN' AND emails_mode = N'OWN'))),
     CONSTRAINT ck_account_rollday CHECK (job_number_rollover_day BETWEEN 1 AND 28),
     CONSTRAINT ck_account_pending CHECK ((pending_mis_job_number IS NULL AND pending_job_number_from IS NULL) OR (pending_mis_job_number IS NOT NULL AND pending_job_number_from IS NOT NULL))
 );
@@ -213,20 +222,29 @@ WITH up AS (
 SELECT account_id, node_id AS owner_account_id FROM up WHERE inherits = 0;
 GO
 
--- For every account, the accounts whose envelope rows make up its effective envelope list, nearest first (depth 0 = the account itself).
--- An inheriting account passes straight through to its parent. Otherwise OWN stops here, INHERIT contributes nothing and goes up, EXTEND contributes and goes up.
-CREATE VIEW idoc.v_account_envelope_source AS
-WITH walk AS (
-    SELECT account_id AS origin, account_id AS node_id, parent_account_id AS next_id, 0 AS depth,
-           CASE WHEN inherits_settings = 0 AND envelopes_mode <> N'INHERIT' THEN 1 ELSE 0 END AS adds_self,
-           CASE WHEN inherits_settings = 1 OR envelopes_mode <> N'OWN' THEN 1 ELSE 0 END AS goes_up
-    FROM idoc.account
+-- For every account and settings group (envelopes, brands, matching, sequence, emails), the accounts whose rows make up its effective settings, nearest first
+-- (depth 0 = the account itself). An inheriting account passes straight through to its parent. Otherwise OWN stops here, INHERIT contributes nothing and
+-- goes up, EXTEND contributes and goes up. The single values of a group (address matching, the keys) come from the nearest source.
+CREATE VIEW idoc.v_account_setting_source AS
+WITH node AS (
+    SELECT a.account_id, a.parent_account_id, g.setting,
+           CASE WHEN a.inherits_settings = 0 AND m.setting_mode <> N'INHERIT' THEN 1 ELSE 0 END AS adds_self,
+           CASE WHEN a.inherits_settings = 1 OR m.setting_mode <> N'OWN' THEN 1 ELSE 0 END AS goes_up
+    FROM idoc.account AS a
+    CROSS JOIN (VALUES (N'envelopes'), (N'brands'), (N'matching'), (N'sequence'), (N'emails')) AS g(setting)
+    CROSS APPLY (SELECT CASE g.setting WHEN N'envelopes' THEN a.envelopes_mode WHEN N'brands' THEN a.brands_mode WHEN N'matching' THEN a.matching_mode
+                                       WHEN N'sequence' THEN a.sequence_mode ELSE a.emails_mode END AS setting_mode) AS m),
+walk AS (
+    SELECT account_id AS origin, account_id AS node_id, parent_account_id AS next_id, setting, 0 AS depth, adds_self, goes_up FROM node
     UNION ALL
-    SELECT w.origin, p.account_id, p.parent_account_id, w.depth + 1,
-           CASE WHEN p.inherits_settings = 0 AND p.envelopes_mode <> N'INHERIT' THEN 1 ELSE 0 END,
-           CASE WHEN p.inherits_settings = 1 OR p.envelopes_mode <> N'OWN' THEN 1 ELSE 0 END
-    FROM walk AS w INNER JOIN idoc.account AS p ON p.account_id = w.next_id WHERE w.goes_up = 1)
-SELECT origin AS account_id, node_id AS source_account_id, depth FROM walk WHERE adds_self = 1;
+    SELECT w.origin, n.account_id, n.parent_account_id, w.setting, w.depth + 1, n.adds_self, n.goes_up
+    FROM walk AS w INNER JOIN node AS n ON n.account_id = w.next_id AND n.setting = w.setting WHERE w.goes_up = 1)
+SELECT origin AS account_id, setting, node_id AS source_account_id, depth FROM walk WHERE adds_self = 1;
+GO
+
+-- The envelope list's sources (kept under its old name).
+CREATE VIEW idoc.v_account_envelope_source AS
+SELECT account_id, source_account_id, depth FROM idoc.v_account_setting_source WHERE setting = N'envelopes';
 GO
 
 -- For every account, the account that is invoiced for its mail (its own choice, else the account that holds the settings).

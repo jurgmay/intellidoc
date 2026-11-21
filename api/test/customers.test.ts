@@ -317,12 +317,12 @@ describe('envelope inheritance', () => {
     await call('POST', `/api/customers/${acme}/envelopes`, env({ deliveryBand: '1st Class' }));
     await call('POST', `/api/customers/${acme}/envelopes`, env({ deliveryBand: '2nd Class' }));
   });
-  const mode = (id: number, m: string) => call('PUT', `/api/customers/${id}/envelopes-mode`, { mode: m });
+  const mode = (id: number, m: string, setting = 'envelopes') => call('PUT', `/api/customers/${id}/inheritance`, { setting, mode: m });
   const detail = async (id: number) => (await call('GET', `/api/customers/${id}`)).json();
 
   it('a customer starts with its own list and nothing inherited', async () => {
     const d = await detail(child);
-    expect(d.envelopesMode).toBe('OWN');
+    expect(d.modes.envelopes).toBe('OWN');
     expect(d.inheritedEnvelopes).toEqual([]);
   });
   it('INHERIT shows the parent list, read only, with where it comes from', async () => {
@@ -358,12 +358,14 @@ describe('envelope inheritance', () => {
     const r = await mode(acme, 'INHERIT');
     expect(r.statusCode).toBe(422);
     expect(r.json().errors.mode).toMatch(/no parent/);
+    expect((await mode(acme, 'OWN')).statusCode).toBe(204);
+    expect((await mode(child, 'INHERIT', 'colours')).statusCode).toBe(422);
     expect((await mode(child, 'SOMETIMES')).statusCode).toBe(422);
   });
   it('goes back to its own list when the parent is removed, and says so in the history', async () => {
     await mode(child, 'INHERIT');
     await call('PUT', `/api/customers/${child}`, details({ code: 'CHILD', name: 'Child Co', parentId: null }));
-    expect((await detail(child)).envelopesMode).toBe('OWN');
+    expect((await detail(child)).modes.envelopes).toBe('OWN');
     expect((await call('GET', `/api/customers/${child}/history`)).json().rows[0].summary).toBe("Envelopes: the parent's list → its own list");
   });
 });
@@ -417,5 +419,82 @@ describe('customer to sub-account and back', () => {
     expect(await detail(a)).toMatchObject({ code: 'AC-1', name: 'Acme one', parent: { id: acme }, brands: [] });
     expect((await call('POST', '/api/accounts/99999/make-customer')).statusCode).toBe(404);
     expect((await call('POST', `/api/accounts/${acme}/make-customer`)).statusCode).toBe(404); // a customer is not an account
+  });
+});
+
+describe('inheritance of brands, matching, pack sequence and notification e-mails', () => {
+  let child: number; let grand: number;
+  const mode = (id: number, setting: string, m: string) => call('PUT', `/api/customers/${id}/inheritance`, { setting, mode: m });
+  const detail = async (id: number) => (await call('GET', `/api/customers/${id}`)).json();
+  beforeEach(async () => {
+    child = store.seed({ code: 'CHILD', name: 'Child Co', parentId: acme });
+    grand = store.seed({ code: 'GRAND', name: 'Grand Co', parentId: child });
+    await call('POST', `/api/customers/${acme}/brands`, { name: 'Home' });
+    await call('POST', `/api/customers/${acme}/brands`, { name: 'Business' });
+    await call('PUT', `/api/customers/${acme}/match-rules`, { rules: [{ isInclude: true, key: 'Department', value: null }, { isInclude: false, key: 'Doc Type', value: 'Final Demand' }] });
+    await call('PUT', `/api/customers/${acme}/sequence-rules`, { rules: [{ value: 'Bill', number: 1 }, { value: 'Reminder', number: 2 }] });
+    await call('PUT', `/api/customers/${acme}/emails`, { emails: ['print@acme.example', 'ops@acme.example'] });
+    await call('PUT', `/api/customers/${acme}`, details({ batchingKey: 'Department', packSequenceKey: 'Doc Type', flags: flags({ isAddressMatching: true }) }));
+  });
+
+  it('every group starts on its own list with nothing inherited', async () => {
+    const d = await detail(child);
+    expect(d.modes).toEqual({ envelopes: 'OWN', brands: 'OWN', matching: 'OWN', sequence: 'OWN', emails: 'OWN' });
+    expect(d.inherited).toEqual({ brands: [], matchRules: [], sequenceRules: [], emails: [], matching: null, sequence: null });
+  });
+  it('INHERIT shows the parent’s brands, rules and addresses read only, with where each comes from', async () => {
+    for (const g of ['brands', 'matching', 'sequence', 'emails']) expect((await mode(child, g, 'INHERIT')).statusCode).toBe(204);
+    const d = await detail(child);
+    expect(d.brands).toEqual([]);
+    expect(d.inherited.brands.map((b: { name: string }) => b.name).sort()).toEqual(['Business', 'Home']);
+    expect(d.inherited.brands[0].from).toMatchObject({ id: acme, code: 'ACME' });
+    expect(d.inherited.matchRules).toHaveLength(2);
+    expect(d.inherited.sequenceRules.map((r: { value: string }) => r.value)).toEqual(['Bill', 'Reminder']);
+    expect(d.inherited.emails.map((e: { email: string }) => e.email).sort()).toEqual(['ops@acme.example', 'print@acme.example']);
+    expect(d.inherited.matching).toMatchObject({ isAddressMatching: true, batchingKey: 'Department', from: { code: 'ACME' } });
+    expect(d.inherited.sequence).toMatchObject({ key: 'Doc Type', from: { code: 'ACME' } });
+  });
+  it('EXTEND adds to the parent’s list, a nearer entry with the same key replaces the parent’s, and the single values stay its own', async () => {
+    for (const g of ['brands', 'matching', 'sequence', 'emails']) await mode(child, g, 'EXTEND');
+    await call('POST', `/api/customers/${child}/brands`, { name: 'home' });                        // same name as the parent's Home, other case
+    await call('POST', `/api/customers/${child}/brands`, { name: 'Extra' });
+    await call('PUT', `/api/customers/${child}/sequence-rules`, { rules: [{ value: 'Reminder', number: 5 }] });
+    await call('PUT', `/api/customers/${child}/emails`, { emails: ['PRINT@acme.example'] });
+    await call('PUT', `/api/customers/${child}/match-rules`, { rules: [{ isInclude: true, key: 'Department', value: null }] });
+    const d = await detail(child);
+    expect(d.inherited.brands.map((b: { name: string }) => b.name)).toEqual(['Business']);
+    expect(d.inherited.sequenceRules.map((r: { value: string }) => r.value)).toEqual(['Bill']);
+    expect(d.inherited.emails.map((e: { email: string }) => e.email)).toEqual(['ops@acme.example']);
+    expect(d.inherited.matchRules).toEqual([expect.objectContaining({ isInclude: false, key: 'Doc Type' })]);
+    expect(d.inherited.matching).toBeNull(); expect(d.inherited.sequence).toBeNull();
+  });
+  it('passes through several levels, taking the single values from the nearest source', async () => {
+    await mode(child, 'matching', 'INHERIT'); await mode(grand, 'matching', 'INHERIT');
+    await call('PUT', `/api/customers/${child}`, details({ code: 'CHILD', name: 'Child Co', parentId: acme, batchingKey: 'Own key' }));
+    const d = await detail(grand);
+    expect(d.inherited.matching).toMatchObject({ from: { code: 'ACME' }, batchingKey: 'Department' }); // the child inherits, so it adds nothing; the source is ACME
+    await mode(child, 'matching', 'OWN');
+    expect((await detail(grand)).inherited.matching).toMatchObject({ from: { code: 'CHILD' }, batchingKey: 'Own key' });
+  });
+  it('needs a parent and a known group', async () => {
+    const r = await mode(acme, 'brands', 'INHERIT');
+    expect(r.statusCode).toBe(422); expect(r.json().errors.mode).toMatch(/no parent/);
+    expect((await mode(child, 'colours', 'INHERIT')).statusCode).toBe(422);
+    expect((await mode(child, 'brands', 'SOMETIMES')).statusCode).toBe(422);
+  });
+  it('writes the change to the history in plain words', async () => {
+    await mode(child, 'brands', 'INHERIT'); await mode(child, 'matching', 'EXTEND'); await mode(child, 'sequence', 'INHERIT'); await mode(child, 'emails', 'EXTEND');
+    const lines = (await call('GET', `/api/customers/${child}/history`)).json().rows.map((r: { summary: string }) => r.summary);
+    expect(lines).toEqual(expect.arrayContaining([
+      "Brands: its own list → the parent's list", "Matching: its own settings → the parent's settings plus its own",
+      "Pack sequence: its own settings → the parent's settings", "Notification e-mails: its own list → the parent's list plus its own",
+    ]));
+  });
+  it('removing the parent puts every group back on its own and says so', async () => {
+    await mode(child, 'brands', 'INHERIT'); await mode(child, 'emails', 'EXTEND');
+    await call('PUT', `/api/customers/${child}`, details({ code: 'CHILD', name: 'Child Co', parentId: null }));
+    expect((await detail(child)).modes).toEqual({ envelopes: 'OWN', brands: 'OWN', matching: 'OWN', sequence: 'OWN', emails: 'OWN' });
+    const lines = (await call('GET', `/api/customers/${child}/history`)).json().rows.map((r: { summary: string }) => r.summary);
+    expect(lines).toEqual(expect.arrayContaining(["Brands: the parent's list → its own list", "Notification e-mails: the parent's list plus its own → its own list"]));
   });
 });
