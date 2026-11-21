@@ -68,16 +68,16 @@ async function run(db: Db, plan: Plan): Promise<ApplyCounts> {
   const acc = new Map<string, number>();
   for (const a of plan.accounts) {
     const i: Input[] = [['l', GUID, a.legacyId], ['c', T(100), a.code], ['n', T(200), a.name], ['ia', sql.Bit, a.isAddressMatching], ['ib', sql.Bit, a.isArchiveMailpieces],
-      ['ic', sql.Bit, a.isCreateOutputFiles], ['id', sql.Bit, a.isCreateSeparateBatches], ['ie', sql.Bit, a.isNhs], ['if', sql.Bit, a.isSso], ['ig', sql.Bit, a.isSameDayService],
+      ['ic', sql.Bit, a.isCreateOutputFiles], ['if', sql.Bit, a.isSso], ['ig', sql.Bit, a.isSameDayService],
       ['ih', sql.Bit, a.isUseMrdf], ['ii', sql.Bit, a.isTesting], ['ij', sql.Bit, a.isDeleted], ['cm', sql.TinyInt, a.colourMode], ['mj', T(50), a.misJobNumber], ['ra', T(500), a.returnAddress],
       ['sk', sql.Int, a.packSequenceKey ? await key(a.packSequenceKey) : null], ['bk', sql.Int, a.batchingKey ? await key(a.batchingKey) : null]];
-    const set = `account_code = @c, name = @n, is_address_matching = @ia, is_archive_mailpieces = @ib, is_create_output_files = @ic, is_create_separate_batches = @id, is_nhs = @ie, is_sso = @if,
+    const set = `account_code = @c, name = @n, is_address_matching = @ia, is_archive_mailpieces = @ib, is_create_output_files = @ic, is_sso = @if,
       is_same_day_service = @ig, is_use_mrdf = @ih, is_testing = @ii, is_deleted = @ij, colour_mode = @cm, mis_job_number = @mj, return_address = @ra, pack_sequence_key_id = @sk, batching_key_id = @bk, legacy_id = @l`;
     let id = await db.id('SELECT account_id AS id FROM idoc.account WHERE legacy_id = @l', i) ?? await db.id('SELECT account_id AS id FROM idoc.account WHERE account_code = @c', i);
     if (id) await db.exec(`UPDATE idoc.account SET ${set} WHERE account_id = ${id}`, i);
-    else id = (await db.id(`INSERT INTO idoc.account (account_code, name, is_address_matching, is_archive_mailpieces, is_create_output_files, is_create_separate_batches, is_nhs, is_sso,
+    else id = (await db.id(`INSERT INTO idoc.account (account_code, name, is_address_matching, is_archive_mailpieces, is_create_output_files, is_sso,
       is_same_day_service, is_use_mrdf, is_testing, is_deleted, colour_mode, mis_job_number, return_address, pack_sequence_key_id, batching_key_id, legacy_id)
-      OUTPUT INSERTED.account_id AS id VALUES (@c, @n, @ia, @ib, @ic, @id, @ie, @if, @ig, @ih, @ii, @ij, @cm, @mj, @ra, @sk, @bk, @l)`, i))!;
+      OUTPUT INSERTED.account_id AS id VALUES (@c, @n, @ia, @ib, @ic, @if, @ig, @ih, @ii, @ij, @cm, @mj, @ra, @sk, @bk, @l)`, i))!;
     acc.set(a.legacyId, id);
   }
   for (const a of plan.accounts) {

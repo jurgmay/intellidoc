@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Alert, Badge, Button, Checkbox, Group, Loader, Modal, Paper, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { IconAlertCircle, IconPlus, IconSearch } from '@tabler/icons-react';
 import { createCustomer, listCustomers, type CustomerRow } from '../api/customers';
+import { useColumnWidths, type ColumnSpec } from '../components/useColumnWidths';
 import { run } from './customer/shared';
 
 /** Puts each child directly under its parent. A row whose parent is not in the list (filtered out) stays at the top level. */
@@ -23,6 +24,23 @@ function inHierarchy(rows: CustomerRow[]): { row: CustomerRow; depth: number }[]
   return out;
 }
 
+const CELL = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } as const;
+type Item = { row: CustomerRow; depth: number };
+const flagLabels = (r: CustomerRow): string[] => [r.isAddressMatching && 'Matching', r.isTesting && 'Testing', r.isDeleted && 'Deleted'].filter((x): x is string => !!x);
+const dash = (v: string | null): string => v ?? '–';
+
+/** The columns, with the text each one has to fit. The list keeps one line per customer, so a column is as wide as its longest value. */
+const COLUMNS: (ColumnSpec<Item> & { align?: 'center' })[] = [
+  { key: 'name', header: 'Name', cell: ({ row, depth }) => `${depth > 0 ? '└ ' : ''}${row.name}${depth === 0 && row.parentCode ? ` · part of ${row.parentCode}` : ''}`, extra: ({ depth }) => depth * 24 },
+  { key: 'code', header: 'Account code', cell: ({ row }) => row.code },
+  { key: 'job', header: 'Job number', cell: ({ row }) => dash(row.misJobNumber), align: 'center' },
+  { key: 'pending', header: 'Pending job number', cell: ({ row }) => dash(row.pendingJobNumber), align: 'center' },
+  { key: 'accounts', header: 'Accounts', cell: ({ row }) => String(row.accountCount), align: 'center' },
+  { key: 'brands', header: 'Brands', cell: ({ row }) => String(row.brandCount), align: 'center' },
+  { key: 'envelopes', header: 'Envelopes', cell: ({ row }) => String(row.envelopeCount), align: 'center' },
+  { key: 'flags', header: 'Flags', cell: ({ row }) => flagLabels(row).join(' '), extra: ({ row }) => flagLabels(row).length * 24 },
+];
+
 export function CustomersPage() {
   const nav = useNavigate();
   const [search, setSearch] = useState('');
@@ -34,6 +52,8 @@ export function CustomersPage() {
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const items = useMemo(() => (rows ? inHierarchy(rows) : []), [rows]);
+  const cols = useColumnWidths('intellidoc.customers.columns', COLUMNS, items);
 
   useEffect(() => {
     let current = true;
@@ -49,7 +69,7 @@ export function CustomersPage() {
   };
 
   return (
-    <Stack gap="lg" maw={1100}>
+    <Stack gap="lg">
       <Group justify="space-between" align="flex-end">
         <div>
           <Title order={2}>Customers</Title>
@@ -64,26 +84,33 @@ export function CustomersPage() {
       {error && <Alert color="red" icon={<IconAlertCircle />} title="Could not load the customers">{error}</Alert>}
       {!rows && !error && <Loader />}
       {rows && (
-        <Paper withBorder>
-          <Table highlightOnHover verticalSpacing="sm">
+        <Paper withBorder style={{ overflowX: 'auto' }}>
+          <Table highlightOnHover verticalSpacing="sm" style={{ tableLayout: 'fixed', width: cols.total, minWidth: '100%' }}>
+            <colgroup>{COLUMNS.map((c) => <col key={c.key} style={{ width: cols.widthOf(c.key) }} />)}</colgroup>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Name</Table.Th><Table.Th>Account code</Table.Th><Table.Th ta="center">Job number</Table.Th><Table.Th ta="center">Pending job number</Table.Th>
-                <Table.Th ta="center">Accounts</Table.Th><Table.Th ta="center">Brands</Table.Th><Table.Th ta="center">Envelopes</Table.Th><Table.Th>Flags</Table.Th>
+                {COLUMNS.map((c) => (
+                  <Table.Th key={c.key} ta={c.align} style={{ position: 'relative', whiteSpace: 'nowrap', overflow: 'hidden' }}>
+                    {c.header}
+                    <div role="separator" aria-orientation="vertical" aria-label={`Resize ${c.header} column`} title="Drag to resize, double-click to fit"
+                      onMouseDown={cols.startResize(c.key)} onDoubleClick={() => cols.fit(c.key)}
+                      style={{ position: 'absolute', top: 0, right: 0, bottom: 0, width: 8, cursor: 'col-resize', borderRight: `2px solid ${cols.dragging === c.key ? 'var(--mantine-color-brand-6)' : 'transparent'}` }} />
+                  </Table.Th>
+                ))}
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {inHierarchy(rows).map(({ row: r, depth }) => (
+              {items.map(({ row: r, depth }) => (
                 <Table.Tr key={r.id} onClick={() => nav(`/customers/${r.id}`)} style={{ cursor: 'pointer' }}>
-                  <Table.Td fw={500} pl={depth * 24 + 12}>{depth > 0 && <Text span c="dimmed" fw={400}>└ </Text>}{r.name}{depth === 0 && r.parentCode && <Text span size="xs" c="dimmed" fw={400}> · part of {r.parentCode}</Text>}</Table.Td>
-                  <Table.Td>{r.code}</Table.Td>
-                  <Table.Td ta="center">{r.misJobNumber ?? <Text span c="dimmed">–</Text>}</Table.Td>
-                  <Table.Td ta="center">{r.pendingJobNumber ?? <Text span c="dimmed">–</Text>}</Table.Td>
-                  <Table.Td ta="center">{r.accountCount}</Table.Td>
-                  <Table.Td ta="center">{r.brandCount}</Table.Td>
-                  <Table.Td ta="center">{r.envelopeCount}</Table.Td>
-                  <Table.Td>
-                    <Group gap={6}>
+                  <Table.Td fw={500} pl={depth * 24 + 12} style={CELL}>{depth > 0 && <Text span c="dimmed" fw={400}>└ </Text>}{r.name}{depth === 0 && r.parentCode && <Text span size="xs" c="dimmed" fw={400}> · part of {r.parentCode}</Text>}</Table.Td>
+                  <Table.Td style={CELL}>{r.code}</Table.Td>
+                  <Table.Td ta="center" style={CELL}>{r.misJobNumber ?? <Text span c="dimmed">–</Text>}</Table.Td>
+                  <Table.Td ta="center" style={CELL}>{r.pendingJobNumber ?? <Text span c="dimmed">–</Text>}</Table.Td>
+                  <Table.Td ta="center" style={CELL}>{r.accountCount}</Table.Td>
+                  <Table.Td ta="center" style={CELL}>{r.brandCount}</Table.Td>
+                  <Table.Td ta="center" style={CELL}>{r.envelopeCount}</Table.Td>
+                  <Table.Td style={CELL}>
+                    <Group gap={6} wrap="nowrap">
                       {r.isAddressMatching && <Badge variant="light">Matching</Badge>}
                       {r.isTesting && <Badge color="orange" variant="light">Testing</Badge>}
                       {r.isDeleted && <Badge color="gray">Deleted</Badge>}
@@ -91,7 +118,7 @@ export function CustomersPage() {
                   </Table.Td>
                 </Table.Tr>
               ))}
-              {rows.length === 0 && <Table.Tr><Table.Td colSpan={8}><Text c="dimmed" ta="center" py="md">No customers match.</Text></Table.Td></Table.Tr>}
+              {items.length === 0 && <Table.Tr><Table.Td colSpan={COLUMNS.length}><Text c="dimmed" ta="center" py="md">No customers match.</Text></Table.Td></Table.Tr>}
             </Table.Tbody>
           </Table>
         </Paper>

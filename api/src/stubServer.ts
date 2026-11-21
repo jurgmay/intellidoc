@@ -11,7 +11,7 @@ store.rows = [
 ];
 const customers = new MemoryCustomerStore();
 const acme = customers.seed({ code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', pendingJobNumber: '24601', pendingFrom: '2026-12-01', returnAddress: 'PO Box 12, Leeds LS1 1AA', batchingKey: 'Department', packSequenceKey: 'Doc Type',
-  flags: { isAddressMatching: true, isArchiveMailpieces: false, isCreateOutputFiles: true, isCreateSeparateBatches: false, isNhs: false, isSso: false, isSameDayService: false, isUseMrdf: false, isTesting: false, isDeleted: false },
+  flags: { isAddressMatching: true, isArchiveMailpieces: false, isCreateOutputFiles: true, isSso: false, isSameDayService: false, isUseMrdf: false, isTesting: false, isDeleted: false },
   emails: ['print@acme.example'], matchRules: [{ isInclude: true, key: 'Department', value: null }, { isInclude: false, key: 'Doc Type', value: 'Final Demand' }], sequenceRules: [{ value: 'Bill', number: 1 }, { value: 'Arrears', number: 2 }] });
 await customers.addAccount(acme, { code: 'ACME-SC', name: 'Acme Energy – Scotland' }, 'system');
 const brand = await customers.addBrand(acme, 'Acme Home', 'system');

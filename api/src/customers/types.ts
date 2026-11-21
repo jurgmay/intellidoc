@@ -16,13 +16,15 @@ export interface EnvelopeView {
 export interface MatchRule { isInclude: boolean; key: string; value: string | null }
 export interface SequenceRule { value: string; number: number }
 
-export const FLAGS = ['isAddressMatching', 'isArchiveMailpieces', 'isCreateOutputFiles', 'isCreateSeparateBatches', 'isNhs', 'isSso', 'isSameDayService', 'isUseMrdf', 'isTesting', 'isDeleted'] as const;
+export const FLAGS = ['isAddressMatching', 'isArchiveMailpieces', 'isCreateOutputFiles', 'isSso', 'isSameDayService', 'isUseMrdf', 'isTesting', 'isDeleted'] as const;
 export type FlagKey = (typeof FLAGS)[number];
 
 export interface CustomerDetail {
   id: number; code: string; name: string; misJobNumber: string | null; returnAddress: string | null; colourMode: number | null;
   /** The next job number, and the date (1st of a month, London) on which it replaces the job number. */
   pendingJobNumber: string | null; pendingFrom: string | null;
+  /** Day of the month (1-28) on which a pending job number takes over. */
+  jobNumberRolloverDay: number;
   flags: Record<FlagKey, boolean>;
   batchingKey: string | null; packSequenceKey: string | null;
   parent: ParentView | null; children: ChildView[];
@@ -32,7 +34,7 @@ export interface CustomerDetail {
 
 /** What can be edited on the customer record itself. */
 export interface CustomerDetailsInput {
-  code: string; name: string; misJobNumber: string | null; pendingJobNumber: string | null; returnAddress: string | null;
+  code: string; name: string; misJobNumber: string | null; pendingJobNumber: string | null; jobNumberRolloverDay: number; returnAddress: string | null;
   flags: Record<FlagKey, boolean>; batchingKey: string | null; packSequenceKey: string | null;
   /** null = top of its hierarchy. Must be another customer, and never itself or one of its own descendants. */
   parentId: number | null;

@@ -35,7 +35,7 @@ A customer is an `idoc.account` with no grouping account; its sub-accounts point
 | `GET /api/customers?search=&deleted=1` | list with account, brand and envelope counts |
 | `POST /api/customers` | `{ code, name }` |
 | `GET` / `PUT /api/customers/:id` | the whole customer; PUT saves code, name, MIS job number, return address, flags, batching key, pack sequence key and `parentId` (hierarchy parent, `null` for none; must be another customer and never a loop) |
-| (pending job number) | `PUT /api/customers/:id` also takes `pendingJobNumber` (`null` for none). A new one starts on the 1st of next month (London time); the API checks every 10 minutes and the watcher every minute, and when it is due it replaces the job number, is cleared, and is written to the History tab |
+| (pending job number) | `PUT /api/customers/:id` also takes `pendingJobNumber` (`null` for none) and `jobNumberRolloverDay` (1 to 28, default 1; one customer uses the 21st). A new pending number starts on the next occurrence of that day (London time); the API checks every 10 minutes and the watcher every minute, and when it is due it replaces the job number, is cleared, and is written to the History tab |
 | `GET /api/customers/lookups` | passthrough keys, delivery bands, postal rates, envelope stock, flag labels |
 | `GET /api/customers/:id/history` | the change history |
 | `POST /api/customers/:id/accounts`, `PUT /api/accounts/:id` | sub-accounts (removing one is a soft delete) |

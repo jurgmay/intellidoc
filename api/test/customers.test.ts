@@ -9,7 +9,7 @@ let app: FastifyInstance;
 let store: MemoryCustomerStore;
 let acme: number;
 const flags = (over: Record<string, boolean> = {}) => ({ ...Object.fromEntries(FLAGS.map((f) => [f, false])), ...over });
-const details = (over: Record<string, unknown> = {}) => ({ code: 'ACME', name: 'Acme Ltd', misJobNumber: null, pendingJobNumber: null, returnAddress: null, batchingKey: null, packSequenceKey: null, parentId: null, flags: flags(), ...over });
+const details = (over: Record<string, unknown> = {}) => ({ code: 'ACME', name: 'Acme Ltd', misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, returnAddress: null, batchingKey: null, packSequenceKey: null, parentId: null, flags: flags(), ...over });
 const env = (over: Record<string, unknown> = {}) => ({ brandId: null, deliveryBand: '2nd Class', postalRateId: 1, stockItemId: 10, reference: null, externalName: null, isOversticker: false, ...over });
 
 beforeEach(async () => {
@@ -110,6 +110,37 @@ describe('pending job number', () => {
     expect(await store.applyDuePending()).toBe(0);
     expect((await call('GET', `/api/customers/${acme}`)).json()).toMatchObject({ misJobNumber: '24601', pendingJobNumber: null, pendingFrom: null });
     expect((await call('GET', `/api/customers/${acme}/history`)).json().rows[0]).toMatchObject({ changedBy: 'system', summary: 'Job number: "24518" → "24601" (the pending job number took effect)' });
+  });
+});
+
+describe('job number rollover day', () => {
+  it('a customer that rolls over on the 21st starts a pending number on the next 21st', async () => {
+    store.today = () => '2026-11-10';
+    expect((await call('PUT', `/api/customers/${acme}`, details({ pendingJobNumber: '5', jobNumberRolloverDay: 21 }))).json()).toMatchObject({ jobNumberRolloverDay: 21, pendingFrom: '2026-11-21' });
+    store.today = () => '2026-11-21'; // on the day itself the number set today waits for next month
+    expect((await call('PUT', `/api/customers/${acme}`, details({ pendingJobNumber: '6', jobNumberRolloverDay: 21 }))).json().pendingFrom).toBe('2026-12-21');
+    store.today = () => '2026-12-22';
+    expect((await call('PUT', `/api/customers/${acme}`, details({ pendingJobNumber: '7', jobNumberRolloverDay: 21 }))).json().pendingFrom).toBe('2027-01-21');
+  });
+  it('changing the day moves the start date of a pending number; other customers keep the 1st', async () => {
+    store.today = () => '2026-11-10';
+    await call('PUT', `/api/customers/${acme}`, details({ pendingJobNumber: '5' }));
+    expect((await call('GET', `/api/customers/${acme}`)).json().pendingFrom).toBe('2026-12-01');
+    expect((await call('PUT', `/api/customers/${acme}`, details({ pendingJobNumber: '5', jobNumberRolloverDay: 21 }))).json().pendingFrom).toBe('2026-11-21');
+    expect((await call('GET', `/api/customers/${acme}/history`)).json().rows[0].summary).toBe('Job number rollover day: 1 → 21');
+  });
+  it('moves on the rollover day, not on the 1st', async () => {
+    store.today = () => '2026-11-10';
+    await call('PUT', `/api/customers/${acme}`, details({ misJobNumber: '1', pendingJobNumber: '2', jobNumberRolloverDay: 21 }));
+    store.today = () => '2026-11-20';
+    expect(await store.applyDuePending()).toBe(0);
+    store.today = () => '2026-11-21';
+    expect(await store.applyDuePending()).toBe(1);
+    expect((await call('GET', `/api/customers/${acme}`)).json()).toMatchObject({ misJobNumber: '2', pendingJobNumber: null });
+  });
+  it('accepts 1 to 28 only, and must be given', async () => {
+    for (const bad of [0, 29, 1.5, '21', null]) expect((await call('PUT', `/api/customers/${acme}`, details({ jobNumberRolloverDay: bad }))).json().errors.jobNumberRolloverDay).toMatch(/1 to 28/);
+    expect((await call('PUT', `/api/customers/${acme}`, details({ jobNumberRolloverDay: 28 }))).statusCode).toBe(200);
   });
 });
 

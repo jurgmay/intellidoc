@@ -6,13 +6,15 @@ import type {
 import { FLAGS } from './types.js';
 
 interface Cust extends Omit<CustomerDetail, 'accounts' | 'brands' | 'envelopes' | 'parent' | 'children' | 'pendingJobNumber' | 'pendingFrom'> {
-  parentId: number | null; pendingJobNumber: string | null; pendingFrom: string | null;
+  parentId: number | null; pendingJobNumber: string | null; pendingFrom: string | null; jobNumberRolloverDay: number;
 }
 
-/** The 1st of the month after the given YYYY-MM-DD. */
-export function firstOfNextMonth(day: string): string {
-  const [y, m] = day.split('-').map(Number) as [number, number];
-  return m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
+/** The next date after today (YYYY-MM-DD) that falls on the given day of the month (1-28). */
+export function nextRollover(today: string, rollDay: number): string {
+  const [y, m, d] = today.split('-').map(Number) as [number, number, number];
+  const pad = (n: number): string => String(n).padStart(2, '0');
+  if (d < rollDay) return `${y}-${pad(m)}-${pad(rollDay)}`;
+  return m === 12 ? `${y + 1}-01-${pad(rollDay)}` : `${y}-${pad(m + 1)}-${pad(rollDay)}`;
 }
 interface Acct { id: number; customerId: number; code: string; name: string; isDeleted: boolean }
 interface Brand { id: number; customerId: number; name: string }
@@ -50,7 +52,7 @@ export class MemoryCustomerStore implements CustomerStore {
 
   seed(c: { code: string; name: string } & Partial<Cust>): number {
     const id = this.nextId();
-    this.customers.set(id, { id, parentId: null, misJobNumber: null, pendingJobNumber: null, pendingFrom: null, returnAddress: null, colourMode: null, flags: noFlags(), batchingKey: null, packSequenceKey: null, matchRules: [], sequenceRules: [], emails: [], ...c });
+    this.customers.set(id, { id, parentId: null, misJobNumber: null, pendingJobNumber: null, pendingFrom: null, jobNumberRolloverDay: 1, returnAddress: null, colourMode: null, flags: noFlags(), batchingKey: null, packSequenceKey: null, matchRules: [], sequenceRules: [], emails: [], ...c });
     return id;
   }
 
@@ -111,8 +113,10 @@ export class MemoryCustomerStore implements CustomerStore {
     const old = await this.get(id);
     if (this.codeTaken(input.code, id)) throw new ConflictError(`Account code "${input.code}" is already in use`);
     this.checkParent(id, input.parentId);
-    // A new pending number starts on the 1st of next month; an unchanged one keeps the date it already had.
-    const pendingFrom = input.pendingJobNumber === null ? null : input.pendingJobNumber === old.pendingJobNumber ? old.pendingFrom : firstOfNextMonth(this.today());
+    // A new pending number (or a new rollover day) starts on the next occurrence of the rollover day; an unchanged one keeps its date.
+    const pendingFrom = input.pendingJobNumber === null ? null
+      : input.pendingJobNumber === old.pendingJobNumber && input.jobNumberRolloverDay === old.jobNumberRolloverDay ? old.pendingFrom
+        : nextRollover(this.today(), input.jobNumberRolloverDay);
     const lines = describeDetailsChange(old, input, input.parentId === null ? null : this.cust(input.parentId).code, pendingFrom);
     Object.assign(this.cust(id), input, { pendingFrom });
     for (const l of lines) this.log(id, by, l);

@@ -10,7 +10,7 @@ type R = Record<string, any>;
 
 const FLAG_COLUMNS: Record<FlagKey, string> = {
   isAddressMatching: 'is_address_matching', isArchiveMailpieces: 'is_archive_mailpieces', isCreateOutputFiles: 'is_create_output_files',
-  isCreateSeparateBatches: 'is_create_separate_batches', isNhs: 'is_nhs', isSso: 'is_sso', isSameDayService: 'is_same_day_service',
+  isSso: 'is_sso', isSameDayService: 'is_same_day_service',
   isUseMrdf: 'is_use_mrdf', isTesting: 'is_testing', isDeleted: 'is_deleted',
 };
 
@@ -106,6 +106,7 @@ export class MssqlCustomerStore implements CustomerStore {
     for (const f of FLAGS) flags[f] = !!a[FLAG_COLUMNS[f]];
     return {
       id: a.account_id, code: a.account_code, name: a.name, misJobNumber: a.mis_job_number, pendingJobNumber: a.pending_mis_job_number ?? null,
+      jobNumberRolloverDay: a.job_number_rollover_day,
       pendingFrom: a.pending_job_number_from ? (a.pending_job_number_from as Date).toISOString().slice(0, 10) : null, returnAddress: a.return_address, colourMode: a.colour_mode ?? null, flags,
       batchingKey: a.batching_key, packSequenceKey: a.pack_sequence_key,
       parent: a.p_id ? { id: a.p_id, code: a.p_code, name: a.p_name } : null,
@@ -156,17 +157,20 @@ export class MssqlCustomerStore implements CustomerStore {
   async updateDetails(id: number, input: CustomerDetailsInput, by: string): Promise<void> {
     const old = await this.get(id);
     const parentCode = await this.checkParent(id, input.parentId);
-    // A new pending number starts on the 1st of next month (London); an unchanged one keeps the date it already had.
+    // A new pending number (or a new rollover day) starts on the next occurrence of the rollover day after today (London); an unchanged one keeps its date.
     const pendingFrom = input.pendingJobNumber === null ? null
-      : input.pendingJobNumber === old.pendingJobNumber ? old.pendingFrom
-        : (await this.pool.request().query(`SELECT CONVERT(CHAR(10), DATEADD(MONTH, 1, DATEFROMPARTS(YEAR(d), MONTH(d), 1)), 23) AS f FROM (SELECT CAST(SYSDATETIMEOFFSET() AT TIME ZONE 'GMT Standard Time' AS DATE) AS d) x`)).recordset[0].f as string;
+      : input.pendingJobNumber === old.pendingJobNumber && input.jobNumberRolloverDay === old.jobNumberRolloverDay ? old.pendingFrom
+        : (await this.pool.request().input('day', sql.Int, input.jobNumberRolloverDay).query(`
+            SELECT CONVERT(CHAR(10), CASE WHEN c > d THEN c ELSE DATEADD(MONTH, 1, c) END, 23) AS f
+            FROM (SELECT d, DATEFROMPARTS(YEAR(d), MONTH(d), @day) AS c
+                  FROM (SELECT CAST(SYSDATETIMEOFFSET() AT TIME ZONE 'GMT Standard Time' AS DATE) AS d) t) x`)).recordset[0].f as string;
     const lines = describeDetailsChange(old, input, parentCode, pendingFrom);
     await this.tx(async (t) => {
       const req = this.req(t).input('id', sql.Int, id).input('par', sql.Int, input.parentId).input('code', sql.NVarChar(100), input.code).input('name', sql.NVarChar(200), input.name)
-        .input('mis', sql.NVarChar(50), input.misJobNumber).input('pmis', sql.NVarChar(50), input.pendingJobNumber).input('pfrom', sql.NVarChar(10), pendingFrom).input('ret', sql.NVarChar(500), input.returnAddress)
+        .input('mis', sql.NVarChar(50), input.misJobNumber).input('pmis', sql.NVarChar(50), input.pendingJobNumber).input('rday', sql.TinyInt, input.jobNumberRolloverDay).input('pfrom', sql.NVarChar(10), pendingFrom).input('ret', sql.NVarChar(500), input.returnAddress)
         .input('bk', sql.Int, await this.keyId(t, input.batchingKey)).input('sk', sql.Int, await this.keyId(t, input.packSequenceKey));
       const sets = FLAGS.map((f) => { req.input(f, sql.Bit, input.flags[f]); return `${FLAG_COLUMNS[f]} = @${f}`; });
-      await req.query(`UPDATE idoc.account SET parent_account_id = @par, account_code = @code, name = @name, mis_job_number = @mis, pending_mis_job_number = @pmis, pending_job_number_from = CAST(@pfrom AS DATE), return_address = @ret, batching_key_id = @bk, pack_sequence_key_id = @sk, ${sets.join(', ')} WHERE account_id = @id`);
+      await req.query(`UPDATE idoc.account SET parent_account_id = @par, account_code = @code, name = @name, mis_job_number = @mis, pending_mis_job_number = @pmis, pending_job_number_from = CAST(@pfrom AS DATE), job_number_rollover_day = @rday, return_address = @ret, batching_key_id = @bk, pack_sequence_key_id = @sk, ${sets.join(', ')} WHERE account_id = @id`);
       for (const l of lines) await this.audit(t, id, by, l);
     }, `Account code "${input.code}" is already in use`);
   }

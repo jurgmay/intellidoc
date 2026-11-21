@@ -166,8 +166,6 @@ CREATE TABLE idoc.account (
     is_address_matching        BIT                NOT NULL CONSTRAINT df_account_match DEFAULT (0),
     is_archive_mailpieces      BIT                NOT NULL CONSTRAINT df_account_archive DEFAULT (0),
     is_create_output_files     BIT                NOT NULL CONSTRAINT df_account_output DEFAULT (0),
-    is_create_separate_batches BIT                NOT NULL CONSTRAINT df_account_sepbatch DEFAULT (0),
-    is_nhs                     BIT                NOT NULL CONSTRAINT df_account_nhs DEFAULT (0),
     is_sso                     BIT                NOT NULL CONSTRAINT df_account_sso DEFAULT (0),
     is_same_day_service        BIT                NOT NULL CONSTRAINT df_account_sameday DEFAULT (0),
     is_use_mrdf                BIT                NOT NULL CONSTRAINT df_account_mrdf DEFAULT (0),
@@ -178,6 +176,8 @@ CREATE TABLE idoc.account (
     -- The next job number, set in advance. On pending_job_number_from (the 1st of a month) it replaces mis_job_number and is cleared.
     pending_mis_job_number     NVARCHAR(50)       NULL,
     pending_job_number_from    DATE               NULL,
+    -- Day of the month (1-28) on which a pending job number takes over. Most customers use 1; one invoices mid-month and uses 21.
+    job_number_rollover_day    TINYINT            NOT NULL CONSTRAINT df_account_rollday DEFAULT (1),
     return_address             NVARCHAR(500)      NULL,
     -- Passthrough keys that drive sequencing and batching (replace packSequenceJSON / batchingJSON)
     pack_sequence_key_id       INT                NULL CONSTRAINT fk_account_seqkey REFERENCES idoc.passthrough_key (passthrough_key_id),
@@ -185,6 +185,7 @@ CREATE TABLE idoc.account (
     created_at                 DATETIME2(0)       NOT NULL CONSTRAINT df_account_created DEFAULT (SYSUTCDATETIME()),
     legacy_id                  UNIQUEIDENTIFIER   NULL,   -- FileMaker Customers.id (reference import only)
     CONSTRAINT uq_account_code UNIQUE (account_code),
+    CONSTRAINT ck_account_rollday CHECK (job_number_rollover_day BETWEEN 1 AND 28),
     CONSTRAINT ck_account_pending CHECK ((pending_mis_job_number IS NULL AND pending_job_number_from IS NULL) OR (pending_mis_job_number IS NOT NULL AND pending_job_number_from IS NOT NULL))
 );
 GO
