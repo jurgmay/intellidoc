@@ -32,7 +32,25 @@ CREATE TABLE idoc.settings (
     machine_enclosing_max_sheets        INT           NOT NULL CONSTRAINT df_settings_mach_sheets DEFAULT (12),
     machine_enclosing_envelope_code     NVARCHAR(20)  NOT NULL CONSTRAINT df_settings_mach_env DEFAULT (N'C5'),
     hand_enclosing_max_sheets           INT           NOT NULL CONSTRAINT df_settings_hand_sheets DEFAULT (125),
-    CONSTRAINT ck_settings_single_row CHECK (settings_id = 1)
+    -- XML-first import (the watcher reads these every minute, so a change applies without a restart)
+    xml_first_enabled                   BIT           NOT NULL CONSTRAINT df_settings_xml_first DEFAULT (1),   -- import an XML without waiting for its PDF
+    pdf_wait_minutes                    INT           NOT NULL CONSTRAINT df_settings_pdf_wait DEFAULT (30),   -- first "PDF missing" alert after this long
+    pdf_reminder_minutes                INT           NOT NULL CONSTRAINT df_settings_pdf_remind DEFAULT (30), -- then a reminder this often
+    alert_recipients                    NVARCHAR(1000) NOT NULL CONSTRAINT df_settings_alert_to DEFAULT (N''), -- e-mail addresses, comma or semicolon separated
+    CONSTRAINT ck_settings_single_row CHECK (settings_id = 1),
+    CONSTRAINT ck_settings_positive CHECK (a4_sheet_weight_g > 0 AND a4_sheet_thickness_mm > 0 AND machine_enclosing_min_mailpieces >= 0
+        AND machine_enclosing_max_sheets > 0 AND hand_enclosing_max_sheets > 0 AND pdf_wait_minutes >= 1 AND pdf_reminder_minutes >= 1)
+);
+GO
+
+/* Every change made to settings from the web app: who, when, what it was and what it became. */
+CREATE TABLE idoc.settings_audit (
+    audit_id     BIGINT IDENTITY(1, 1) NOT NULL CONSTRAINT pk_settings_audit PRIMARY KEY,
+    changed_at   DATETIME2(0)   NOT NULL CONSTRAINT df_settings_audit_at DEFAULT (SYSUTCDATETIME()),
+    changed_by   NVARCHAR(200)  NOT NULL,
+    setting_name NVARCHAR(100)  NOT NULL,
+    old_value    NVARCHAR(1000) NULL,
+    new_value    NVARCHAR(1000) NULL
 );
 GO
 
@@ -344,7 +362,7 @@ GO
    Batches are never combined across different envelopes, brands etc. to reach the machine threshold. */
 /* One global running number for batch codes (FileMaker: Settings::batchCode). Start it at FileMaker's current value:
    ALTER SEQUENCE idoc.batch_code_seq RESTART WITH <next number>; */
-CREATE SEQUENCE idoc.batch_code_seq AS BIGINT START WITH 1 INCREMENT BY 1 NO CYCLE;
+CREATE SEQUENCE idoc.batch_code_seq AS BIGINT START WITH 1 INCREMENT BY 1 NO CYCLE NO CACHE;  -- NO CACHE: no gaps after a server restart
 GO
 CREATE TABLE idoc.batch (
     batch_id                BIGINT IDENTITY(1, 1) NOT NULL CONSTRAINT pk_batch PRIMARY KEY,

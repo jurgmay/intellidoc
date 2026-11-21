@@ -156,6 +156,18 @@ describe('FolderWatcher with XML-first', () => {
     expect(calls.at(-1)).toBe('pair:a.xml');
     expect(await ls(dirs.processed)).toContain('a.pdf');
   });
+  it('with XML-first switched off in the settings, a lone XML waits for its PDF', async () => {
+    let on = false;
+    const w = new FolderWatcher(dirs, {
+      process: async () => ({ kind: 'processed', summary: {} }), processXmlOnly: async (x) => { calls.push(`xml:${x}`); return { kind: 'processed', summary: {} }; },
+      xmlFirstEnabled: () => on, log: () => undefined, now: () => t,
+    }, { stableMs: 10_000, retryMs: 60_000, orphanWarnMs: 120_000 });
+    await w.init(); await put('a.xml');
+    await w.scanOnce(); t += 11_000; await w.scanOnce();
+    expect(calls).toEqual([]); expect(await ls(dirs.inbox)).toEqual(['a.xml']);
+    on = true; t += 11_000; await w.scanOnce(); t += 11_000; await w.scanOnce();
+    expect(calls).toHaveLength(1);
+  });
   it('both files present at once is still processed as a pair', async () => {
     const w = mk(); await w.init(); await put('a.xml'); await put('a.pdf');
     await w.scanOnce(); t += 11_000; await w.scanOnce();
