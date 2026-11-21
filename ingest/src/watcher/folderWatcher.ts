@@ -11,6 +11,10 @@ export type Outcome =
 
 export interface WatcherDeps {
   process(xmlPath: string, pdfPath: string): Promise<Outcome>;
+  /** XML-first import: when given, an XML whose PDF has not arrived is imported on its own (job status 'Awaiting PDF'). */
+  processXmlOnly?(xmlPath: string): Promise<Outcome>;
+  /** XML-first import: when given, a PDF with no XML beside it is offered to jobs waiting for their PDF. 'unmatched' = no such job (yet). */
+  attachPdf?(pdfPath: string): Promise<Outcome | { kind: 'unmatched' }>;
   log(level: 'info' | 'warn' | 'error', msg: string): void;
   now(): number;
 }
@@ -35,6 +39,8 @@ const exists = async (p: string): Promise<boolean> => access(p).then(() => true,
 export class FolderWatcher {
   private seen = new Map<string, Seen>();
   private notBefore = new Map<string, number>();
+  /** A lone PDF no waiting job wanted: ask again after this time (does not delay a pair if the XML turns up). */
+  private unmatchedUntil = new Map<string, number>();
   private orphanLogged = new Map<string, number>();
   private orphanSince = new Map<string, number>();
   private handledDry = new Set<string>();
@@ -70,7 +76,27 @@ export class FolderWatcher {
     let handled = 0;
     for (const k of [...this.orphanSince.keys()]) { const f = stems.get(k); if (!f || (f.xml && f.pdf)) this.orphanSince.delete(k); }
     for (const [stem, f] of [...stems].sort((a, b) => a[0].localeCompare(b[0]))) {
-      if (!f.xml || !f.pdf) { this.noteOrphan(stem, f.xml ?? f.pdf!, now); continue; }
+      if (!f.xml || !f.pdf) {
+        const lone = f.xml ?? f.pdf!;
+        const single = f.xml ? this.deps.processXmlOnly : this.opts.dryRun ? undefined : this.deps.attachPdf;
+        if (!single) { this.noteOrphan(stem, lone, now); continue; }
+        if ((this.notBefore.get(stem) ?? 0) > now || (this.unmatchedUntil.get(stem) ?? 0) > now) continue;
+        let sig1: string;
+        try { const st = await stat(join(this.dirs.inbox, lone)); sig1 = `${st.size}:${st.mtimeMs}`; } catch { continue; }
+        const prev1 = this.seen.get(stem);
+        if (!prev1 || prev1.sig !== sig1) { this.seen.set(stem, { sig: sig1, since: now }); continue; }
+        if (now - prev1.since < this.opts.stableMs) continue;
+        if (this.opts.dryRun) {
+          if (this.handledDry.has(`${stem}|${sig1}`)) continue;
+          this.handledDry.add(`${stem}|${sig1}`);
+          const o = await this.runXmlOnlySafely(join(this.dirs.inbox, lone));
+          this.deps.log(o.kind === 'failed' ? 'error' : 'info', `[dry-run] ${lone} (no PDF yet): ${o.kind}${'message' in o ? ` - ${o.message}` : ''}`);
+          handled++;
+          continue;
+        }
+        if (await this.handleSingle(stem, lone, f.xml ? 'xml' : 'pdf')) handled++;
+        continue;
+      }
       if ((this.notBefore.get(stem) ?? 0) > now) continue;
       const xmlPath = join(this.dirs.inbox, f.xml);
       const pdfPath = join(this.dirs.inbox, f.pdf);
@@ -129,6 +155,45 @@ export class FolderWatcher {
     try { return await this.deps.process(xmlPath, pdfPath); } catch (e) {
       return { kind: 'failed', summary: {}, message: `Unexpected error: ${(e as Error).stack ?? (e as Error).message}` };
     }
+  }
+
+  private async runXmlOnlySafely(xmlPath: string): Promise<Outcome> {
+    try { return await this.deps.processXmlOnly!(xmlPath); } catch (e) {
+      return { kind: 'failed', summary: {}, message: `Unexpected error: ${(e as Error).stack ?? (e as Error).message}` };
+    }
+  }
+
+  /** A file on its own: an XML (imported without its PDF) or a PDF (attached to a job that is waiting for it). */
+  private async handleSingle(stem: string, name: string, kind: 'xml' | 'pdf'): Promise<boolean> {
+    const claimed = join(this.dirs.processing, name);
+    if (await exists(claimed)) { this.deps.log('warn', `${name}: name clash in processing/, skipping`); return false; }
+    try { await rename(join(this.dirs.inbox, name), claimed); } catch (e) {
+      this.deps.log('info', `${name} not ready (${(e as NodeJS.ErrnoException).code ?? 'busy'})`); this.seen.delete(stem); return false;
+    }
+    this.deps.log('info', kind === 'xml' ? `Processing ${name} (no PDF yet)` : `Checking ${name} against the job waiting for it`);
+    let outcome: Outcome | { kind: 'unmatched' };
+    try { outcome = kind === 'xml' ? await this.deps.processXmlOnly!(claimed) : await this.deps.attachPdf!(claimed); } catch (e) {
+      outcome = { kind: 'failed', summary: {}, message: `Unexpected error: ${(e as Error).stack ?? (e as Error).message}` };
+    }
+    this.seen.delete(stem);
+    if (outcome.kind === 'retry' || outcome.kind === 'unmatched') {
+      await rename(claimed, await this.freeName(this.dirs.inbox, name));
+      (outcome.kind === 'retry' ? this.notBefore : this.unmatchedUntil).set(stem, this.deps.now() + this.opts.retryMs);
+      if (outcome.kind === 'retry') this.deps.log('warn', `${name}: ${outcome.message}; will retry in ${Math.round(this.opts.retryMs / 1000)}s`);
+      else this.noteOrphan(stem, name, this.deps.now());
+      return outcome.kind === 'retry';
+    }
+    const dest = outcome.kind === 'processed' ? this.dirs.processed : outcome.kind === 'duplicate' ? this.dirs.duplicates : this.dirs.failed;
+    const final = await this.freeName(dest, name);
+    await rename(claimed, final);
+    const prefix = basename(final).slice(0, basename(final).length - name.length);
+    const label = kind === 'pdf' ? 'pdf' : '';
+    const note = join(dest, `${prefix}${parse(name).name}${label ? '.pdf' : ''}.${outcome.kind === 'failed' ? 'error.txt' : 'result.json'}`);
+    await writeFile(note, outcome.kind === 'failed'
+      ? `${outcome.message}\n\n${JSON.stringify(outcome.summary, null, 2)}\n`
+      : `${JSON.stringify(outcome.summary, null, 2)}\n`, 'utf8');
+    this.deps.log(outcome.kind === 'failed' ? 'error' : 'info', `${name}: ${outcome.kind}${outcome.kind === 'failed' ? ` - ${outcome.message.split('\n')[0]}` : ''}`);
+    return true;
   }
 
   private async handlePair(stem: string, xml: string, pdf: string): Promise<boolean> {

@@ -69,6 +69,26 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     expect(await scalar('SELECT COUNT(*) - COUNT(DISTINCT batch_code) AS n FROM idoc.batch')).toBe(0);
   });
 
+  it('XML-first: saves without a PDF, alerts when overdue, attaches the PDF later', async () => {
+    const ref = await loadReferenceData(pool);
+    const { xml } = buildXml([person('Pat', 'Late'), person('Quinn', 'Late')]);
+    const r = await ingest(xml, 'job-nopdf.xml', null, { ref, pdf: new FakePdf(0), repo });
+    expect(r.persisted).toBe(true);
+    const jobId = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-nopdf'`);
+    expect(await scalar(`SELECT COUNT(*) AS n FROM idoc.job WHERE job_id = ${jobId} AND status = N'Awaiting PDF'`)).toBe(1);
+    expect((await repo.listOverdue(30, 30)).some((j) => j.jobId === jobId)).toBe(false);
+    expect((await repo.listOverdue(-1, 30)).find((j) => j.jobId === jobId)).toMatchObject({ baseName: 'job-nopdf', packCount: 2 });
+    await repo.markAlerted(jobId);
+    expect((await repo.listOverdue(-1, 30)).some((j) => j.jobId === jobId)).toBe(false); // reminded too recently (-1 = ignore timestamp rounding)
+    expect((await repo.listOverdue(-1, 0)).some((j) => j.jobId === jobId)).toBe(true);
+    const found = await repo.findAwaitingPdf('JOB-NOPDF');
+    expect(found).toMatchObject({ jobId, alertCount: 1 });
+    expect(found!.packs).toHaveLength(2);
+    expect(await repo.markPdfReceived(jobId, 4)).toEqual({ alertCount: 1 });
+    expect(await scalar(`SELECT COUNT(*) AS n FROM idoc.job WHERE job_id = ${jobId} AND status = N'Received' AND pdf_received_at IS NOT NULL`)).toBe(1);
+    expect(await repo.findAwaitingPdf('job-nopdf')).toBeNull();
+  });
+
   it('stores address lines without the postcode line and keeps >6 lines', async () => {
     await load([{ first: 'Long', surname: 'Address', lines: ['Long Address', 'l2', 'l3', 'l4', 'l5', 'l6', 'l7', 'AB1 2CD'] }], 'job-lines.xml');
     expect(await scalar(`SELECT MAX(line_no) AS n FROM idoc.address_line al JOIN idoc.address a ON a.address_id = al.address_id WHERE a.address_id IN

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import sql from 'mssql';
-import type { Repository } from '../repository.js';
+import type { AwaitingJob, OverdueJob, PdfTracker, Repository } from '../repository.js';
 import type { Batch, IngestPack, IngestResult, Mailpiece } from '../types.js';
 
 export class DuplicatePackError extends Error {}
@@ -39,12 +39,58 @@ class Dict {
  * Persists an IngestResult into the idoc.* schema in ONE transaction (all rows or none).
  * The one-recipient-per-envelope rule is enforced again by the database (fk_pack_mailpiece_same_recipient).
  */
-export class MssqlRepository implements Repository {
+export class MssqlRepository implements Repository, PdfTracker {
   constructor(private readonly pool: sql.ConnectionPool) {}
 
   async packExists(guid: string): Promise<boolean> {
     const r = await this.pool.request().input('g', sql.UniqueIdentifier, guid).query('SELECT 1 AS x FROM idoc.pack WHERE pack_guid = @g');
     return r.recordset.length > 0;
+  }
+
+  // ---- PDF tracking (XML-first import)
+  async findAwaitingPdf(baseName: string): Promise<AwaitingJob | null> {
+    const rows = (await this.pool.request().input('b', sql.NVarChar(260), baseName).query<{ job_id: number; xml_file_name: string; customer: string; pdf_alert_count: number }>(`
+      SELECT TOP 1 j.job_id, j.xml_file_name, c.name AS customer, j.pdf_alert_count
+      FROM idoc.job AS j INNER JOIN idoc.account AS c ON c.account_id = j.account_id
+      WHERE j.status = N'Awaiting PDF' AND LOWER(j.base_name) = LOWER(@b) ORDER BY j.job_id DESC`)).recordset;
+    const j = rows[0];
+    if (!j) return null;
+    const packs = (await this.pool.request().input('j', sql.BigInt, j.job_id).query<{ pack_guid: string; start_page: number; end_page: number; page_count: number }>(
+      'SELECT CAST(pack_guid AS NVARCHAR(36)) AS pack_guid, start_page, end_page, page_count FROM idoc.pack WHERE job_id = @j')).recordset;
+    return { jobId: j.job_id, xmlName: j.xml_file_name, customerName: j.customer, alertCount: j.pdf_alert_count,
+      packs: packs.map((p) => ({ guid: p.pack_guid, startPage: p.start_page, endPage: p.end_page, pageCount: p.page_count })) };
+  }
+
+  async markPdfReceived(jobId: number, pdfPages: number): Promise<{ alertCount: number }> {
+    const r = await this.pool.request().input('j', sql.BigInt, jobId).input('pg', sql.Int, pdfPages).query<{ pdf_alert_count: number }>(`
+      UPDATE idoc.job SET status = N'Received', pdf_received_at = SYSUTCDATETIME(), page_count = @pg, pdf_error = NULL
+      OUTPUT INSERTED.pdf_alert_count WHERE job_id = @j AND status = N'Awaiting PDF'`);
+    return { alertCount: r.recordset[0]?.pdf_alert_count ?? 0 };
+  }
+
+  async markPdfRejected(jobId: number, message: string): Promise<void> {
+    await this.pool.request().input('j', sql.BigInt, jobId).input('m', sql.NVarChar(2000), message.slice(0, 2000))
+      .query(`UPDATE idoc.job SET status = N'PDF Rejected', pdf_error = @m WHERE job_id = @j AND status = N'Awaiting PDF'`);
+  }
+
+  async listOverdue(waitMinutes: number, reminderMinutes: number): Promise<OverdueJob[]> {
+    const rows = (await this.pool.request().input('w', sql.Int, waitMinutes).input('r', sql.Int, reminderMinutes).query<{
+      job_id: number; base_name: string; xml_file_name: string; customer: string; pack_count: number; page_count: number; export_date: Date; waiting: number; pdf_alert_count: number;
+    }>(`
+      SELECT j.job_id, j.base_name, j.xml_file_name, c.name AS customer, j.pack_count, j.page_count, j.export_date,
+             DATEDIFF(MINUTE, j.export_date, SYSUTCDATETIME()) AS waiting, j.pdf_alert_count
+      FROM idoc.job AS j INNER JOIN idoc.account AS c ON c.account_id = j.account_id
+      WHERE j.status = N'Awaiting PDF'
+        AND j.export_date <= DATEADD(MINUTE, -@w, SYSUTCDATETIME())
+        AND (j.pdf_last_alert_at IS NULL OR j.pdf_last_alert_at <= DATEADD(MINUTE, -@r, SYSUTCDATETIME()))
+      ORDER BY j.export_date`)).recordset;
+    return rows.map((j) => ({ jobId: j.job_id, baseName: j.base_name, xmlName: j.xml_file_name, customerName: j.customer, packCount: j.pack_count ?? 0,
+      expectedPages: j.page_count ?? 0, receivedAt: j.export_date, minutesWaiting: j.waiting, alertCount: j.pdf_alert_count }));
+  }
+
+  async markAlerted(jobId: number): Promise<void> {
+    await this.pool.request().input('j', sql.BigInt, jobId)
+      .query('UPDATE idoc.job SET pdf_last_alert_at = SYSUTCDATETIME(), pdf_alert_count = pdf_alert_count + 1 WHERE job_id = @j');
   }
 
   async saveJob(result: IngestResult): Promise<void> {
@@ -83,9 +129,9 @@ export class MssqlRepository implements Repository {
     const job = (await db.one<{ job_id: number }>(`
       INSERT INTO idoc.job (account_id, base_name, xml_file_name, pdf_file_name, export_date, status, pack_count, page_count)
       OUTPUT INSERTED.job_id
-      VALUES (@a, @b, @x, @p, SYSUTCDATETIME(), N'Received', @pc, @pg)`, [
+      VALUES (@a, @b, @x, @p, SYSUTCDATETIME(), @status, @pc, @pg)`, [
       ['a', sql.Int, customerId], ['b', sql.NVarChar(260), baseName], ['x', sql.NVarChar(260), r.xmlName],
-      ['p', sql.NVarChar(260), r.pdfName], ['pc', sql.Int, r.packs.length], ['pg', sql.Int, r.pdfPages]]))!;
+      ['p', sql.NVarChar(260), r.pdfName], ['pc', sql.Int, r.packs.length], ['pg', sql.Int, r.pdfPages], ['status', sql.NVarChar(30), r.pdfReceived ? 'Received' : 'Awaiting PDF']]))!;
     const jobId = job.job_id;
 
     // ---- dictionaries
