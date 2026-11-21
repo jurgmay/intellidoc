@@ -46,7 +46,7 @@ for (let attempt = 1; ; attempt++) {
 const dbName = (await pool.request().query('SELECT DB_NAME() AS n')).recordset[0].n as string;
 log('info', `Connected to database "${dbName}"${cfg.dryRun ? ' (DRY RUN: nothing will be saved, files stay in the inbox)' : ''}`);
 
-const real = new MssqlRepository(pool);
+const real = new MssqlRepository(pool, (jobId, e) => log('error', `Could not price job ${jobId}; its mailpieces stay unpriced: ${(e as Error).message}`));
 // XML-first and alert settings live in the database (Settings screen) and are re-read every minute; the environment values are only the fallback.
 let live: AlertSettings = { xmlFirst: cfg.xmlFirst, pdfWaitMinutes: cfg.pdfWaitMinutes, pdfReminderMinutes: cfg.pdfReminderMinutes, alertTo: cfg.alertTo };
 async function refreshSettings(): Promise<void> {
