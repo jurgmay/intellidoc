@@ -5,6 +5,9 @@ import type { Batch, IngestPack, IngestResult, Mailpiece } from '../types.js';
 
 export type BatchEventType = 'Created' | 'Printed' | 'Enclosed' | 'Despatched' | 'Cancelled';
 export interface BatchEvent { type: BatchEventType; at: Date; by: string | null; note: string | null }
+/** The job's PDF has not arrived (or was rejected), so the batch cannot go into production yet. */
+export class ProductionGateError extends Error {}
+export const PRODUCTION_EVENTS: readonly BatchEventType[] = ['Printed', 'Enclosed', 'Despatched'];
 export class DuplicatePackError extends Error {}
 export class JobAlreadyExistsError extends Error {}
 export class ReferenceError_ extends Error {}
@@ -110,16 +113,24 @@ export class MssqlRepository implements Repository, PdfTracker {
         for (const [n, t, v] of inputs) r.input(n, t, v);
         return r.query(text);
       };
-      const cur = (await run('SELECT current_status AS s FROM idoc.batch WITH (UPDLOCK, ROWLOCK) WHERE batch_id = @b', [['b', sql.BigInt, batchId]])).recordset[0] as { s: string } | undefined;
+      const cur = (await run(`SELECT b.current_status AS s, b.batch_code AS code, j.base_name AS job, j.status AS js, j.pdf_error AS err
+                              FROM idoc.batch b WITH (UPDLOCK, ROWLOCK) JOIN idoc.job j ON j.job_id = b.job_id WHERE b.batch_id = @b`, [['b', sql.BigInt, batchId]]))
+        .recordset[0] as { s: string; code: number; job: string; js: string; err: string | null } | undefined;
       if (!cur) throw new Error(`Batch ${batchId} does not exist`);
       if (cur.s === 'Cancelled') throw new Error(`Batch ${batchId} is cancelled`);
+      // The production gate: nothing is printed, enclosed or despatched before the job's PDF has arrived and been checked.
+      if (PRODUCTION_EVENTS.includes(type) && cur.js !== 'Received') {
+        throw new ProductionGateError(cur.js === 'Awaiting PDF'
+          ? `Batch ${cur.code} cannot be ${type.toLowerCase()} yet: the PDF for job "${cur.job}" has not arrived.`
+          : `Batch ${cur.code} cannot be ${type.toLowerCase()}: the PDF for job "${cur.job}" was rejected${cur.err ? ` (${cur.err})` : ''}.`);
+      }
       await run(`INSERT INTO idoc.batch_event (batch_id, event_type, occurred_at, recorded_by, note)
                  VALUES (@b, @t, COALESCE(@at, SYSUTCDATETIME()), @by, @note);
                  UPDATE idoc.batch SET current_status = @t WHERE batch_id = @b;`, [
         ['b', sql.BigInt, batchId], ['t', sql.NVarChar(30), type], ['at', sql.DateTime2, opts.at ?? null],
         ['by', sql.NVarChar(100), opts.by ?? null], ['note', sql.NVarChar(400), opts.note ?? null]]);
       await tx.commit();
-    } catch (e) { await tx.rollback(); throw e; }
+    } catch (e) { try { await tx.rollback(); } catch { /* already rolled back by the database */ } throw e; }
   }
 
   async batchEvents(batchId: number): Promise<BatchEvent[]> {

@@ -756,6 +756,49 @@ GROUP BY m.invoicing_account_id, m.invoicing_account_code, m.invoicing_account_n
 GO
 
 /* ===========================================================================
+   11. PRODUCTION GATE
+   A batch can only be printed, enclosed or despatched once the PDF of its job has arrived and been checked (job.status =
+   'Received'). A job that is 'Awaiting PDF' or 'PDF Rejected' holds all of its batches. Cancelling is always allowed.
+   MssqlRepository.recordBatchEvent checks this first and gives a readable message; the triggers are the backstop for any
+   other writer (they stop a direct insert into batch_event or a direct update of batch.current_status).
+   =========================================================================== */
+CREATE VIEW idoc.v_batch_production AS
+SELECT b.batch_id,
+       b.batch_code,
+       b.job_id,
+       j.base_name AS job_name,
+       j.status    AS job_status,
+       b.current_status,
+       CASE WHEN j.status = N'Received' THEN NULL
+            WHEN j.status = N'Awaiting PDF' THEN N'Waiting for the PDF'
+            ELSE N'PDF rejected' + COALESCE(N': ' + j.pdf_error, N'') END AS hold_reason,
+       CAST(CASE WHEN j.status = N'Received' AND b.current_status = N'Created' THEN 1 ELSE 0 END AS BIT) AS can_print
+FROM idoc.batch AS b
+INNER JOIN idoc.job AS j ON j.job_id = b.job_id;
+GO
+
+CREATE TRIGGER idoc.trg_batch_event_gate ON idoc.batch_event AFTER INSERT AS
+BEGIN
+    SET NOCOUNT ON;
+    IF EXISTS (SELECT 1 FROM inserted AS i
+               INNER JOIN idoc.batch AS b ON b.batch_id = i.batch_id
+               INNER JOIN idoc.job AS j ON j.job_id = b.job_id
+               WHERE i.event_type IN (N'Printed', N'Enclosed', N'Despatched') AND j.status <> N'Received')
+        THROW 50001, N'Production gate: a batch cannot be printed, enclosed or despatched until the PDF of its job has been received.', 1;
+END;
+GO
+
+CREATE TRIGGER idoc.trg_batch_status_gate ON idoc.batch AFTER UPDATE AS
+BEGIN
+    SET NOCOUNT ON;
+    IF UPDATE(current_status)
+       AND EXISTS (SELECT 1 FROM inserted AS i
+                   INNER JOIN deleted AS d ON d.batch_id = i.batch_id
+                   INNER JOIN idoc.job AS j ON j.job_id = i.job_id
+                   WHERE i.current_status <> d.current_status AND i.current_status IN (N'Printed', N'Enclosed', N'Despatched') AND j.status <> N'Received')
+        THROW 50001, N'Production gate: a batch cannot be printed, enclosed or despatched until the PDF of its job has been received.', 1;
+END;
+
    12. COSTING MODELS
    A costing model is a named price list that belongs to a customer (the account that holds the settings) and applies between two
    dates. A customer can have several over time; the one in force on the production date prices the mailpiece. A sub-account that
