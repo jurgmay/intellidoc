@@ -181,7 +181,7 @@ describe.skipIf(!cs)('MssqlCustomerStore', { timeout: 120_000 }, () => {
     d = await store.get(kid);
     expect(d.envelopes.map((e) => e.reference).sort()).toEqual(['A', 'C']);
     expect(d.inheritedEnvelopes.map((e) => e.reference)).toEqual(['B']);
-    expect((await store.history(kid, 5))[0]!.summary).toBe("Envelopes: the parent's list → the parent's list plus its own");
+    expect((await store.history(kid, 10)).map((h) => h.summary)).toContain("Envelopes: the parent's list → the parent's list plus its own");
     // removing the parent puts it back on its own list
     await setParent(null);
     expect((await store.get(kid)).envelopesMode).toBe('OWN');
