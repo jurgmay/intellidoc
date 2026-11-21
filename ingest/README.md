@@ -170,3 +170,9 @@ One A4 run sheet per batch, plus one merged PDF per job (FileMaker: "Create Run 
 - Not yet: large-print flag, batch comments, the separate insert page, spoil run sheets, e-mail and archive.
 
 An existing database needs the new sequence/column: re-run `initDevDb.ts --reset` and the reference import (a scratch DB has no jobs worth keeping).
+
+## Pending job numbers
+
+A customer can be given next month's job number in advance (Customers > Details > Pending job number). On the 1st of that month (London time) it replaces the job number and the pending field is cleared; each move is written to the customer's History. `src/mssql/jobNumbers.ts` does the move. The watcher runs it every minute, and `runsheets` runs it before it reads a job number, so a run sheet made on the 1st already has the new number. It is safe to run repeatedly.
+
+This added two columns to `idoc.account` (`pending_mis_job_number`, `pending_job_number_from`): reset the scratch database (`npm run db:reset`, or `npm run db:rebuild <folder>`).

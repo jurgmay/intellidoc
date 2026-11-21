@@ -9,7 +9,7 @@ let app: FastifyInstance;
 let store: MemoryCustomerStore;
 let acme: number;
 const flags = (over: Record<string, boolean> = {}) => ({ ...Object.fromEntries(FLAGS.map((f) => [f, false])), ...over });
-const details = (over: Record<string, unknown> = {}) => ({ code: 'ACME', name: 'Acme Ltd', misJobNumber: null, returnAddress: null, batchingKey: null, packSequenceKey: null, parentId: null, flags: flags(), ...over });
+const details = (over: Record<string, unknown> = {}) => ({ code: 'ACME', name: 'Acme Ltd', misJobNumber: null, pendingJobNumber: null, returnAddress: null, batchingKey: null, packSequenceKey: null, parentId: null, flags: flags(), ...over });
 const env = (over: Record<string, unknown> = {}) => ({ brandId: null, deliveryBand: '2nd Class', postalRateId: 1, stockItemId: 10, reference: null, externalName: null, isOversticker: false, ...over });
 
 beforeEach(async () => {
@@ -67,6 +67,49 @@ describe('create and edit details', () => {
   it('404s for an unknown or malformed id', async () => {
     expect((await call('GET', '/api/customers/9999')).statusCode).toBe(404);
     expect((await call('GET', '/api/customers/abc')).statusCode).toBe(404);
+  });
+});
+
+describe('pending job number', () => {
+  it('starts on the 1st of next month and appears in the list, the detail and the history', async () => {
+    store.today = () => '2026-11-21';
+    const r = await call('PUT', `/api/customers/${acme}`, details({ misJobNumber: '24518', pendingJobNumber: '24601' }));
+    expect(r.json()).toMatchObject({ misJobNumber: '24518', pendingJobNumber: '24601', pendingFrom: '2026-12-01' });
+    expect((await call('GET', '/api/customers')).json().rows.find((x: { id: number }) => x.id === acme)).toMatchObject({ misJobNumber: '24518', pendingJobNumber: '24601' });
+    expect((await call('GET', `/api/customers/${acme}/history`)).json().rows[0].summary).toBe('Pending job number: (none) → "24601" (takes effect 2026-12-01)');
+    expect((await call('GET', '/api/customers?search=24601')).json().rows).toHaveLength(1);
+  });
+  it('rolls over the year in December', async () => {
+    store.today = () => '2026-12-15';
+    expect((await call('PUT', `/api/customers/${acme}`, details({ pendingJobNumber: '25001' }))).json().pendingFrom).toBe('2027-01-01');
+  });
+  it('keeps the original start date when the pending number is left alone, and restarts it when changed', async () => {
+    store.today = () => '2026-11-05';
+    await call('PUT', `/api/customers/${acme}`, details({ pendingJobNumber: '111' }));
+    store.today = () => '2026-11-28';
+    expect((await call('PUT', `/api/customers/${acme}`, details({ name: 'Renamed', pendingJobNumber: '111' }))).json().pendingFrom).toBe('2026-12-01');
+    store.today = () => '2026-12-02'; // the 1st has passed without a rollover running; a changed number now waits for January
+    expect((await call('PUT', `/api/customers/${acme}`, details({ pendingJobNumber: '222' }))).json().pendingFrom).toBe('2027-01-01');
+  });
+  it('can be cancelled', async () => {
+    await call('PUT', `/api/customers/${acme}`, details({ pendingJobNumber: '111' }));
+    const r = await call('PUT', `/api/customers/${acme}`, details({ pendingJobNumber: null }));
+    expect(r.json()).toMatchObject({ pendingJobNumber: null, pendingFrom: null });
+  });
+  it('must be stated, so a client cannot cancel it by leaving it out', async () => {
+    const { pendingJobNumber: _omit, ...rest } = details();
+    expect((await call('PUT', `/api/customers/${acme}`, rest)).json().errors.pendingJobNumber).toMatch(/must be given/);
+  });
+  it('moves into the job number on its date, clears itself, and is recorded', async () => {
+    store.today = () => '2026-11-21';
+    await call('PUT', `/api/customers/${acme}`, details({ misJobNumber: '24518', pendingJobNumber: '24601' }));
+    store.today = () => '2026-11-30';
+    expect(await store.applyDuePending()).toBe(0);
+    store.today = () => '2026-12-01';
+    expect(await store.applyDuePending()).toBe(1);
+    expect(await store.applyDuePending()).toBe(0);
+    expect((await call('GET', `/api/customers/${acme}`)).json()).toMatchObject({ misJobNumber: '24601', pendingJobNumber: null, pendingFrom: null });
+    expect((await call('GET', `/api/customers/${acme}/history`)).json().rows[0]).toMatchObject({ changedBy: 'system', summary: 'Job number: "24518" → "24601" (the pending job number took effect)' });
   });
 });
 

@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { buildRunSheet } from './data.js';
 import { renderRunSheet, mergePdfs } from './pdf.js';
+import { applyDuePendingJobNumbers } from '../mssql/jobNumbers.js';
 import { loadRunSheetInputs } from './query.js';
 import sql from 'mssql';
 
@@ -11,6 +12,7 @@ export async function writeRunSheets(jobId: number, outDir: string, logoPath?: s
   if (!cs) throw new Error('Set INTELLIDOC_DB first');
   const pool = await new sql.ConnectionPool(cs).connect();
   try {
+    await applyDuePendingJobNumbers(pool); // a job number due today must be on the run sheet
     const inputs = await loadRunSheetInputs(pool, jobId);
     if (!inputs.length) throw new Error(`Job ${jobId} has no batches`);
     const logo = logoPath ? new Uint8Array(await readFile(logoPath)) : undefined;

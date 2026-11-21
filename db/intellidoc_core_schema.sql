@@ -175,13 +175,17 @@ CREATE TABLE idoc.account (
     is_deleted                 BIT                NOT NULL CONSTRAINT df_account_deleted DEFAULT (0),
     colour_mode                TINYINT            NULL,
     mis_job_number             NVARCHAR(50)       NULL,
+    -- The next job number, set in advance. On pending_job_number_from (the 1st of a month) it replaces mis_job_number and is cleared.
+    pending_mis_job_number     NVARCHAR(50)       NULL,
+    pending_job_number_from    DATE               NULL,
     return_address             NVARCHAR(500)      NULL,
     -- Passthrough keys that drive sequencing and batching (replace packSequenceJSON / batchingJSON)
     pack_sequence_key_id       INT                NULL CONSTRAINT fk_account_seqkey REFERENCES idoc.passthrough_key (passthrough_key_id),
     batching_key_id            INT                NULL CONSTRAINT fk_account_batchkey REFERENCES idoc.passthrough_key (passthrough_key_id),
     created_at                 DATETIME2(0)       NOT NULL CONSTRAINT df_account_created DEFAULT (SYSUTCDATETIME()),
     legacy_id                  UNIQUEIDENTIFIER   NULL,   -- FileMaker Customers.id (reference import only)
-    CONSTRAINT uq_account_code UNIQUE (account_code)
+    CONSTRAINT uq_account_code UNIQUE (account_code),
+    CONSTRAINT ck_account_pending CHECK ((pending_mis_job_number IS NULL AND pending_job_number_from IS NULL) OR (pending_mis_job_number IS NOT NULL AND pending_job_number_from IS NOT NULL))
 );
 GO
 CREATE UNIQUE INDEX ux_account_legacy ON idoc.account (legacy_id) WHERE legacy_id IS NOT NULL;

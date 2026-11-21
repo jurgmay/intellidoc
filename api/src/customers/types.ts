@@ -1,5 +1,5 @@
 export interface CustomerRow {
-  id: number; code: string; name: string; misJobNumber: string | null;
+  id: number; code: string; name: string; misJobNumber: string | null; pendingJobNumber: string | null;
   isAddressMatching: boolean; isTesting: boolean; isDeleted: boolean;
   /** The hierarchy parent (not the same as the grouping account that holds the settings). */
   parentId: number | null; parentCode: string | null;
@@ -21,6 +21,8 @@ export type FlagKey = (typeof FLAGS)[number];
 
 export interface CustomerDetail {
   id: number; code: string; name: string; misJobNumber: string | null; returnAddress: string | null; colourMode: number | null;
+  /** The next job number, and the date (1st of a month, London) on which it replaces the job number. */
+  pendingJobNumber: string | null; pendingFrom: string | null;
   flags: Record<FlagKey, boolean>;
   batchingKey: string | null; packSequenceKey: string | null;
   parent: ParentView | null; children: ChildView[];
@@ -30,7 +32,7 @@ export interface CustomerDetail {
 
 /** What can be edited on the customer record itself. */
 export interface CustomerDetailsInput {
-  code: string; name: string; misJobNumber: string | null; returnAddress: string | null;
+  code: string; name: string; misJobNumber: string | null; pendingJobNumber: string | null; returnAddress: string | null;
   flags: Record<FlagKey, boolean>; batchingKey: string | null; packSequenceKey: string | null;
   /** null = top of its hierarchy. Must be another customer, and never itself or one of its own descendants. */
   parentId: number | null;
@@ -66,4 +68,6 @@ export interface CustomerStore {
   setSequenceRules(customerId: number, rules: SequenceRule[], by: string): Promise<void>;
   setEmails(customerId: number, emails: string[], by: string): Promise<void>;
   history(customerId: number, limit: number): Promise<AuditEntry[]>;
+  /** Moves every pending job number that is due into the job number. Returns how many moved. */
+  applyDuePending(): Promise<number>;
 }

@@ -1,3 +1,4 @@
+import { applyDuePendingJobNumbers } from './mssql/jobNumbers.js';
 import { appendFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import sql from 'mssql';
@@ -71,7 +72,11 @@ for (const s of ['SIGINT', 'SIGTERM'] as const) process.on(s, () => { log('info'
 await watcher.init();
 if (!cfg.dryRun && !cfg.once) {
   const dog = new PdfWatchdog(real, mailer, { get waitMinutes() { return live.pdfWaitMinutes; }, get reminderMinutes() { return live.pdfReminderMinutes; }, get to() { return live.alertTo; }, inbox: cfg.dirs.inbox }, log);
-  const tick = (): void => { refreshSettings().then(() => (live.xmlFirst ? dog.check() : 0)).catch((e) => log('error', `PDF check failed: ${(e as Error).message}`)); };
+  const rollJobNumbers = (): void => {
+    applyDuePendingJobNumbers(pool).then((n) => { if (n > 0) log('info', `${n} pending job number${n === 1 ? '' : 's'} took effect`); })
+      .catch((e) => log('error', `Pending job numbers: ${(e as Error).message}`));
+  };
+  const tick = (): void => { rollJobNumbers(); refreshSettings().then(() => (live.xmlFirst ? dog.check() : 0)).catch((e) => log('error', `PDF check failed: ${(e as Error).message}`)); };
   const timer = setInterval(tick, 60_000);
   abortSignalCleanup(timer);
   tick();

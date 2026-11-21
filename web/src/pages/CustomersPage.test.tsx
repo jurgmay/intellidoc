@@ -10,7 +10,7 @@ import { CustomersPage } from './CustomersPage';
 
 const flags = { isAddressMatching: true, isArchiveMailpieces: false, isCreateOutputFiles: false, isCreateSeparateBatches: false, isNhs: false, isSso: false, isSameDayService: false, isUseMrdf: false, isTesting: false, isDeleted: false };
 const detail = () => ({
-  id: 7, code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', returnAddress: 'PO Box 1', colourMode: null, flags, batchingKey: 'Department', packSequenceKey: null,
+  id: 7, code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', pendingJobNumber: '24601', pendingFrom: '2026-12-01', returnAddress: 'PO Box 1', colourMode: null, flags, batchingKey: 'Department', packSequenceKey: null,
   parent: null, children: [{ id: 9, code: 'ACME-HL', name: 'Highline Solicitors', isDeleted: false }],
   accounts: [{ id: 8, code: 'ACME-SC', name: 'Acme Scotland', isDeleted: false }],
   brands: [{ id: 21, name: 'Home', usage: 1 }, { id: 22, name: 'Business', usage: 0 }],
@@ -22,7 +22,7 @@ const lookups = {
   postalRates: [{ id: 1, label: 'Royal Mail – 2nd Class (Letter), up to 100g', format: 'Letter' }, { id: 2, label: 'Royal Mail – 1st Class (Letter), up to 100g', format: 'Letter' }],
   envelopeStock: [{ id: 10, code: 'WH0101', description: 'C5 white window', size: 'C5' }],
 };
-const row = { id: 7, code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', parentId: null as number | null, parentCode: null as string | null, isAddressMatching: true, isTesting: false, isDeleted: false, accountCount: 1, brandCount: 2, envelopeCount: 1 };
+const row = { id: 7, code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', pendingJobNumber: '24601' as string | null, parentId: null as number | null, parentCode: null as string | null, isAddressMatching: true, isTesting: false, isDeleted: false, accountCount: 1, brandCount: 2, envelopeCount: 1 };
 
 let calls: { url: string; method: string; body?: any }[];
 let respond: (url: string, method: string, body: any) => { status: number; json?: unknown };
@@ -84,6 +84,35 @@ describe('Customers list', () => {
   });
 });
 
+describe('Job numbers', () => {
+  it('shows the job number and the pending job number in the list, with centred headings', async () => {
+    wrap('/customers');
+    await screen.findByText('Acme Energy Ltd');
+    const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
+    expect(headers).toEqual(['Name', 'Account code', 'Job number', 'Pending job number', 'Accounts', 'Brands', 'Envelopes', 'Flags']);
+    const cells = within(screen.getAllByRole('row')[1]!).getAllByRole('cell').map((c) => c.textContent);
+    expect(cells.slice(2, 7)).toEqual(['24518', '24601', '1', '2', '1']);
+    for (const name of ['Job number', 'Pending job number', 'Accounts', 'Brands', 'Envelopes']) {
+      expect(screen.getByRole('columnheader', { name })).toHaveStyle({ textAlign: 'center' });
+    }
+  });
+  it('says on the Details tab when the pending number takes over, and saves a changed one', async () => {
+    wrap('/customers/7');
+    expect(await screen.findByText(/Becomes the job number on 1 December 2026/)).toBeInTheDocument();
+    const field = screen.getByLabelText('Pending job number');
+    await userEvent.clear(field); await userEvent.type(field, '24777');
+    expect(screen.getByText(/Becomes the job number on the 1st of next month/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.find((c) => c.method === 'PUT')?.body).toMatchObject({ misJobNumber: '24518', pendingJobNumber: '24777' }));
+  });
+  it('sends null to clear the pending number', async () => {
+    wrap('/customers/7');
+    await userEvent.clear(await screen.findByLabelText('Pending job number'));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.find((c) => c.method === 'PUT')?.body).toMatchObject({ pendingJobNumber: null }));
+  });
+});
+
 describe('Hierarchy', () => {
   it('lists a child customer directly under its parent', async () => {
     const child = { ...row, id: 9, code: 'ACME-HL', name: 'Highline Solicitors', parentId: 7, parentCode: 'ACME' };
@@ -130,10 +159,10 @@ describe('Customer page', () => {
     wrap('/customers/7');
     const save = await screen.findByRole('button', { name: 'Save' });
     expect(save).toBeDisabled();
-    const mis = screen.getByLabelText(/MIS job number/);
+    const mis = screen.getByLabelText('Job number');
     await userEvent.clear(mis); await userEvent.type(mis, '999');
     await userEvent.click(save);
-    await waitFor(() => expect(calls.find((c) => c.method === 'PUT')?.body).toMatchObject({ code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '999', batchingKey: 'Department', parentId: null, flags: { isAddressMatching: true } }));
+    await waitFor(() => expect(calls.find((c) => c.method === 'PUT')?.body).toMatchObject({ code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '999', pendingJobNumber: '24601', batchingKey: 'Department', parentId: null, flags: { isAddressMatching: true } }));
   });
 
   it('shows the envelope settings and adds one with the chosen values', async () => {
