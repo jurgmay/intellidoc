@@ -24,7 +24,7 @@ in one transaction.
     await ingest(xml, xmlName, pdfPath, { ref, pdf: new CliPdfInspector(), repo });
 
 Behaviour worth knowing:
-- Account config (matching flag, batching key, rules, brands, envelopes) is read from the account that holds the settings: the account itself, or the nearest ancestor that does not inherit (`idoc.v_account_owner`);
+- Account config (matching flag, batching key, rules, pack sequence, brands, envelopes) is read per group from the accounts that make it up (`idoc.v_account_setting_source`): the account itself, its parents, or both, as the account's inheritance choice says; an account that inherits all its settings follows its parent;
   the submitting account is kept on each pack. Batches and mailpieces belong to the customer.
 - Unknown paper and brand values arriving in the XML are created (paper `batch_name` defaults to the upper-cased name).
   Unknown accounts, stock codes, postal formats and postal services are errors and roll the whole job back.
@@ -177,9 +177,9 @@ A customer can be given next month's job number in advance (Customers > Details 
 
 This added three columns to `idoc.account` (`pending_mis_job_number`, `pending_job_number_from`, `job_number_rollover_day`) and removed `is_nhs` and `is_create_separate_batches`: reset the scratch database (`npm run db:reset`, or `npm run db:rebuild <folder>`).
 
-## Envelope inheritance
+## Settings inheritance
 
-An account's envelope list is its own rows (`OWN`), its parent's effective list (`INHERIT`) or the parent's plus its own (`EXTEND`), set per account in `account.envelopes_mode`. `idoc.v_account_envelope_source` resolves it; the loader reads the effective list and, where a nearer source has an entry with the same brand name, delivery band, postal rate and reference, uses the nearer one. The schema changed, so reset the scratch database (`npm run db:rebuild <folder>`).
+Five groups of settings each have their own choice on the account: `envelopes_mode`, `brands_mode`, `matching_mode` (address matching on or off, batching key, matching rules), `sequence_mode` (pack sequence key and rules) and `emails_mode`. A group is the account's own rows (`OWN`), its parent's effective rows (`INHERIT`) or the parent's plus its own (`EXTEND`). `idoc.v_account_setting_source` resolves them (nearest source first; `idoc.v_account_envelope_source` is its envelope part). The loader reads the effective lists; where a nearer source has an entry with the same key (envelopes: brand name, delivery band, postal rate and reference; brands: name; sequence: value) it uses the nearer one. The single values (address matching, batching key, pack sequence key) come from the nearest source: the parent's under `INHERIT`, the account's own otherwise. The schema changed, so reset the scratch database (`npm run db:rebuild <folder>`).
 
 ## Invoicing account and batching boundary
 

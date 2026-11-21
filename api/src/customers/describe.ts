@@ -1,4 +1,4 @@
-import { FLAGS, type EnvelopesMode, type CustomerDetail, type CustomerDetailsInput, type EnvelopeInput, type FlagKey, type MatchRule, type SequenceRule } from './types.js';
+import { FLAGS, type InheritMode, type SettingKey, type CustomerDetail, type CustomerDetailsInput, type EnvelopeInput, type FlagKey, type MatchRule, type SequenceRule } from './types.js';
 
 /** Plain-English names for the account flags, shared by the audit log and (via the API) the screen. */
 export const FLAG_LABELS: Record<FlagKey, string> = {
@@ -29,8 +29,15 @@ export function describeDetailsChange(old: CustomerDetail, next: CustomerDetails
   return out;
 }
 
-export const ENVELOPES_MODE_LABELS: Record<EnvelopesMode, string> = { OWN: 'its own list', INHERIT: "the parent's list", EXTEND: "the parent's list plus its own" };
-export const describeEnvelopesMode = (from: EnvelopesMode, to: EnvelopesMode): string => `Envelopes: ${ENVELOPES_MODE_LABELS[from]} → ${ENVELOPES_MODE_LABELS[to]}`;
+const SETTING_LABELS: Record<SettingKey, { name: string; noun: string }> = {
+  envelopes: { name: 'Envelopes', noun: 'list' }, brands: { name: 'Brands', noun: 'list' }, matching: { name: 'Matching', noun: 'settings' },
+  sequence: { name: 'Pack sequence', noun: 'settings' }, emails: { name: 'Notification e-mails', noun: 'list' },
+};
+export const describeMode = (setting: SettingKey, from: InheritMode, to: InheritMode): string => {
+  const { name, noun } = SETTING_LABELS[setting];
+  const label: Record<InheritMode, string> = { OWN: `its own ${noun}`, INHERIT: `the parent's ${noun}`, EXTEND: `the parent's ${noun} plus its own` };
+  return `${name}: ${label[from]} → ${label[to]}`;
+};
 
 export const describeEnvelope = (brand: string | null, band: string, rate: string, stock: string): string =>
   `${brand ?? 'any brand'} / ${band} / ${rate} / ${stock}`;

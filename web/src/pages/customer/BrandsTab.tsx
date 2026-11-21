@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Button, Group, Modal, Paper, Stack, Table, Text, TextInput } from '@mantine/core';
+import { Alert, Button, Group, Modal, Paper, Stack, Table, Text, TextInput } from '@mantine/core';
 import { IconPlus } from '@tabler/icons-react';
 import { addBrand, deleteBrand, renameBrand, type BrandView } from '../../api/customers';
+import { ModeSelect, FromParent } from './ModeSelect';
 import { run, type TabProps } from './shared';
 
 export function BrandsTab({ detail, reload }: TabProps) {
+  const mode = detail.modes.brands;
   const [editing, setEditing] = useState<BrandView | 'new' | null>(null);
   const [name, setName] = useState('');
   const [error, setError] = useState<string | undefined>();
@@ -24,11 +26,15 @@ export function BrandsTab({ detail, reload }: TabProps) {
 
   return (
     <Stack>
+      <ModeSelect detail={detail} setting="brands" label="Where the brand list comes from" noun="list" reload={reload}
+        hint="A brand here with the same name as one of the parent's replaces it. Brands are matched by name, so an envelope setting for a parent's brand applies to the same name here.">
+        {mode === 'INHERIT' && detail.brands.length > 0 && <Alert color="yellow" variant="light" mt="sm">This customer's own brands are kept but not used while it takes the parent's list.</Alert>}
+      </ModeSelect>
       <Group justify="space-between">
         <Text size="sm" c="dimmed" maw={700}>
           A brand is matched by name from the XML. Batches never combine across brands. Envelopes can be set for a brand, and a brand in use cannot be deleted.
         </Text>
-        <Button leftSection={<IconPlus size={16} />} onClick={() => open('new')}>Add brand</Button>
+        <Button leftSection={<IconPlus size={16} />} onClick={() => open('new')} disabled={mode === 'INHERIT'}>Add brand</Button>
       </Group>
       <Paper withBorder>
         <Table verticalSpacing="sm">
@@ -50,6 +56,7 @@ export function BrandsTab({ detail, reload }: TabProps) {
           </Table.Tbody>
         </Table>
       </Paper>
+      <FromParent head={['Brand']} rows={detail.inherited.brands.map((b) => ({ key: b.name, cells: [b.name], from: b.from.name }))} />
       <Modal opened={editing !== null} onClose={() => setEditing(null)} title={editing === 'new' ? 'Add brand' : 'Rename brand'}>
         <Stack>
           <TextInput label="Brand name" value={name} onChange={(e) => setName(e.currentTarget.value)} error={error} data-autofocus />
