@@ -34,7 +34,7 @@ A customer is an `idoc.account` with no grouping account; its sub-accounts point
 |---|---|
 | `GET /api/customers?search=&deleted=1` | list with account, brand and envelope counts |
 | `POST /api/customers` | `{ code, name }` |
-| `GET` / `PUT /api/customers/:id` | the whole customer; PUT saves code, name, MIS job number, return address, flags, batching key, pack sequence key |
+| `GET` / `PUT /api/customers/:id` | the whole customer; PUT saves code, name, MIS job number, return address, flags, batching key, pack sequence key and `parentId` (hierarchy parent, `null` for none; must be another customer and never a loop) |
 | `GET /api/customers/lookups` | passthrough keys, delivery bands, postal rates, envelope stock, flag labels |
 | `GET /api/customers/:id/history` | the change history |
 | `POST /api/customers/:id/accounts`, `PUT /api/accounts/:id` | sub-accounts (removing one is a soft delete) |

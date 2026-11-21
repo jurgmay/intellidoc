@@ -33,7 +33,7 @@ export function CustomerPage() {
   const patchDetails = async (patch: Partial<DetailsInput>): Promise<void> => {
     const body: DetailsInput = {
       code: detail.code, name: detail.name, misJobNumber: detail.misJobNumber, returnAddress: detail.returnAddress,
-      flags: detail.flags, batchingKey: detail.batchingKey, packSequenceKey: detail.packSequenceKey, ...patch,
+      flags: detail.flags, batchingKey: detail.batchingKey, packSequenceKey: detail.packSequenceKey, parentId: detail.parent?.id ?? null, ...patch,
     };
     const res = await run(() => saveDetails(id, body), 'Customer saved');
     if (!res.ok) throw Object.assign(new Error(res.message), { fieldErrors: res.fieldErrors });
@@ -50,12 +50,13 @@ export function CustomerPage() {
           <Badge variant="outline">{detail.code}</Badge>
           {detail.flags.isDeleted && <Badge color="gray">Deleted</Badge>}
         </Group>
+        {detail.parent && <Text size="sm" mt={4}>Part of <Anchor component={Link} to={`/customers/${detail.parent.id}`}>{detail.parent.name}</Anchor> ({detail.parent.code})</Text>}
         <Text c="dimmed" size="sm">Changes are saved as soon as you press Save on a tab, and take effect for the next file imported.</Text>
       </div>
       <Tabs defaultValue="details" keepMounted={false}>
         <Tabs.List>
           <Tabs.Tab value="details">Details</Tabs.Tab>
-          <Tabs.Tab value="accounts">Accounts ({detail.accounts.filter((a) => !a.isDeleted).length})</Tabs.Tab>
+          <Tabs.Tab value="accounts">Accounts ({detail.accounts.filter((a) => !a.isDeleted).length + detail.children.filter((c) => !c.isDeleted).length})</Tabs.Tab>
           <Tabs.Tab value="brands">Brands ({detail.brands.length})</Tabs.Tab>
           <Tabs.Tab value="envelopes">Envelopes ({detail.envelopes.length})</Tabs.Tab>
           <Tabs.Tab value="matching">Matching &amp; batching</Tabs.Tab>

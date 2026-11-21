@@ -9,7 +9,7 @@ let app: FastifyInstance;
 let store: MemoryCustomerStore;
 let acme: number;
 const flags = (over: Record<string, boolean> = {}) => ({ ...Object.fromEntries(FLAGS.map((f) => [f, false])), ...over });
-const details = (over: Record<string, unknown> = {}) => ({ code: 'ACME', name: 'Acme Ltd', misJobNumber: null, returnAddress: null, batchingKey: null, packSequenceKey: null, flags: flags(), ...over });
+const details = (over: Record<string, unknown> = {}) => ({ code: 'ACME', name: 'Acme Ltd', misJobNumber: null, returnAddress: null, batchingKey: null, packSequenceKey: null, parentId: null, flags: flags(), ...over });
 const env = (over: Record<string, unknown> = {}) => ({ brandId: null, deliveryBand: '2nd Class', postalRateId: 1, stockItemId: 10, reference: null, externalName: null, isOversticker: false, ...over });
 
 beforeEach(async () => {
@@ -67,6 +67,41 @@ describe('create and edit details', () => {
   it('404s for an unknown or malformed id', async () => {
     expect((await call('GET', '/api/customers/9999')).statusCode).toBe(404);
     expect((await call('GET', '/api/customers/abc')).statusCode).toBe(404);
+  });
+});
+
+describe('hierarchy', () => {
+  it('sets a parent, lists the child under it, and shows both in the list and detail', async () => {
+    const child = (await call('POST', '/api/customers', { code: 'CHILD', name: 'Child Co' })).json().id;
+    const r = await call('PUT', `/api/customers/${child}`, details({ code: 'CHILD', name: 'Child Co', parentId: acme }));
+    expect(r.statusCode).toBe(200);
+    expect(r.json().parent).toEqual({ id: acme, code: 'ACME', name: 'Acme Ltd' });
+    expect((await call('GET', `/api/customers/${acme}`)).json().children).toEqual([{ id: child, code: 'CHILD', name: 'Child Co', isDeleted: false }]);
+    const row = (await call('GET', '/api/customers')).json().rows.find((x: { id: number }) => x.id === child);
+    expect(row).toMatchObject({ parentId: acme, parentCode: 'ACME' });
+    expect((await call('GET', `/api/customers/${child}/history`)).json().rows[0].summary).toBe('Parent: (none) → "ACME"');
+  });
+  it('can clear a parent again', async () => {
+    const child = (await call('POST', '/api/customers', { code: 'CHILD', name: 'Child Co' })).json().id;
+    await call('PUT', `/api/customers/${child}`, details({ code: 'CHILD', name: 'Child Co', parentId: acme }));
+    const r = await call('PUT', `/api/customers/${child}`, details({ code: 'CHILD', name: 'Child Co', parentId: null }));
+    expect(r.json().parent).toBeNull();
+  });
+  it('refuses itself, an unknown customer, and a loop through its own descendants', async () => {
+    const child = (await call('POST', '/api/customers', { code: 'CHILD', name: 'Child Co' })).json().id;
+    const grand = (await call('POST', '/api/customers', { code: 'GRAND', name: 'Grand Co' })).json().id;
+    await call('PUT', `/api/customers/${child}`, details({ code: 'CHILD', name: 'Child Co', parentId: acme }));
+    await call('PUT', `/api/customers/${grand}`, details({ code: 'GRAND', name: 'Grand Co', parentId: child }));
+    expect((await call('PUT', `/api/customers/${acme}`, details({ parentId: acme }))).json().errors.parentId).toMatch(/own parent/);
+    expect((await call('PUT', `/api/customers/${acme}`, details({ parentId: 9999 }))).json().errors.parentId).toMatch(/not found/);
+    expect((await call('PUT', `/api/customers/${acme}`, details({ parentId: grand }))).json().errors.parentId).toMatch(/below this one/);
+  });
+  it('needs the parent to be stated, so a client cannot clear it by leaving it out', async () => {
+    const { parentId: _omit, ...rest } = details();
+    expect((await call('PUT', `/api/customers/${acme}`, rest)).json().errors.parentId).toMatch(/must be given/);
+  });
+  it('offers customers to choose as a parent', async () => {
+    expect((await call('GET', '/api/customers/lookups')).json().customers.map((c: { code: string }) => c.code)).toEqual(['ACME', 'NWB']);
   });
 });
 

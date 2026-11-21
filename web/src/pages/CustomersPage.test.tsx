@@ -11,17 +11,18 @@ import { CustomersPage } from './CustomersPage';
 const flags = { isAddressMatching: true, isArchiveMailpieces: false, isCreateOutputFiles: false, isCreateSeparateBatches: false, isNhs: false, isSso: false, isSameDayService: false, isUseMrdf: false, isTesting: false, isDeleted: false };
 const detail = () => ({
   id: 7, code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', returnAddress: 'PO Box 1', colourMode: null, flags, batchingKey: 'Department', packSequenceKey: null,
+  parent: null, children: [{ id: 9, code: 'ACME-HL', name: 'Highline Solicitors', isDeleted: false }],
   accounts: [{ id: 8, code: 'ACME-SC', name: 'Acme Scotland', isDeleted: false }],
   brands: [{ id: 21, name: 'Home', usage: 1 }, { id: 22, name: 'Business', usage: 0 }],
   envelopes: [{ id: 31, brandId: 21, brandName: 'Home', deliveryBand: '2nd Class', postalRateId: 1, rateLabel: 'Royal Mail – 2nd Class (Letter), up to 100g', stockItemId: 10, stockCode: 'WH0101', stockDescription: 'C5 white window', reference: null, externalName: null, isOversticker: false }],
   matchRules: [], sequenceRules: [], emails: ['print@acme.example'],
 });
 const lookups = {
-  passthroughKeys: ['Department'], deliveryBands: ['1st Class', '2nd Class'], flagLabels: Object.fromEntries(Object.keys(flags).map((k) => [k, k])),
+  passthroughKeys: ['Department'], customers: [{ id: 7, code: 'ACME', name: 'Acme Energy Ltd' }, { id: 5, code: 'ODEVO', name: 'Odevo' }], deliveryBands: ['1st Class', '2nd Class'], flagLabels: Object.fromEntries(Object.keys(flags).map((k) => [k, k])),
   postalRates: [{ id: 1, label: 'Royal Mail – 2nd Class (Letter), up to 100g', format: 'Letter' }, { id: 2, label: 'Royal Mail – 1st Class (Letter), up to 100g', format: 'Letter' }],
   envelopeStock: [{ id: 10, code: 'WH0101', description: 'C5 white window', size: 'C5' }],
 };
-const row = { id: 7, code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', isAddressMatching: true, isTesting: false, isDeleted: false, accountCount: 1, brandCount: 2, envelopeCount: 1 };
+const row = { id: 7, code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', parentId: null as number | null, parentCode: null as string | null, isAddressMatching: true, isTesting: false, isDeleted: false, accountCount: 1, brandCount: 2, envelopeCount: 1 };
 
 let calls: { url: string; method: string; body?: any }[];
 let respond: (url: string, method: string, body: any) => { status: number; json?: unknown };
@@ -83,6 +84,47 @@ describe('Customers list', () => {
   });
 });
 
+describe('Hierarchy', () => {
+  it('lists a child customer directly under its parent', async () => {
+    const child = { ...row, id: 9, code: 'ACME-HL', name: 'Highline Solicitors', parentId: 7, parentCode: 'ACME' };
+    const other = { ...row, id: 3, code: 'ZED', name: 'Zed Ltd' };
+    respond = ((prev) => (url, method, body) => (url.startsWith('/api/customers?') ? { status: 200, json: { rows: [row, other, child].sort((a, b) => (a.name < b.name ? -1 : 1)) } } : prev(url, method, body)))(respond);
+    wrap('/customers');
+    await screen.findByText('Highline Solicitors');
+    const names = screen.getAllByRole('row').slice(1).map((r) => within(r).getAllByRole('cell')[1]!.textContent);
+    expect(names).toEqual(['Acme Energy Ltd', 'Highline Solicitors', 'Zed Ltd']);
+  });
+  it('says which parent a child belongs to when the parent is filtered out of the list', async () => {
+    const child = { ...row, id: 9, code: 'ACME-HL', name: 'Highline Solicitors', parentId: 7, parentCode: 'ACME' };
+    respond = ((prev) => (url, method, body) => (url.startsWith('/api/customers?') ? { status: 200, json: { rows: [child] } } : prev(url, method, body)))(respond);
+    wrap('/customers');
+    expect(await screen.findByText(/part of ACME/)).toBeInTheDocument();
+  });
+  it('shows the parent on the child and the children on the parent', async () => {
+    respond = ((prev) => (url, method, body) => (url === '/api/customers/7' && method === 'GET' ? { status: 200, json: { ...detail(), parent: { id: 5, code: 'ODEVO', name: 'Odevo' }, children: [] } } : prev(url, method, body)))(respond);
+    wrap('/customers/7');
+    expect(await screen.findByRole('link', { name: 'Odevo' })).toHaveAttribute('href', '/customers/5');
+  });
+  it('lists child customers on the Accounts tab', async () => {
+    wrap('/customers/7');
+    await userEvent.click(await screen.findByRole('tab', { name: /Accounts/ }));
+    expect(await screen.findByRole('link', { name: 'Highline Solicitors' })).toHaveAttribute('href', '/customers/9');
+  });
+  it('saves a chosen parent', async () => {
+    wrap('/customers/7');
+    await userEvent.click(await screen.findByRole('combobox', { name: /Parent customer/ }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Odevo (ODEVO)', hidden: true }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.find((c) => c.method === 'PUT')?.body).toMatchObject({ parentId: 5 }));
+  });
+  it('never offers the customer itself as its own parent', async () => {
+    wrap('/customers/7');
+    await userEvent.click(await screen.findByRole('combobox', { name: /Parent customer/ }));
+    await screen.findByRole('option', { name: 'Odevo (ODEVO)', hidden: true });
+    expect(screen.queryByRole('option', { name: 'Acme Energy Ltd (ACME)', hidden: true })).toBeNull();
+  });
+});
+
 describe('Customer page', () => {
   it('saves changed details, sending the unchanged fields too, and only enables Save once something changed', async () => {
     wrap('/customers/7');
@@ -91,7 +133,7 @@ describe('Customer page', () => {
     const mis = screen.getByLabelText(/MIS job number/);
     await userEvent.clear(mis); await userEvent.type(mis, '999');
     await userEvent.click(save);
-    await waitFor(() => expect(calls.find((c) => c.method === 'PUT')?.body).toMatchObject({ code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '999', batchingKey: 'Department', flags: { isAddressMatching: true } }));
+    await waitFor(() => expect(calls.find((c) => c.method === 'PUT')?.body).toMatchObject({ code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '999', batchingKey: 'Department', parentId: null, flags: { isAddressMatching: true } }));
   });
 
   it('shows the envelope settings and adds one with the chosen values', async () => {

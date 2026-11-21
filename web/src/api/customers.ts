@@ -5,8 +5,11 @@ export type FlagKey = (typeof FLAGS)[number];
 
 export interface CustomerRow {
   id: number; code: string; name: string; misJobNumber: string | null; isAddressMatching: boolean; isTesting: boolean; isDeleted: boolean;
+  parentId: number | null; parentCode: string | null;
   accountCount: number; brandCount: number; envelopeCount: number;
 }
+export interface ParentView { id: number; code: string; name: string }
+export interface ChildView { id: number; code: string; name: string; isDeleted: boolean }
 export interface AccountView { id: number; code: string; name: string; isDeleted: boolean }
 export interface BrandView { id: number; name: string; usage: number }
 export interface EnvelopeView {
@@ -18,14 +21,15 @@ export interface SequenceRule { value: string; number: number }
 export interface CustomerDetail {
   id: number; code: string; name: string; misJobNumber: string | null; returnAddress: string | null; colourMode: number | null;
   flags: Record<FlagKey, boolean>; batchingKey: string | null; packSequenceKey: string | null;
+  parent: ParentView | null; children: ChildView[];
   accounts: AccountView[]; brands: BrandView[]; envelopes: EnvelopeView[]; matchRules: MatchRule[]; sequenceRules: SequenceRule[]; emails: string[];
 }
-export type DetailsInput = Pick<CustomerDetail, 'code' | 'name' | 'misJobNumber' | 'returnAddress' | 'flags' | 'batchingKey' | 'packSequenceKey'>;
+export type DetailsInput = Pick<CustomerDetail, 'code' | 'name' | 'misJobNumber' | 'returnAddress' | 'flags' | 'batchingKey' | 'packSequenceKey'> & { parentId: number | null };
 export interface EnvelopeInput {
   brandId: number | null; deliveryBand: string; postalRateId: number; stockItemId: number; reference: string | null; externalName: string | null; isOversticker: boolean;
 }
 export interface Lookups {
-  passthroughKeys: string[]; deliveryBands: string[]; flagLabels: Record<FlagKey, string>;
+  passthroughKeys: string[]; customers: { id: number; code: string; name: string }[]; deliveryBands: string[]; flagLabels: Record<FlagKey, string>;
   postalRates: { id: number; label: string; format: string }[];
   envelopeStock: { id: number; code: string | null; description: string; size: string | null }[];
 }

@@ -46,6 +46,10 @@ export function parseDetails(body: Body): CustomerDetailsInput {
   const returnAddress = text(errs, body, 'returnAddress', 'Return address', 500, false);
   const batchingKey = text(errs, body, 'batchingKey', 'Batching key', 100, false);
   const packSequenceKey = text(errs, body, 'packSequenceKey', 'Pack sequence key', 100, false);
+  const pid = body?.['parentId'];
+  let parentId: number | null = null;
+  if (pid === undefined) errs['parentId'] = 'Parent must be given (use null for none)';
+  else if (pid !== null) { if (typeof pid !== 'number' || !Number.isInteger(pid) || pid < 1) errs['parentId'] = 'Parent is not valid'; else parentId = pid; }
   const flagsRaw = (body?.['flags'] ?? {}) as Record<string, unknown>;
   const flags = {} as Record<FlagKey, boolean>;
   for (const f of FLAGS) {
@@ -53,7 +57,7 @@ export function parseDetails(body: Body): CustomerDetailsInput {
     flags[f] = flagsRaw[f] === true;
   }
   done(errs);
-  return { code: code!, name: name!, misJobNumber, returnAddress, flags, batchingKey, packSequenceKey };
+  return { code: code!, name: name!, misJobNumber, returnAddress, flags, batchingKey, packSequenceKey, parentId };
 }
 
 export function parseBrandName(body: Body): string {
