@@ -78,7 +78,7 @@ describe.skipIf(!cs)('MssqlRecipientStore', { timeout: 120_000 }, () => {
   it('returns the snapshot, batch and references for a hit', async () => {
     const r = (await store.search(q({ name: 'ann patel' }))).rows[0]!;
     expect(r).toMatchObject({ accountCode: 'FEXCO', postcode: 'AB1 2CD', brand: 'Remus', batchStatus: 'Created', job: 'job-search' });
-    expect(r.addressLines).toEqual(['Ann Patel', '1 High Street', 'Town', 'AB1 2CD']);
+    expect(r.addressLines).toEqual(['Ann Patel', '1 High Street', 'Town']); // the postcode is stored apart from the lines
     expect(r.references).toEqual({ 'Tenant Reference': 'T-1001', 'Document Type': 'Statement', Brand: 'Remus' });
     expect(r.batchCode).toBeGreaterThan(0);
     expect(r.invoicingCode).toBeTruthy();

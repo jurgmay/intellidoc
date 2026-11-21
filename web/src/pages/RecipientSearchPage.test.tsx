@@ -44,6 +44,7 @@ describe('RecipientSearchPage', () => {
     expect(new URLSearchParams(search.split('?')[1])).toEqual(new URLSearchParams({ accountId: '1', name: 'patel', reference: 'T-10*' }));
     const tr = row.closest('tr')!;
     expect(within(tr).getByText('Odevo > Highline Solicitors')).toBeInTheDocument();
+    expect(within(tr).getByText('LS1 4AB')).toBeInTheDocument(); // the postcode is shown under the address lines
     expect(within(tr).getByText('7001')).toBeInTheDocument();
     expect(within(tr).getByText('T-1001')).toBeInTheDocument();
     expect(screen.getByText(/1 found in Odevo and below/)).toBeInTheDocument();
