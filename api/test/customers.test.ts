@@ -309,3 +309,61 @@ describe('invoicing account', () => {
     expect(r.json().errors.invoicingAccountId).toBeDefined();
   });
 });
+
+describe('envelope inheritance', () => {
+  let child: number;
+  beforeEach(async () => {
+    child = store.seed({ code: 'CHILD', name: 'Child Co', parentId: acme });
+    await call('POST', `/api/customers/${acme}/envelopes`, env({ deliveryBand: '1st Class' }));
+    await call('POST', `/api/customers/${acme}/envelopes`, env({ deliveryBand: '2nd Class' }));
+  });
+  const mode = (id: number, m: string) => call('PUT', `/api/customers/${id}/envelopes-mode`, { mode: m });
+  const detail = async (id: number) => (await call('GET', `/api/customers/${id}`)).json();
+
+  it('a customer starts with its own list and nothing inherited', async () => {
+    const d = await detail(child);
+    expect(d.envelopesMode).toBe('OWN');
+    expect(d.inheritedEnvelopes).toEqual([]);
+  });
+  it('INHERIT shows the parent list, read only, with where it comes from', async () => {
+    expect((await mode(child, 'INHERIT')).statusCode).toBe(204);
+    const d = await detail(child);
+    expect(d.envelopes).toEqual([]);
+    expect(d.inheritedEnvelopes.map((e: { deliveryBand: string }) => e.deliveryBand).sort()).toEqual(['1st Class', '2nd Class']);
+    expect(d.inheritedEnvelopes[0].from).toMatchObject({ id: acme, code: 'ACME' });
+    expect((await call('GET', `/api/customers/${child}/history`)).json().rows[0].summary).toBe("Envelopes: its own list → the parent's list");
+  });
+  it('EXTEND adds the customer’s own settings to the parent list', async () => {
+    await mode(child, 'EXTEND');
+    await call('POST', `/api/customers/${child}/envelopes`, env({ deliveryBand: '1st Class', reference: 'Planning' }));
+    const d = await detail(child);
+    expect(d.envelopes).toHaveLength(1);
+    expect(d.inheritedEnvelopes).toHaveLength(2);
+  });
+  it('an own setting with the same brand, band, service and reference replaces the parent’s', async () => {
+    await mode(child, 'EXTEND');
+    await call('POST', `/api/customers/${child}/envelopes`, env({ deliveryBand: '1st Class' }));
+    const d = await detail(child);
+    expect(d.inheritedEnvelopes.map((e: { deliveryBand: string }) => e.deliveryBand)).toEqual(['2nd Class']);
+  });
+  it('passes through several levels', async () => {
+    const grand = store.seed({ code: 'GRAND', name: 'Grandchild', parentId: child });
+    await mode(child, 'INHERIT');
+    await mode(grand, 'INHERIT');
+    const d = await detail(grand);
+    expect(d.inheritedEnvelopes).toHaveLength(2);
+    expect(d.inheritedEnvelopes[0].from.code).toBe('ACME');
+  });
+  it('needs a parent', async () => {
+    const r = await mode(acme, 'INHERIT');
+    expect(r.statusCode).toBe(422);
+    expect(r.json().errors.mode).toMatch(/no parent/);
+    expect((await mode(child, 'SOMETIMES')).statusCode).toBe(422);
+  });
+  it('goes back to its own list when the parent is removed, and says so in the history', async () => {
+    await mode(child, 'INHERIT');
+    await call('PUT', `/api/customers/${child}`, details({ code: 'CHILD', name: 'Child Co', parentId: null }));
+    expect((await detail(child)).envelopesMode).toBe('OWN');
+    expect((await call('GET', `/api/customers/${child}/history`)).json().rows[0].summary).toBe("Envelopes: the parent's list → its own list");
+  });
+});

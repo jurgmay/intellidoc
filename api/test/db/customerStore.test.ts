@@ -124,6 +124,32 @@ describe.skipIf(!cs)('MssqlCustomerStore', { timeout: 120_000 }, () => {
     expect((await store.get(id)).envelopes).toHaveLength(2);
   });
 
+  it('envelope inheritance: INHERIT and EXTEND read the parent list, a nearer entry wins, and it needs a parent', async () => {
+    const top = await store.create({ code: 'EI-TOP', name: 'Env top' }, 'tester');
+    const kid = await store.create({ code: 'EI-KID', name: 'Env kid' }, 'tester');
+    await store.addEnvelope(top, env({ reference: 'A' }), 'tester');
+    await store.addEnvelope(top, env({ reference: 'B' }), 'tester');
+    await expect(store.setEnvelopesMode(kid, 'INHERIT', 'tester')).rejects.toBeInstanceOf(ValidationError);
+    const flags = (await store.get(kid)).flags;
+    const setParent = (p: number | null) => store.updateDetails(kid, { code: 'EI-KID', name: 'Env kid', misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, returnAddress: null, batchingKey: null, packSequenceKey: null, parentId: p, flags }, 'tester');
+    await setParent(top);
+    await store.setEnvelopesMode(kid, 'INHERIT', 'tester');
+    let d = await store.get(kid);
+    expect(d.envelopesMode).toBe('INHERIT');
+    expect(d.inheritedEnvelopes.map((e) => e.reference).sort()).toEqual(['A', 'B']);
+    expect(d.inheritedEnvelopes[0]!.from).toMatchObject({ id: top, code: 'EI-TOP' });
+    await store.setEnvelopesMode(kid, 'EXTEND', 'tester');
+    await store.addEnvelope(kid, env({ reference: 'A' }), 'tester'); // same key as the parent's A: replaces it
+    await store.addEnvelope(kid, env({ reference: 'C' }), 'tester');
+    d = await store.get(kid);
+    expect(d.envelopes.map((e) => e.reference).sort()).toEqual(['A', 'C']);
+    expect(d.inheritedEnvelopes.map((e) => e.reference)).toEqual(['B']);
+    expect((await store.history(kid, 5))[0]!.summary).toBe("Envelopes: the parent's list → the parent's list plus its own");
+    // removing the parent puts it back on its own list
+    await setParent(null);
+    expect((await store.get(kid)).envelopesMode).toBe('OWN');
+  });
+
   it('match rules, pack sequence and e-mails are replaced as a list and audited', async () => {
     const id = await store.create({ code: 'LST', name: 'Lists' }, 'tester');
     await store.setMatchRules(id, [{ isInclude: true, key: 'Department', value: null }, { isInclude: false, key: 'Doc Type', value: 'Final Demand' }], 'tester');

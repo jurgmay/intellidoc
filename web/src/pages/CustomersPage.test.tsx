@@ -10,7 +10,7 @@ import { CustomersPage } from './CustomersPage';
 
 const flags = { isAddressMatching: true, isArchiveMailpieces: false, isCreateOutputFiles: false, isSso: false, isSameDayService: false, isUseMrdf: false, isTesting: false, isDeleted: false };
 const detail = () => ({
-  id: 7, code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', pendingJobNumber: '24601', pendingFrom: '2026-12-01', jobNumberRolloverDay: 1, invoicing: null, invoicingOptions: [{ id: 7, code: 'ACME', name: 'Acme Energy Ltd' }], returnAddress: 'PO Box 1', colourMode: null, flags, batchingKey: 'Department', packSequenceKey: null,
+  id: 7, code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', pendingJobNumber: '24601', pendingFrom: '2026-12-01', jobNumberRolloverDay: 1, envelopesMode: 'OWN', inheritedEnvelopes: [], invoicing: null, invoicingOptions: [{ id: 7, code: 'ACME', name: 'Acme Energy Ltd' }], returnAddress: 'PO Box 1', colourMode: null, flags, batchingKey: 'Department', packSequenceKey: null,
   parent: null, children: [{ id: 9, code: 'ACME-HL', name: 'Highline Solicitors', isDeleted: false }],
   accounts: [{ id: 8, code: 'ACME-SC', name: 'Acme Scotland', isDeleted: false }],
   brands: [{ id: 21, name: 'Home', usage: 1 }, { id: 22, name: 'Business', usage: 0 }],
@@ -178,6 +178,42 @@ describe('Invoicing account', () => {
     await userEvent.click(within(document.getElementById(combo.getAttribute('aria-controls')!)!).getByRole('option', { name: 'Odevo (ODEVO)', hidden: true }));
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(calls.find((c) => c.method === 'PUT')?.body).toMatchObject({ invoicingAccountId: 5 }));
+  });
+});
+
+describe('Envelope inheritance', () => {
+  const inherited = { id: 90, brandId: null, brandName: null, deliveryBand: '2nd Class', postalRateId: 1, rateLabel: 'Royal Mail – 2nd Class (Letter), up to 100g', stockItemId: 10, stockCode: 'WH0101', stockDescription: 'C5 white window', reference: null, externalName: null, isOversticker: false, from: { id: 5, code: 'ODEVO', name: 'Odevo' } };
+  const withParent = (over: Record<string, unknown> = {}) => {
+    respond = ((prev) => (url, method, body) => (url === '/api/customers/7' && method === 'GET' ? { status: 200, json: { ...detail(), parent: { id: 5, code: 'ODEVO', name: 'Odevo' }, ...over } } : prev(url, method, body)))(respond);
+  };
+  it('cannot be changed without a parent, and says why', async () => {
+    wrap('/customers/7');
+    await userEvent.click(await screen.findByRole('tab', { name: /Envelopes/ }));
+    expect(await screen.findByRole('combobox', { name: 'Where the envelope list comes from' })).toBeDisabled();
+    expect(screen.getByText(/Choose a parent customer on the Details tab/)).toBeInTheDocument();
+  });
+  it('shows the parent list read only with where each setting comes from', async () => {
+    withParent({ envelopesMode: 'EXTEND', inheritedEnvelopes: [inherited] });
+    wrap('/customers/7');
+    await userEvent.click(await screen.findByRole('tab', { name: /Envelopes/ }));
+    expect(await screen.findByText('From the parent')).toBeInTheDocument();
+    const rows = screen.getAllByRole('row').map((r) => r.textContent ?? '');
+    expect(rows.some((t) => t.includes('Odevo') && t.includes('WH0101'))).toBe(true);
+  });
+  it('sends the chosen list source', async () => {
+    withParent();
+    wrap('/customers/7');
+    await userEvent.click(await screen.findByRole('tab', { name: /Envelopes/ }));
+    const combo = await screen.findByRole('combobox', { name: 'Where the envelope list comes from' });
+    await userEvent.click(combo);
+    await userEvent.click(within(document.getElementById(combo.getAttribute('aria-controls')!)!).getByRole('option', { name: "The parent's list plus this customer's own", hidden: true }));
+    await waitFor(() => expect(calls.find((c) => c.url === '/api/customers/7/envelopes-mode')?.body).toEqual({ mode: 'EXTEND' }));
+  });
+  it('does not allow adding an envelope while the parent list is used instead', async () => {
+    withParent({ envelopesMode: 'INHERIT', inheritedEnvelopes: [inherited] });
+    wrap('/customers/7');
+    await userEvent.click(await screen.findByRole('tab', { name: /Envelopes/ }));
+    expect(await screen.findByRole('button', { name: /Add envelope/ })).toBeDisabled();
   });
 });
 

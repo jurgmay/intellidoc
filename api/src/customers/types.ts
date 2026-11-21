@@ -13,6 +13,10 @@ export interface EnvelopeView {
   id: number; brandId: number | null; brandName: string | null; deliveryBand: string; postalRateId: number; rateLabel: string;
   stockItemId: number; stockCode: string | null; stockDescription: string; reference: string | null; externalName: string | null; isOversticker: boolean;
 }
+/** Where a customer's envelope list comes from: its own rows, its parent's list, or the parent's list plus its own. */
+export const ENVELOPE_MODES = ['OWN', 'INHERIT', 'EXTEND'] as const;
+export type EnvelopesMode = (typeof ENVELOPE_MODES)[number];
+export interface InheritedEnvelopeView extends EnvelopeView { from: ParentView }
 export interface MatchRule { isInclude: boolean; key: string; value: string | null }
 export interface SequenceRule { value: string; number: number }
 
@@ -33,6 +37,9 @@ export interface CustomerDetail {
   /** The accounts that can be chosen: this customer first, then each ancestor up the tree. */
   invoicingOptions: ParentView[];
   accounts: AccountView[]; brands: BrandView[]; envelopes: EnvelopeView[];
+  envelopesMode: EnvelopesMode;
+  /** Envelope settings that come from the parent customers (read only here), nearest first; one that this customer also has is left out. */
+  inheritedEnvelopes: InheritedEnvelopeView[];
   matchRules: MatchRule[]; sequenceRules: SequenceRule[]; emails: string[];
 }
 
@@ -72,6 +79,7 @@ export interface CustomerStore {
   addEnvelope(customerId: number, input: EnvelopeInput, by: string): Promise<number>;
   updateEnvelope(envelopeId: number, input: EnvelopeInput, by: string): Promise<void>;
   deleteEnvelope(envelopeId: number, by: string): Promise<void>;
+  setEnvelopesMode(customerId: number, mode: EnvelopesMode, by: string): Promise<void>;
   setMatchRules(customerId: number, rules: MatchRule[], by: string): Promise<void>;
   setSequenceRules(customerId: number, rules: SequenceRule[], by: string): Promise<void>;
   setEmails(customerId: number, emails: string[], by: string): Promise<void>;
