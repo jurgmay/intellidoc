@@ -1,3 +1,4 @@
+import { MemoryCustomerStore } from '../../src/customers/memoryStore.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import sql from 'mssql';
 import { assertScratchDatabase, resetAndSeed } from '../../../ingest/src/mssql/devDb.js';
@@ -21,7 +22,7 @@ describe.skipIf(!cs)('MssqlSettingsStore', { timeout: 120_000 }, () => {
   });
 
   it('saves through the API, audits the change, and the database enforces sensible limits', async () => {
-    const app = await buildApp({ settings: store });
+    const app = await buildApp({ settings: store, customers: new MemoryCustomerStore() });
     const r = await app.inject({ method: 'PUT', url: '/api/settings', payload: { values: { pdfWaitMinutes: 45, xmlFirstEnabled: false, alertRecipients: 'ops@latcham.co.uk' } } });
     expect(r.statusCode).toBe(200);
     expect(await store.read()).toMatchObject({ pdfWaitMinutes: 45, xmlFirstEnabled: false, alertRecipients: 'ops@latcham.co.uk' });
@@ -31,7 +32,7 @@ describe.skipIf(!cs)('MssqlSettingsStore', { timeout: 120_000 }, () => {
   });
 
   it('batch code: shows the next number and can be moved up but not onto a used number', async () => {
-    const app = await buildApp({ settings: store });
+    const app = await buildApp({ settings: store, customers: new MemoryCustomerStore() });
     expect((await store.batchCode()).highestUsed).toBeNull();
     const ok = await app.inject({ method: 'PUT', url: '/api/settings/batch-code', payload: { next: 5000 } });
     expect(ok.json()).toEqual({ highestUsed: null, next: 5000 });
