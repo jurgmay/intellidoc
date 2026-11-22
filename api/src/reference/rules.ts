@@ -23,6 +23,8 @@ export function checkFormatLimits(self: FormatView, input: FormatInput, others: 
   check('maxWeightG', 'Most weight', input.maxWeightG, (f) => f.maxWeightG);
   check('maxThicknessMm', 'Most thickness', input.maxThicknessMm, (f) => f.maxThicknessMm);
   check('maxSheets', 'Most sheets', input.maxSheets, (f) => f.maxSheets);
+  check('maxLengthMm', 'Most length', input.maxLengthMm, (f) => f.maxLengthMm);
+  check('maxWidthMm', 'Most width', input.maxWidthMm, (f) => f.maxWidthMm);
   if (Object.keys(errs).length) throw new ValidationError(errs);
 }
 

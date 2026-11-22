@@ -63,26 +63,36 @@ describe('postal formats', () => {
     expect(f.map((x: { name: string }) => x.name)).toEqual(['Letter', 'Large Letter', 'Small Parcel']);
   });
   it('changes the limits and logs it; the name and rank cannot be changed', async () => {
-    const r = await put('/api/reference/postal-formats/1', { name: 'Hacked', rank: 9, maxWeightG: 120, maxThicknessMm: 6.5, maxSheets: null });
+    const r = await put('/api/reference/postal-formats/1', { name: 'Hacked', rank: 9, maxWeightG: 120, maxThicknessMm: 6.5, maxSheets: null, maxLengthMm: 245, maxWidthMm: 170.5 });
     expect(r.statusCode).toBe(204);
-    expect(store.formatRows[0]).toMatchObject({ name: 'Letter', rank: 1, maxWeightG: 120, maxThicknessMm: 6.5, maxSheets: null });
-    expect((await get('/api/reference/history')).json().rows[0].summary).toBe('Postal format "Letter": most weight 100g -> 120g, most thickness 5 -> 6.5 mm, most sheets 16 -> not set');
+    expect(store.formatRows[0]).toMatchObject({ name: 'Letter', rank: 1, maxWeightG: 120, maxThicknessMm: 6.5, maxSheets: null, maxLengthMm: 245, maxWidthMm: 170.5 });
+    expect((await get('/api/reference/history')).json().rows[0].summary).toBe('Postal format "Letter": most weight 100g -> 120g, most thickness 5 -> 6.5 mm, most sheets 16 -> not set, most length 240 mm -> 245 mm, most width 165 mm -> 170.5 mm');
   });
   it('keeps the formats in order: a bigger one cannot take less than a smaller one', async () => {
-    const low = await put('/api/reference/postal-formats/2', { maxWeightG: 90, maxThicknessMm: 25, maxSheets: 125 });
+    const low = await put('/api/reference/postal-formats/2', { maxWeightG: 90, maxThicknessMm: 25, maxSheets: 125, maxLengthMm: 353, maxWidthMm: 250 });
     expect(low.statusCode).toBe(422);
     expect(low.body).toContain('Letter');
-    const high = await put('/api/reference/postal-formats/1', { maxWeightG: 800, maxThicknessMm: 5, maxSheets: 16 });
+    const high = await put('/api/reference/postal-formats/1', { maxWeightG: 800, maxThicknessMm: 5, maxSheets: 16, maxLengthMm: 240, maxWidthMm: 165 });
     expect(high.statusCode).toBe(422);
     expect(high.body).toContain('Large Letter');
     expect(store.log).toHaveLength(0);
   });
+  it('keeps the sizes in order too, and every format must have a length and a width', async () => {
+    const wide = await put('/api/reference/postal-formats/2', { maxWeightG: 750, maxThicknessMm: 25, maxSheets: 125, maxLengthMm: 239, maxWidthMm: 165 });
+    expect(wide.statusCode).toBe(422); expect(wide.json().errors.maxLengthMm).toContain('Letter');
+    const tall = await put('/api/reference/postal-formats/1', { maxWeightG: 100, maxThicknessMm: 5, maxSheets: 16, maxLengthMm: 300, maxWidthMm: 251 });
+    expect(tall.statusCode).toBe(422); expect(tall.json().errors.maxWidthMm).toContain('Large Letter');
+  });
   it('validates the numbers', async () => {
-    for (const body of [{ maxWeightG: 0 }, { maxWeightG: 1.5 }, { maxWeightG: 100, maxThicknessMm: -1 }, { maxWeightG: 100, maxThicknessMm: 1.234 }, { maxWeightG: 100, maxSheets: 0 }, {}]) {
+    const ok = { maxWeightG: 100, maxLengthMm: 240, maxWidthMm: 165 };
+    expect((await put('/api/reference/postal-formats/1', ok)).statusCode).toBe(204);
+    for (const body of [{ ...ok, maxWeightG: 0 }, { ...ok, maxWeightG: 1.5 }, { ...ok, maxThicknessMm: -1 }, { ...ok, maxThicknessMm: 1.234 }, { ...ok, maxSheets: 0 },
+      { maxWeightG: 100 }, { ...ok, maxLengthMm: null }, { ...ok, maxWidthMm: undefined }, { ...ok, maxLengthMm: 0 }, { ...ok, maxWidthMm: -5 }, { ...ok, maxLengthMm: 240.123 }, { ...ok, maxLengthMm: 'wide' },
+      { ...ok, maxLengthMm: 160, maxWidthMm: 165 }, {}]) {
       expect((await put('/api/reference/postal-formats/1', body)).statusCode, JSON.stringify(body)).toBe(422);
     }
   });
-  it('404s an unknown format', async () => { expect((await put('/api/reference/postal-formats/99', { maxWeightG: 100 })).statusCode).toBe(404); });
+  it('404s an unknown format', async () => { expect((await put('/api/reference/postal-formats/99', { maxWeightG: 100, maxLengthMm: 240, maxWidthMm: 165 })).statusCode).toBe(404); });
 });
 
 describe('anonymous addressees', () => {

@@ -14,7 +14,7 @@ const wrap = (ui: React.ReactElement) => render(<MantineProvider theme={theme}><
 beforeEach(() => {
   calls = []; failNext = null;
   papers = [{ id: 1, name: 'A4 White', batchName: 'A4 WHITE', paperCode: null, usedBy: 3 }, { id: 2, name: 'A4 Plain', batchName: 'A4 PLAIN', paperCode: 'P1', usedBy: 0 }];
-  formats = [{ id: 1, name: 'Letter', rank: 1, maxWeightG: 100, maxThicknessMm: 5, maxSheets: 16, usedBy: 2 }, { id: 2, name: 'Large Letter', rank: 2, maxWeightG: 750, maxThicknessMm: null, maxSheets: null, usedBy: 1 }];
+  formats = [{ id: 1, name: 'Letter', rank: 1, maxWeightG: 100, maxThicknessMm: 5, maxSheets: 16, maxLengthMm: 240, maxWidthMm: 165, usedBy: 2 }, { id: 2, name: 'Large Letter', rank: 2, maxWeightG: 750, maxThicknessMm: null, maxSheets: null, maxLengthMm: 353, maxWidthMm: 250, usedBy: 1 }];
   names = ['THEOCCUPIER', 'THERESIDENT'];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
     calls.push({ url, method: init?.method ?? 'GET', body: init?.body ? JSON.parse(init.body) : undefined });
@@ -69,16 +69,29 @@ describe('PostalFormatsTab', () => {
     wrap(<PostalFormatsTab />);
     const large = (await screen.findByText('Large Letter')).closest('tr')!;
     expect(within(large).getAllByText('no limit')).toHaveLength(2);
-    expect(within(screen.getByText('Letter').closest('tr')!).getByText('100 g')).toBeInTheDocument();
+    const letter = screen.getByText('Letter').closest('tr')!;
+    expect(within(letter).getByText('100 g')).toBeInTheDocument();
+    expect(within(letter).getByText('240 mm')).toBeInTheDocument();
+    expect(within(letter).getByText('165 mm')).toBeInTheDocument();
   });
   it('saves changed limits, and an emptied one becomes null', async () => {
     wrap(<PostalFormatsTab />);
     await userEvent.click(within((await screen.findByText('Letter')).closest('tr')!).getByRole('button', { name: 'Edit' }));
     const w = screen.getByLabelText('Most weight (g)'); await userEvent.clear(w); await userEvent.type(w, '120');
     await userEvent.clear(screen.getByLabelText('Most sheets'));
+    const mw = screen.getByLabelText('Most length (mm)'); await userEvent.clear(mw); await userEvent.type(mw, '245.5');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(sent('PUT')).toHaveLength(1));
-    expect(sent('PUT')[0]).toMatchObject({ url: '/api/reference/postal-formats/1', body: { maxWeightG: 120, maxThicknessMm: 5, maxSheets: null } });
+    expect(sent('PUT')[0]).toMatchObject({ url: '/api/reference/postal-formats/1', body: { maxWeightG: 120, maxThicknessMm: 5, maxSheets: null, maxLengthMm: 245.5, maxWidthMm: 165 } });
+  });
+  it('will not save a format with no length', async () => {
+    wrap(<PostalFormatsTab />);
+    await userEvent.click(within((await screen.findByText('Letter')).closest('tr')!).getByRole('button', { name: 'Edit' }));
+    await userEvent.clear(screen.getByLabelText('Most length (mm)'));
+    failNext = new Response(JSON.stringify({ errors: { maxLengthMm: 'Most length must be a number above 0' } }), { status: 422 });
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect((await screen.findAllByText('Most length must be a number above 0')).length).toBeGreaterThan(0);
+    expect(sent('PUT')[0]!.body.maxLengthMm).toBeNull(); // an empty box is sent as null (NaN in JSON), for the server to refuse
   });
   it('shows the ordering error from the server', async () => {
     wrap(<PostalFormatsTab />);
