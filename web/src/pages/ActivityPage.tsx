@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Alert, Badge, Group, Loader, Paper, Progress, Stack, Table, Text, Title } from '@mantine/core';
 import { IconAlertCircle } from '@tabler/icons-react';
 import { getActivity, type ActivityData } from '../api/activity';
@@ -69,16 +69,16 @@ export function ActivityPage({ refreshMs = 3000 }: { refreshMs?: number }) {
   const [data, setData] = useState<ActivityData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
-  const inFlight = useRef(false);
 
   useEffect(() => {
     let live = true;
+    let inFlight = false;   // per effect run: React's development double-run must not leave the second run waiting on the first's discarded request
     const load = async () => {
-      if (inFlight.current) return;
-      inFlight.current = true;
+      if (inFlight) return;
+      inFlight = true;
       try { const d = await getActivity(); if (live) { setData(d); setError(null); setNow(Date.now()); } }
       catch (e) { if (live) setError((e as Error).message); }
-      finally { inFlight.current = false; }
+      finally { inFlight = false; }
     };
     void load();
     const t = setInterval(() => { void load(); }, refreshMs);
