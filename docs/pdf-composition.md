@@ -5,7 +5,7 @@ Makes the print PDF(s) of a batch from the customer's PDF. The rules come from F
 ## Run it
 
 ```
-npm run compose -- <jobId> <outDir> [pdfDir] [logo.png]      (compose:env reads .env)
+npm run compose -- <jobId> <outDir> [pdfDir] [logo.png]      (compose:env reads .env; MRDF_OUT_DIR is where MRDF files go)
 ```
 
 `pdfDir` defaults to `$WATCH_DIR/processed` (the watcher keeps a prefix on the name, so the PDF is found by the end of its name). The job must be **Received**. Every batch of the job that is still **Created** is composed; others are reported as skipped. It is safe to repeat: it keeps the sequence numbers, replaces its own files and records, and deletes files of earlier runs that it no longer makes. Ghostscript is needed only when a colour page has to be printed mono (`GS_PATH` names the executable if it is not `gs`, `gswin64c` on Windows).
@@ -15,7 +15,7 @@ npm run compose -- <jobId> <outDir> [pdfDir] [logo.png]      (compose:env reads 
 The folder watcher can make the print files itself. Once a minute it looks for Received jobs with a batch that has mail to print and no print file yet, and composes them (`src/compose/auto.ts`). It does this only when **both** are true:
 
 * **Make print files automatically** is on in Settings (Print file marks). It is **off** by default: switch it on once the marks have been checked on a printed proof. It is re-read every minute, no restart.
-* `COMPOSE_OUT_DIR` is set in the watcher's `.env` (the folder the PDFs are written to). `GS_PATH` names Ghostscript if it is not on the PATH.
+* `COMPOSE_OUT_DIR` is set in the watcher's `.env` (the folder the PDFs are written to). `GS_PATH` names Ghostscript if it is not on the PATH. `MRDF_OUT_DIR` is the inserter's input folder for MRDF files.
 
 It reads the customer's PDF from the watcher's `processed` folder, so a job is composed a minute or so after it is Received, never while the PDF is still in the inbox. A batch that already has print files is left alone, and so is a batch that is no longer Created. A job that fails (PDF not found, Ghostscript missing, ...) is tried again after 1, 2, 5, 10 and then every 30 minutes, an e-mail goes to the alert recipients once after the third failure in a row, and it is never given up on. The compose command still works at any time and composes the batches again.
 
@@ -32,15 +32,38 @@ It reads the customer's PDF from the watcher's `processed` folder, so a job is c
   * the window Data Matrix: the last 5 digits of the batch code, 6 digits of sequence, `00000` (vector, not a picture);
   * the pack start dot, 2 mm across at 205.5 mm / 269 mm: red, or black when that page is printed mono;
   * a bookmark per mailpiece, titled with the first 11 characters of the Data Matrix.
+* **MRDF** for customers that use it (account flag `is_use_mrdf`, read from the owner of the account tree): see the section below.
 * PDF metadata: title = file name, PDF/X-4 version, not trapped, keyword `imposition:SRA4` for edge-to-edge paper.
+
+## MRDF (Bluecrest inserter)
+
+For a customer with **Use MRDF** on, composing a batch also does two things.
+
+**Page codes** on the front of every sheet (odd page of the mailpiece; the control marks layer, black), in the positions of the **MRDF page codes** settings:
+
+* a Data Matrix of 23 digits: batch code (10), sequence (6), sheet number (2), sheets in the mailpiece (2), `000`;
+* an OCR-B code (font size 8.2 by default): sheet number (2), sheets in the mailpiece (2), sequence (6), e.g. `0203000007`.
+
+The sheet number and sheet count are of the composed file, padding included, so they are what the inserter will see. (FileMaker counted from the source pages; the two agree whenever every pack has an even number of pages.)
+
+**The MRDF file** `<batchCode>.txt`, written to `MRDF_OUT_DIR` (watcher `.env`, or the environment of the compose command): ANSI (Windows-1252), CRLF line ends, written under a `.tmp` name and renamed so the inserter never reads half a file. If `MRDF_OUT_DIR` is not set the page codes are still printed and no file is written (the watcher logs a warning at start). A re-compose writes the file again. It has one **header** record (790 characters) and one **input** record per mailpiece (1406 characters), in sequence order. Every field has a fixed width taken from its "Auto enter" calculation in FileMaker (`src/compose/mrdf.ts` lists them in order): text is left-justified, padded with spaces and cut to the width (a 40-character address line is cut at 40); numbers are right-justified and zero padded. The file is checked for length before it is written.
+
+What goes in them: the header has the batch code as job and run id, the date and time (`dd/mm/yyyy hh:mm:ss`), the cycle (`mm_yy`), mailpiece count, sheet count, and FileMaker's constants (inserter mode `SM_CH_01`, carrier `SM`, class `002`, feeder 1 mode 6, the rest 1, document ids `None`, print job name `Hybrid Default`). Each input record has the batch code, sequence number, sheets, the customer's account code, the addressee and up to five address lines (the postcode in its own field), the customer's return address (up to five lines, one per line of the account's return address), and FileMaker's constants for weight, postage and processing category. Every other field is blank or zero.
+
+Things to know:
+
+* **HostSortID** is 20 characters wide in FileMaker's field list but its calculation only ever produced 18 (`Hybrid Mail 01042 `), so 18 is written: the inserter has been reading 1406-character records. If it should be 20, change `HOST_SORT_ID_WIDTH`; the record becomes 1408.
+* **Logos**: FileMaker's customer record had two logo codes (`LogoBitmapSelect1/2`). They are not in the account table yet, so those two fields are blank.
+* Weight and postage in each record are FileMaker's constants (000.933 and 00.355), not the mailpiece's real values.
+* The page-code positions are placeholders until set from a printed proof, like the other marks.
 
 ## Settings
 
-The Settings page has a group **Print file marks** (box positions, font size, dot, most pages per file). FileMaker kept these in its Settings table, which was not in the DDR, so **the starting values are placeholders** (except the dot, which FileMaker fixed in the script). Check them against a printed proof and correct them there.
+The Settings page has two groups, **Print file marks** and **MRDF page codes**. **Print file marks** (box positions, font size, dot, most pages per file). FileMaker kept these in its Settings table, which was not in the DDR, so **the starting values are placeholders** (except the dot, which FileMaker fixed in the script). Check them against a printed proof and correct them there.
 
 ## Not built, and differences from FileMaker
 
-* **MRDF** (Bluecrest MRDF codes on every odd page and the MRDF input/header files) is not built.
+* **MRDF**: reading what the inserter sends back (FileMaker's output, select and lock folders and the `MRDF_OutputRecords` / `MRDF_SelectRecords` tables) is not built. Only the files the inserter is given are (see MRDF below).
 * Archive keywords (`moduleArchive`) are not written; `forceA4PageSize` is not implemented.
 * FileMaker forced mono for modes 2 and 3 as well as mode 1 (`forceMono = colourMode > 0 …`), which looks like a mistake; here the four modes mean what the customer was told.
 * Pricing follows the composer on a pack's own Mono option (all of its pages are billed as mono). One approximation remains: for "first page of each mailpiece", pricing takes the first pack in document-sequence order, the composer in envelope order, so they differ only when those orders differ and only one of the two packs has colour pages.

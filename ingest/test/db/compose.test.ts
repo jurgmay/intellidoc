@@ -33,6 +33,38 @@ describe.skipIf(!hasDb)('composeJob', { timeout: 120_000 }, () => {
     expect(s.maxPagesPerPdf).toBe(10000);
     expect(s.marks.dot).toEqual({ xMm: 205.5, yMm: 269, diameterMm: 2 });
     expect(s.marks.seq.fontPt).toBe(8);
+    expect(s.marks.mrdf).toEqual({ dm: { leftMm: 10, topMm: 10, widthMm: 8, heightMm: 8 }, ocr: { fontPt: 8.2, leftMm: 20, topMm: 10, widthMm: 30, heightMm: 4 } });
+  });
+
+  it('writes the MRDF file for a customer that uses MRDF, and none for one that does not', async () => {
+    const ref = await loadReferenceData(pool);
+    const { xml, pages } = buildXml([person('Cy', 'Day', 3), person('Di', 'Day', 2)]);
+    await ingest(xml, 'job-mrdf.xml', 'job-mrdf.pdf', { ref, pdf: new FakePdf(pages), repo });
+    const jobId = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-mrdf'`);
+    const batchId = await scalar(`SELECT TOP 1 batch_id AS n FROM idoc.batch WHERE job_id = ${jobId}`);
+    const batchCode = await scalar(`SELECT batch_code AS n FROM idoc.batch WHERE batch_id = ${batchId}`);
+    const dir = mkdtempSync(join(tmpdir(), 'idoc-mrdf-db-')); const pdfDir = join(dir, 'processed'), outDir = join(dir, 'out'), mrdfDir = join(dir, 'mrdf');
+    mkdirSync(pdfDir);
+    await realPdf(pages, pdfDir, '20260101120000_job-mrdf.pdf');
+
+    const [off] = await composeJob({ pool, jobId, pdfDir, outDir, mrdfDir, grey: null });
+    expect(off!.mrdfFile).toBeUndefined();
+    expect(existsSync(join(mrdfDir, `${batchCode}.txt`))).toBe(false);
+
+    await pool.request().query(`UPDATE o SET is_use_mrdf = 1, return_address = N'Latcham Direct' + CHAR(13) + CHAR(10) + N'Unit 1' FROM idoc.account AS o
+      WHERE o.account_id = (SELECT v.owner_account_id FROM idoc.v_account_owner AS v INNER JOIN idoc.batch AS b ON b.account_id = v.account_id WHERE b.batch_id = ${batchId})`);
+    const [on] = await composeJob({ pool, jobId, pdfDir, outDir, mrdfDir, grey: null });
+    expect(on!.mrdfFile).toBe(join(mrdfDir, `${batchCode}.txt`));
+    const lines = readFileSync(on!.mrdfFile!, 'latin1').split('\r\n');
+    expect(lines).toHaveLength(4);
+    expect(lines.slice(0, 3).map((l) => l.length)).toEqual([790, 1406, 1406]);
+    expect(lines[0]!.slice(0, 10)).toBe(String(batchCode).padStart(10, '0'));
+    expect(lines[1]!.slice(10, 16)).toBe('000001');
+    expect(lines[1]!.slice(16, 19)).toMatch(/^00[12]$/);
+    expect(lines[1]!).toContain('Latcham Direct');
+    expect(lines[1]!).toContain('Unit 1');
+    expect(lines[1]!).toMatch(/(Cy|Di) Day {30,}/);
+    expect(lines[1]!).toContain('AB1 2CD');
   });
 
   it('composes a job, numbers the mailpieces, records the files and each pack\'s output pages, and can be repeated', async () => {

@@ -75,10 +75,12 @@ await watcher.init();
 if (!cfg.dryRun && !cfg.once) {
   const dog = new PdfWatchdog(real, mailer, { get waitMinutes() { return live.pdfWaitMinutes; }, get reminderMinutes() { return live.pdfReminderMinutes; }, get to() { return live.alertTo; }, inbox: cfg.dirs.inbox }, log);
   const composer = cfg.composeOutDir
-    ? new AutoComposer({ pool, pdfDir: cfg.dirs.processed, outDir: cfg.composeOutDir, grey: new GhostscriptGrey(), log, notify: (subject, text) => mailer.send(live.alertTo, subject, text) })
+    ? new AutoComposer({ pool, pdfDir: cfg.dirs.processed, outDir: cfg.composeOutDir, mrdfDir: cfg.mrdfOutDir, grey: new GhostscriptGrey(), log, notify: (subject, text) => mailer.send(live.alertTo, subject, text) })
     : null;
   if (composer) log('info', `Print files go to ${cfg.composeOutDir} when "Make print files automatically" is on in Settings`);
-  else log('info', 'COMPOSE_OUT_DIR is not set: print files are not made by the watcher');
+  if (composer && !cfg.mrdfOutDir) log('warn', 'MRDF_OUT_DIR is not set: customers that use MRDF get the page codes but no MRDF file');
+  else if (composer) log('info', `MRDF files go to ${cfg.mrdfOutDir}`);
+  if (!composer) log('info', 'COMPOSE_OUT_DIR is not set: print files are not made by the watcher');
   const rollJobNumbers = (): void => {
     applyDuePendingJobNumbers(pool).then((n) => { if (n > 0) log('info', `${n} pending job number${n === 1 ? '' : 's'} took effect`); })
       .catch((e) => log('error', `Pending job numbers: ${(e as Error).message}`));

@@ -11,6 +11,8 @@ export interface MarkSettings {
   seq: { fontPt: number; leftMm: number; topMm: number; widthMm: number; heightMm: number };
   dm: { leftMm: number; topMm: number; widthMm: number; heightMm: number };
   dot: { xMm: number; yMm: number; diameterMm: number };
+  /** The MRDF page codes, drawn on the front of every sheet when the customer uses MRDF. */
+  mrdf?: { dm: { leftMm: number; topMm: number; widthMm: number; heightMm: number }; ocr: { fontPt: number; leftMm: number; topMm: number; widthMm: number; heightMm: number } };
 }
 
 /** "Right("00000" & code; 5)": the last `n` characters, zero-padded on the left. */
@@ -54,19 +56,42 @@ export function addMarksLayer(doc: PDFDocument): PDFRef {
   return ocg;
 }
 
+const PROP_NAME = 'CtrlMarks';
+/** Starts marked content on the "Control marks" layer; the caller ends it with endLayer. */
+function beginLayer(page: PDFPage, ocg: PDFRef): void {
+  const res = page.node.Resources() ?? page.doc.context.obj({});
+  const props = (res.lookupMaybe(PDFName.of('Properties'), PDFDict) ?? page.doc.context.obj({})) as PDFDict;
+  props.set(PDFName.of(PROP_NAME), ocg);
+  res.set(PDFName.of('Properties'), props);
+  page.node.set(PDFName.of('Resources'), res);
+  page.pushOperators(PDFOperator.of(PDFOperatorNames.BeginMarkedContentSequence, [PDFName.of('OC'), PDFName.of(PROP_NAME)]), pushGraphicsState());
+}
+function endLayer(page: PDFPage): void { page.pushOperators(popGraphicsState(), PDFOperator.of(PDFOperatorNames.EndMarkedContent)); }
+
+/** A square Data Matrix fitted in a box (mm from the top left of the trim box). */
+function drawMatrix(page: PDFPage, text: string, box: { leftMm: number; topMm: number; widthMm: number; heightMm: number }, trim: { x: number; y: number; height: number }): void {
+  const { size, rects } = dataMatrixRects(text);
+  const side = Math.min(box.widthMm, box.heightMm) * MM, mod = side / size;
+  const ox = trim.x + box.leftMm * MM, oy = trim.y + trim.height - box.topMm * MM;
+  for (const [x, y, w, h] of rects) page.drawRectangle({ x: ox + x * mod, y: oy - (y + h) * mod, width: w * mod, height: h * mod, color: rgb(0, 0, 0) });
+}
+
+/** The MRDF codes of one sheet front: a Data Matrix and the same sheet in OCR-B, both black. */
+export function drawMrdfMarks(page: PDFPage, ocg: PDFRef, font: PDFFont, m: NonNullable<MarkSettings['mrdf']>, text: { matrix: string; ocr: string },
+  trim: { x: number; y: number; width: number; height: number }): void {
+  beginLayer(page, ocg);
+  drawMatrix(page, text.matrix, m.dm, trim);
+  const o = m.ocr, tw = font.widthOfTextAtSize(text.ocr, o.fontPt), capH = font.heightAtSize(o.fontPt, { descender: false });
+  page.drawText(text.ocr, { font, size: o.fontPt, color: rgb(0, 0, 0), x: trim.x + o.leftMm * MM + (o.widthMm * MM - tw) / 2, y: trim.y + trim.height - o.topMm * MM - (o.heightMm * MM + capH) / 2 });
+  endLayer(page);
+}
+
 /** Draws the marks of the first page of a mailpiece. `trim` is the page's trim box: positions are measured from its top left. */
 export function drawMarks(page: PDFPage, ocg: PDFRef, font: PDFFont, m: MarkSettings, text: { sequence: string; matrix: string },
   trim: { x: number; y: number; width: number; height: number }, dotColour: 'red' | 'black'): void {
-  const propName = 'CtrlMarks';
-  const res = page.node.Resources() ?? page.doc.context.obj({});
-  const props = (res.lookupMaybe(PDFName.of('Properties'), PDFDict) ?? page.doc.context.obj({})) as PDFDict;
-  props.set(PDFName.of(propName), ocg);
-  res.set(PDFName.of('Properties'), props);
-  page.node.set(PDFName.of('Resources'), res);
-
+  beginLayer(page, ocg);
   const left = (mm: number): number => trim.x + mm * MM;
   const topY = (mm: number): number => trim.y + trim.height - mm * MM; // top-down to PDF coordinates
-  page.pushOperators(PDFOperator.of(PDFOperatorNames.BeginMarkedContentSequence, [PDFName.of('OC'), PDFName.of(propName)]), pushGraphicsState());
 
   // Window sequence number, centred in its box
   const s = m.seq;
@@ -79,15 +104,12 @@ export function drawMarks(page: PDFPage, ocg: PDFRef, font: PDFFont, m: MarkSett
   });
 
   // Window Data Matrix: square, fitted in its box
-  const { size, rects } = dataMatrixRects(text.matrix);
-  const side = Math.min(m.dm.widthMm, m.dm.heightMm) * MM, mod = side / size;
-  const ox = left(m.dm.leftMm), oy = topY(m.dm.topMm);
-  for (const [x, y, w, h] of rects) page.drawRectangle({ x: ox + x * mod, y: oy - (y + h) * mod, width: w * mod, height: h * mod, color: rgb(0, 0, 0) });
+  drawMatrix(page, text.matrix, m.dm, trim);
 
   // Pack start dot (red; black when the page is printed mono)
   page.drawCircle({ x: left(m.dot.xMm), y: topY(m.dot.yMm), size: (m.dot.diameterMm * MM) / 2, color: dotColour === 'red' ? rgb(1, 0, 0) : rgb(0, 0, 0) });
 
-  page.pushOperators(popGraphicsState(), PDFOperator.of(PDFOperatorNames.EndMarkedContent));
+  endLayer(page);
 }
 
 /** One bookmark per mailpiece, titled with the first 11 characters of its Data Matrix, pointing at its first page. */

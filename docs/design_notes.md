@@ -96,4 +96,4 @@ paper.batch_name | sorted insert stock ids | batching_value | enclosing_route
 3. `sheet_count` for duplex packs where the last page is blank (National Grid shows 47 near-blank fourth pages).
 4. `Coverage` is ignored, as in FileMaker.
 5. `pack_sequence_rule` mapping from `PackSequenceRules.description` / `sequence`.
-6. Not yet designed: pricing/invoicing, run sheets, spoils/returns, stock allocation, docketing, archiving, MRDF, reports, users and roles.
+6. Not yet designed: pricing/invoicing, run sheets, spoils/returns, stock allocation, docketing, archiving, reading back the inserter's MRDF output, reports, users and roles.
