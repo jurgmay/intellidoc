@@ -72,9 +72,9 @@ const reports = new MemoryReportStore();
 reports.accounts = [{ id: 101, code: 'ACME', name: 'Acme Energy Ltd' }, { id: 106, code: 'ODEVO', name: 'Odevo' }];
 const usageDays = Array.from({ length: 21 }, (_, i) => new Date(Date.UTC(2026, 10, 1 + i)).toISOString().slice(0, 10)).filter((d) => ![6, 7, 13, 14, 20, 21].includes(Number(d.slice(8))));
 reports.lines.set(106, usageDays.flatMap((day, i) => [
-  { day, brand: 'Highline Solicitors', format: 'Letter', service: '2nd Class', mailpieces: 40 + ((i * 7) % 25), packs: 55 + i, sheets: 120 + i * 3 },
-  { day, brand: 'Rendall & Rittner', format: 'Letter', service: '1st Class', mailpieces: 18 + ((i * 5) % 14), packs: 22 + i, sheets: 60 + i * 2 },
-  { day, brand: 'Odevo', format: 'Large Letter', service: '2nd Class', mailpieces: 6 + (i % 5), packs: 6 + (i % 5), sheets: 30 + i },
+  { day, brand: 'Highline Solicitors', format: 'Letter', service: '2nd Class', mailpieces: 40 + ((i * 7) % 25), packs: 55 + i, sheets: 120 + i * 3, priced: 40 + ((i * 7) % 25), productionSell: (40 + ((i * 7) % 25)) * 0.31, postageSell: (40 + ((i * 7) % 25)) * 0.85 },
+  { day, brand: 'Rendall & Rittner', format: 'Letter', service: '1st Class', mailpieces: 18 + ((i * 5) % 14), packs: 22 + i, sheets: 60 + i * 2, priced: 18 + ((i * 5) % 14), productionSell: (18 + ((i * 5) % 14)) * 0.28, postageSell: (18 + ((i * 5) % 14)) * 1.1 },
+  { day, brand: 'Odevo', format: 'Large Letter', service: '2nd Class', mailpieces: 6 + (i % 5), packs: 6 + (i % 5), sheets: 30 + i, priced: 5 + (i % 5), productionSell: (5 + (i % 5)) * 0.4, postageSell: (5 + (i % 5)) * 1.6 },
 ]));
 const postal = new MemoryPostalStore();
 postal.today = () => '2026-11-21';

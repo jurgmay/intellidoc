@@ -1,11 +1,12 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
-import type { UsageReport } from './types.js';
+import type { Counts, UsageReport } from './types.js';
 
 const W = 595.28, H = 841.89, M = 40;
 const PALETTE = [rgb(0.16, 0.36, 0.64), rgb(0.9, 0.5, 0.13), rgb(0.2, 0.6, 0.4), rgb(0.7, 0.25, 0.45), rgb(0.45, 0.4, 0.75), rgb(0.55, 0.55, 0.2), rgb(0.6, 0.6, 0.6)];
 const INK = rgb(0.1, 0.1, 0.12), MUTED = rgb(0.4, 0.4, 0.45), RULE = rgb(0.8, 0.8, 0.85);
 const fmtDay = (d: string): string => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}`;
 const n = (v: number): string => v.toLocaleString('en-GB');
+const gbp = (v: number): string => `£${v.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 /** "Other" collects every brand beyond the first six, so the chart legend stays readable. */
 export function chartBrands(r: UsageReport, max = 6): string[] {
@@ -32,9 +33,12 @@ export async function usagePdf(r: UsageReport, generated: Date): Promise<Uint8Ar
   text(`${fmtDay(r.from)} to ${fmtDay(r.to)}  |  by the day the mailpieces were produced  |  produced ${generated.toISOString().slice(0, 16).replace('T', ' ')} UTC`, M, y, 8, font, MUTED); y -= 26;
 
   // Totals
-  const tiles: [string, number][] = [['Mailpieces', r.totals.mailpieces], ['Packs', r.totals.packs], ['Sheets', r.totals.sheets]];
-  tiles.forEach(([label, v], i) => { const x = M + i * 140; text(label, x, y, 8, font, MUTED); text(n(v), x, y - 20, 18, bold); });
-  y -= 52;
+  const tiles: [string, string][] = [['Mailpieces', n(r.totals.mailpieces)], ['Packs', n(r.totals.packs)], ['Sheets', n(r.totals.sheets)],
+    ['Production', gbp(r.totals.productionSell)], ['Postage', gbp(r.totals.postageSell)], ['Total', gbp(r.totals.totalSell)]];
+  tiles.forEach(([label, v], i) => { const x = M + i * 86; text(label, x, y, 8, font, MUTED); text(v, x, y - 18, 13, bold); });
+  y -= 44;
+  if (r.totals.unpriced > 0) { text(`${n(r.totals.unpriced)} of ${n(r.totals.mailpieces)} mailpieces are not priced yet and are not in the amounts.`, M, y, 9, bold, rgb(0.7, 0.35, 0)); y -= 16; }
+  text('Amounts are sell prices, excluding VAT.', M, y, 7, font, MUTED); y -= 20;
 
   // Stacked bars
   const brands = chartBrands(r);
@@ -85,14 +89,13 @@ export async function usagePdf(r: UsageReport, generated: Date): Promise<Uint8Ar
     if (foot) { page!.drawLine({ start: { x: M, y: y + 9 }, end: { x: W - M, y: y + 9 }, thickness: 0.4, color: RULE }); line(foot, bold); }
     y -= 14;
   };
-  const num = (c: { mailpieces: number; packs: number; sheets: number }): string[] => [n(c.mailpieces), n(c.packs), n(c.sheets)];
+  const num = (c: Counts): string[] => [n(c.mailpieces), n(c.packs), n(c.sheets), gbp(c.productionSell), gbp(c.postageSell), gbp(c.totalSell)];
   const R = W - M;
-  table('By day', [{ head: 'Day', x: M, align: 'l' }, { head: 'Mailpieces', x: R - 150, align: 'r' }, { head: 'Packs', x: R - 75, align: 'r' }, { head: 'Sheets', x: R, align: 'r' }],
-    r.days.filter((d) => d.mailpieces > 0).map((d) => [fmtDay(d.day), ...num(d)]), ['Total', ...num(r.totals)]);
-  table('By brand', [{ head: 'Brand', x: M, align: 'l' }, { head: 'Mailpieces', x: R - 150, align: 'r' }, { head: 'Packs', x: R - 75, align: 'r' }, { head: 'Sheets', x: R, align: 'r' }],
-    r.brands.map((b) => [b.brand, ...num(b)]));
-  table('By postal format and service', [{ head: 'Format', x: M, align: 'l' }, { head: 'Service', x: M + 130, align: 'l' }, { head: 'Mailpieces', x: R - 150, align: 'r' }, { head: 'Packs', x: R - 75, align: 'r' }, { head: 'Sheets', x: R, align: 'r' }],
-    r.postage.map((p) => [p.format, p.service, ...num(p)]));
+  const figures = (first: Col[]): Col[] => [...first, { head: 'Mailpieces', x: R - 300, align: 'r' }, { head: 'Packs', x: R - 250, align: 'r' }, { head: 'Sheets', x: R - 205, align: 'r' },
+    { head: 'Production', x: R - 122, align: 'r' }, { head: 'Postage', x: R - 61, align: 'r' }, { head: 'Total', x: R, align: 'r' }];
+  table('By day', figures([{ head: 'Day', x: M, align: 'l' }]), r.days.filter((d) => d.mailpieces > 0).map((d) => [fmtDay(d.day), ...num(d)]), ['Total', ...num(r.totals)]);
+  table('By brand', figures([{ head: 'Brand', x: M, align: 'l' }]), r.brands.map((b) => [b.brand, ...num(b)]));
+  table('By postal format and service', figures([{ head: 'Format', x: M, align: 'l' }, { head: 'Service', x: M + 85, align: 'l' }]), r.postage.map((p) => [p.format, p.service, ...num(p)]));
 
   doc.getPages().forEach((p, i, all) => p.drawText(`Page ${i + 1} of ${all.length}`, { x: W - M - 50, y: M - 14, size: 7, font, color: MUTED }));
   return doc.save();
