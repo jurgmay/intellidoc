@@ -547,6 +547,26 @@ GO
 
 -- The print files made from a batch (PDF composition). A batch is one file unless it passes max_pages_per_pdf, then it is split into segments.
 -- Composing again replaces the rows (and the files) while the batch is still Created.
+-- What the watcher and the composer are doing now, and what they did lately, for the Activity screen. Rows are written by the programs as they go
+-- (a Running row is touched as it progresses); Done and Failed rows are kept for a few days. Nothing here is business data: losing it loses nothing.
+CREATE TABLE idoc.activity (
+    activity_id  BIGINT IDENTITY(1, 1) NOT NULL CONSTRAINT pk_activity PRIMARY KEY,
+    kind         NVARCHAR(20)          NOT NULL,   -- Import (an XML, with or without its PDF) / PDF check (a PDF arriving for a waiting job) / Print files
+    label        NVARCHAR(300)         NOT NULL,   -- the file name, or the job
+    job_id       BIGINT                NULL,
+    state        NVARCHAR(20)          NOT NULL,
+    detail       NVARCHAR(500)         NULL,       -- what it is on now, or the outcome / error
+    step_done    INT                   NULL,
+    step_total   INT                   NULL,
+    started_at   DATETIME2(0)          NOT NULL CONSTRAINT df_activity_started DEFAULT (SYSUTCDATETIME()),
+    updated_at   DATETIME2(0)          NOT NULL CONSTRAINT df_activity_updated DEFAULT (SYSUTCDATETIME()),
+    finished_at  DATETIME2(0)          NULL,
+    CONSTRAINT ck_activity_kind CHECK (kind IN (N'Import', N'PDF check', N'Print files')),
+    CONSTRAINT ck_activity_state CHECK (state IN (N'Running', N'Done', N'Failed', N'Abandoned'))
+);
+CREATE INDEX ix_activity_recent ON idoc.activity (activity_id DESC) INCLUDE (state);
+GO
+
 CREATE TABLE idoc.batch_file (
     batch_file_id    BIGINT IDENTITY(1, 1) NOT NULL CONSTRAINT pk_batch_file PRIMARY KEY,
     batch_id         BIGINT        NOT NULL CONSTRAINT fk_batch_file_batch REFERENCES idoc.batch (batch_id),

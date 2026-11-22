@@ -7,6 +7,8 @@ import { loadConfig, ConfigError } from './watcher/config.js';
 import { makeProcessor, makeAttachProcessor } from './watcher/processor.js';
 import { PdfWatchdog } from './watcher/pdfWatchdog.js';
 import { AutoComposer } from './compose/auto.js';
+import { DbActivity, noActivity, type ActivityLog } from './activity.js';
+import { tracked } from './watcher/tracked.js';
 import { GhostscriptGrey } from './compose/grey.js';
 import { loadAlertSettings, type AlertSettings } from './mssql/alertSettings.js';
 import { LogMailer, SmtpMailer, type Mailer } from './mail.js';
@@ -61,9 +63,12 @@ if (!cfg.smtp) log('warn', 'SMTP_HOST is not set: "PDF missing" alerts will only
 if (cfg.smtp && live.alertTo.length === 0) log('warn', 'No alert recipients are set (Settings screen): there is nobody to send "PDF missing" alerts to');
 const process1 = makeProcessor({ loadReference: () => loadReferenceData(pool), repo, pdf, checkPostcodes: cfg.checkPostcodes });
 const attach = makeAttachProcessor({ repo: real, pdf, notify: async (_to, subject, text) => { try { await mailer.send(live.alertTo, subject, text); } catch (e) { log('error', `Could not send "${subject}": ${(e as Error).message}`); } } });
+const dbActivity = new DbActivity(pool, (m) => log('warn', m));
+const activity: ActivityLog = cfg.dryRun ? noActivity : dbActivity;
+if (!cfg.dryRun) await dbActivity.tidy();
 const watcher = new FolderWatcher(cfg.dirs, {
-  process: process1,
-  processXmlOnly: (x: string) => process1(x, null), attachPdf: attach, xmlFirstEnabled: () => live.xmlFirst,
+  process: (x, p) => tracked(activity, 'Import', x, () => process1(x, p)),
+  processXmlOnly: (x: string) => tracked(activity, 'Import', x, () => process1(x, null)), attachPdf: (p: string) => tracked(activity, 'PDF check', p, () => attach(p)), xmlFirstEnabled: () => live.xmlFirst,
   log, now: () => Date.now(),
 }, { stableMs: cfg.stableMs, retryMs: cfg.retryMs, orphanWarnMs: 5 * 60_000, dryRun: cfg.dryRun });
 
@@ -75,7 +80,7 @@ await watcher.init();
 if (!cfg.dryRun && !cfg.once) {
   const dog = new PdfWatchdog(real, mailer, { get waitMinutes() { return live.pdfWaitMinutes; }, get reminderMinutes() { return live.pdfReminderMinutes; }, get to() { return live.alertTo; }, inbox: cfg.dirs.inbox }, log);
   const composer = cfg.composeOutDir
-    ? new AutoComposer({ pool, pdfDir: cfg.dirs.processed, outDir: cfg.composeOutDir, mrdfDir: cfg.mrdfOutDir, grey: new GhostscriptGrey(), mailer, log, notify: (subject, text) => mailer.send(live.alertTo, subject, text) })
+    ? new AutoComposer({ pool, pdfDir: cfg.dirs.processed, outDir: cfg.composeOutDir, mrdfDir: cfg.mrdfOutDir, grey: new GhostscriptGrey(), mailer, activity, log, notify: (subject, text) => mailer.send(live.alertTo, subject, text) })
     : null;
   if (composer) log('info', `Print files go to ${cfg.composeOutDir} when "Make print files automatically" is on in Settings`);
   if (composer && !cfg.mrdfOutDir) log('warn', 'MRDF_OUT_DIR is not set: customers that use MRDF get the page codes but no MRDF file');

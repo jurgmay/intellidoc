@@ -16,12 +16,14 @@ import { recipientRoutes } from './recipients/routes.js';
 import type { RecipientStore } from './recipients/types.js';
 import { jobRoutes } from './jobs/routes.js';
 import type { JobDeps } from './jobs/types.js';
+import { activityRoutes } from './activity/routes.js';
+import type { ActivityDeps } from './activity/types.js';
 import { reportRoutes } from './reports/routes.js';
 import type { ReportStore } from './reports/types.js';
 import { settingsRoutes } from './settings/routes.js';
 import type { SettingsStore } from './settings/store.js';
 
-export interface AppDeps { settings: SettingsStore; customers: CustomerStore; costing: CostingStore; postal: PostalStore; reference: ReferenceStore; reprice: RepriceStore; recipients: RecipientStore; reports: ReportStore; /** Jobs and making their print files. Optional so a server without print folders can still start. */ jobs?: JobDeps; /** Folder with the built web app, served at / when it exists. */ webDir?: string }
+export interface AppDeps { activity?: Omit<ActivityDeps, 'jobs'>; settings: SettingsStore; customers: CustomerStore; costing: CostingStore; postal: PostalStore; reference: ReferenceStore; reprice: RepriceStore; recipients: RecipientStore; reports: ReportStore; /** Jobs and making their print files. Optional so a server without print folders can still start. */ jobs?: JobDeps; /** Folder with the built web app, served at / when it exists. */ webDir?: string }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
@@ -35,6 +37,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   recipientRoutes(app, deps.recipients);
   reportRoutes(app, deps.reports);
   if (deps.jobs) jobRoutes(app, deps.jobs);
+  if (deps.activity && deps.jobs) activityRoutes(app, { ...deps.activity, jobs: deps.jobs.store });
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof ValidationError) return reply.code(422).send({ errors: err.fieldErrors });
     if (err instanceof ConflictError) return reply.code(409).send({ error: err.message });
