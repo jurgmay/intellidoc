@@ -48,6 +48,11 @@ export function parseDetails(body: Body): CustomerDetailsInput {
   if (typeof day !== 'number' || !Number.isInteger(day) || day < 1 || day > 28) errs['jobNumberRolloverDay'] = 'The rollover day must be a whole number from 1 to 28';
   const pendingJobNumber = text(errs, body, 'pendingJobNumber', 'Pending job number', 50, false);
   const returnAddress = text(errs, body, 'returnAddress', 'Return address', 500, false);
+  const archiveCustomerTag = text(errs, body, 'archiveCustomerTag', 'Archive customer tag', 100, false);
+  const archiveProviderTag = text(errs, body, 'archiveProviderTag', 'Archive provider tag', 100, false);
+  const archiveDirectoryTag = text(errs, body, 'archiveDirectoryTag', 'Archive directory tag', 100, false);
+  const logo1 = text(errs, body, 'logo1', 'Logo 1', 8, false);
+  const logo2 = text(errs, body, 'logo2', 'Logo 2', 8, false);
   const cm = body?.['colourMode'];
   if (!COLOUR_MODES.includes(cm as ColourMode)) errs['colourMode'] = 'Choose how the colour is printed';
   const batchingKey = text(errs, body, 'batchingKey', 'Batching key', 100, false);
@@ -67,7 +72,7 @@ export function parseDetails(body: Body): CustomerDetailsInput {
     flags[f] = flagsRaw[f] === true;
   }
   done(errs);
-  return { code: code!, name: name!, misJobNumber, pendingJobNumber, jobNumberRolloverDay: day as number, returnAddress, colourMode: cm as ColourMode, flags, batchingKey, packSequenceKey, parentId, invoicingAccountId };
+  return { code: code!, name: name!, misJobNumber, pendingJobNumber, jobNumberRolloverDay: day as number, returnAddress, archiveCustomerTag, archiveProviderTag, archiveDirectoryTag, logo1, logo2, colourMode: cm as ColourMode, flags, batchingKey, packSequenceKey, parentId, invoicingAccountId };
 }
 
 export function parseBrandName(body: Body): string {

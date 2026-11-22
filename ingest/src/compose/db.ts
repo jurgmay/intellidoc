@@ -30,7 +30,9 @@ export interface JobToCompose { jobId: number; status: string; pdfFileName: stri
 export interface BatchToCompose {
   batchId: number; batchCode: number; status: string; paperName: string | null; mailpieces: PlanMailpiece[];
   /** The customer's MRDF details; null when the customer does not use MRDF. */
-  mrdf: { accountCode: string; returnAddress: string[] } | null;
+  mrdf: { accountCode: string; returnAddress: string[]; logo1: string | null; logo2: string | null } | null;
+  /** The customer's archive tags; null when the customer does not archive mailpieces. */
+  archive: { customerTag: string | null; providerTag: string | null; directoryTag: string | null } | null;
 }
 
 /** Reads the job, its batches and, for each, the mailpieces and packs the planner needs. Read-only. */
@@ -38,8 +40,9 @@ export async function loadJobToCompose(pool: sql.ConnectionPool, jobId: number):
   const job = (await pool.request().input('j', sql.BigInt, jobId).query<{ status: string; pdf_file_name: string }>('SELECT status, pdf_file_name FROM idoc.job WHERE job_id = @j')).recordset[0];
   if (!job) throw new Error(`Job ${jobId} does not exist`);
   // The customer (the owner of the account tree the batch belongs to) holds the MRDF switch, account code and return address
-  const batches = (await pool.request().input('j', sql.BigInt, jobId).query<{ batch_id: number; batch_code: number; current_status: string; paper_name: string | null; use_mrdf: boolean; account_code: string; return_address: string | null }>(
-    `SELECT b.batch_id, b.batch_code, b.current_status, pa.name AS paper_name, o.is_use_mrdf AS use_mrdf, o.account_code, o.return_address
+  const batches = (await pool.request().input('j', sql.BigInt, jobId).query<{ batch_id: number; batch_code: number; current_status: string; paper_name: string | null; use_mrdf: boolean; account_code: string; return_address: string | null; logo1: string | null; logo2: string | null; archive: boolean; archive_customer_tag: string | null; archive_provider_tag: string | null; archive_directory_tag: string | null }>(
+    `SELECT b.batch_id, b.batch_code, b.current_status, pa.name AS paper_name, o.is_use_mrdf AS use_mrdf, o.account_code, o.return_address, o.logo1, o.logo2,
+       o.is_archive_mailpieces AS archive, o.archive_customer_tag, o.archive_provider_tag, o.archive_directory_tag
      FROM idoc.batch AS b INNER JOIN idoc.paper AS pa ON pa.paper_id = b.paper_id
      INNER JOIN idoc.v_account_owner AS v ON v.account_id = b.account_id INNER JOIN idoc.account AS o ON o.account_id = v.owner_account_id
      WHERE b.job_id = @j ORDER BY b.batch_code`)).recordset;
@@ -75,7 +78,8 @@ export async function loadJobToCompose(pool: sql.ConnectionPool, jobId: number):
   return {
     jobId, status: job.status, pdfFileName: job.pdf_file_name,
     batches: batches.map((b) => ({ batchId: Number(b.batch_id), batchCode: Number(b.batch_code), status: b.current_status, paperName: b.paper_name, mailpieces: [...(byBatch.get(b.batch_id)?.values() ?? [])],
-      mrdf: b.use_mrdf ? { accountCode: b.account_code, returnAddress: (b.return_address ?? '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean) } : null })),
+      mrdf: b.use_mrdf ? { accountCode: b.account_code, returnAddress: (b.return_address ?? '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean), logo1: b.logo1, logo2: b.logo2 } : null,
+      archive: b.archive ? { customerTag: b.archive_customer_tag, providerTag: b.archive_provider_tag, directoryTag: b.archive_directory_tag } : null })),
   };
 }
 

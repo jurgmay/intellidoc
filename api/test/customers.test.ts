@@ -58,6 +58,16 @@ describe('create and edit details', () => {
     expect(r.statusCode).toBe(200);
     expect(r.json()).toMatchObject({ misJobNumber: '555', batchingKey: 'Department', flags: { isAddressMatching: true } });
   });
+  it('saves the archive tags and logos, refuses a logo longer than 8 characters, and writes them to the history', async () => {
+    const bad = await call('PUT', `/api/customers/${acme}`, details({ logo1: 'TOOLONGNAME' }));
+    expect(bad.statusCode).toBe(422);
+    expect(bad.json().errors.logo1).toBeDefined();
+    const r = await call('PUT', `/api/customers/${acme}`, details({ archiveCustomerTag: 'ACME', archiveProviderTag: 'IRON', archiveDirectoryTag: 'acme/dir', logo1: 'LOGO1', logo2: ' ' }));
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toMatchObject({ archiveCustomerTag: 'ACME', archiveProviderTag: 'IRON', archiveDirectoryTag: 'acme/dir', logo1: 'LOGO1', logo2: null });
+    const h = await call('GET', `/api/customers/${acme}/history`);
+    expect(JSON.stringify(h.json())).toContain('Archive customer tag: (none) → \\"ACME\\"');
+  });
   it('saves the colour mode, refuses an unknown one, and writes it to the history', async () => {
     const bad = await call('PUT', `/api/customers/${acme}`, details({ colourMode: 'RAINBOW' }));
     expect(bad.statusCode).toBe(422);

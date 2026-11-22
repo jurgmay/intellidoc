@@ -26,6 +26,11 @@ export function describeDetailsChange(old: CustomerDetail, next: CustomerDetails
     out.push(`Pending job number: ${show(old.pendingJobNumber)} → ${show(next.pendingJobNumber)}${next.pendingJobNumber && newPendingFrom ? ` (takes effect ${newPendingFrom})` : ''}`);
   }
   text('Return address', old.returnAddress, next.returnAddress);
+  text('Archive customer tag', old.archiveCustomerTag, next.archiveCustomerTag);
+  text('Archive provider tag', old.archiveProviderTag, next.archiveProviderTag);
+  text('Archive directory tag', old.archiveDirectoryTag, next.archiveDirectoryTag);
+  text('Logo 1', old.logo1, next.logo1);
+  text('Logo 2', old.logo2, next.logo2);
   if (old.colourMode !== next.colourMode) out.push(`Colour mode: ${COLOUR_MODE_LABELS[old.colourMode]} → ${COLOUR_MODE_LABELS[next.colourMode]}`);
   text('Parent', old.parent?.code ?? null, newParentCode);
   text('Invoicing account', old.invoicing?.code ?? null, newInvoicingCode);

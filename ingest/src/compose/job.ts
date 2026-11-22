@@ -10,6 +10,7 @@ import { composeBatch } from './compose.js';
 import type { BatchToCompose } from './db.js';
 import type { BatchPlan } from './plan.js';
 import { loadComposeSettings, loadJobToCompose, loadMrdfRecipients, recordedFiles, saveComposition } from './db.js';
+import { batchKeywords } from './keywords.js';
 import { buildMrdf, encodeAnsi, mailpiecePages } from './mrdf.js';
 import type { GreyConverter } from './grey.js';
 import { planBatch } from './plan.js';
@@ -60,9 +61,10 @@ export async function composeJob(o: ComposeJobOptions): Promise<ComposedBatch[]>
     const plan = planBatch(b.mailpieces, { maxPagesPerPdf: settings.maxPagesPerPdf, runSheetPages: runPages + (runPages % 2) });
     if (!plan.segments.length) { result.push({ batchCode: b.batchCode, files: [], skipped: 'no mailpieces to print' }); continue; }
 
+    const kw = batchKeywords({ archive: b.archive, edgeToEdge: !!b.paperName && paperFacts(b.paperName).edgeToEdge });
     const files = await composeBatch({
       batchCode: b.batchCode, source, runSheet, plan, marks: settings.marks, grey: o.grey, fileName: (n) => printFileName(b.batchCode, n),
-      keywords: b.paperName && paperFacts(b.paperName).edgeToEdge ? ['imposition:SRA4'] : undefined, mrdf: b.mrdf !== null,
+      keywords: kw ? [kw] : undefined, mrdf: b.mrdf !== null,
     });
     const old = await recordedFiles(o.pool, b.batchId);
     for (const f of files) await writeFile(join(o.outDir, f.fileName), f.bytes);
@@ -84,7 +86,7 @@ async function writeMrdfFile(pool: sql.ConnectionPool, dir: string, b: BatchToCo
     if (!r) throw new Error(`Mailpiece ${m.mailpieceId} has no address for the MRDF file`);
     return { sequenceNumber: m.sequenceNumber, pages: pages.get(m.sequenceNumber) ?? 0, addressLines: r.addressLines, postcode: r.postcode };
   });
-  const text = buildMrdf({ batchCode: b.batchCode, accountCode: b.mrdf!.accountCode, returnAddress: b.mrdf!.returnAddress, pieces, now });
+  const text = buildMrdf({ batchCode: b.batchCode, accountCode: b.mrdf!.accountCode, returnAddress: b.mrdf!.returnAddress, logo1: b.mrdf!.logo1 ?? undefined, logo2: b.mrdf!.logo2 ?? undefined, pieces, now });
   await mkdir(dir, { recursive: true });
   const target = join(dir, `${b.batchCode}.txt`), tmp = `${target}.tmp`;
   await writeFile(tmp, encodeAnsi(text));
