@@ -17,10 +17,14 @@ export interface FormatView {
   maxWeightG: number;
   maxThicknessMm: number | null;
   maxSheets: number | null;
+  /** The longer side, mm. */
+  maxWidthMm: number;
+  /** The shorter side, mm. */
+  maxHeightMm: number;
   /** Postal services that use this format. */
   usedBy: number;
 }
-export interface FormatInput { maxWeightG: number; maxThicknessMm: number | null; maxSheets: number | null }
+export interface FormatInput { maxWeightG: number; maxThicknessMm: number | null; maxSheets: number | null; maxWidthMm: number; maxHeightMm: number }
 
 export interface HistoryEntry { id: number; changedAt: string; changedBy: string; summary: string }
 

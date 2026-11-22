@@ -19,6 +19,15 @@ function whole(errs: Record<string, string>, v: unknown, key: string, label: str
   return v;
 }
 
+/** A required size in mm: above 0, at most 2 decimal places, fits DECIMAL(7,2). */
+function size(errs: Record<string, string>, v: unknown, key: string, label: string): number | null {
+  if (v === undefined || v === null) { errs[key] = `${label} is required`; return null; }
+  if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) { errs[key] = `${label} must be a number above 0`; return null; }
+  if (v >= 100000) { errs[key] = `${label} is too large`; return null; }
+  if (Math.abs(Math.round(v * 100) / 100 - v) > 1e-9) { errs[key] = `${label} can have at most 2 decimal places`; return null; }
+  return Math.round(v * 100) / 100;
+}
+
 export function parsePaper(body: Body): PaperInput {
   const errs: Record<string, string> = {};
   const batchName = text(errs, body?.['batchName'], 'batchName', 'Batch name', 100, true);
@@ -39,8 +48,11 @@ export function parseFormat(body: Body): FormatInput {
     else maxThicknessMm = Math.round(t * 100) / 100;
   }
   const maxSheets = whole(errs, body?.['maxSheets'], 'maxSheets', 'Most sheets', 1_000_000, false);
+  const maxWidthMm = size(errs, body?.['maxWidthMm'], 'maxWidthMm', 'Most width');
+  const maxHeightMm = size(errs, body?.['maxHeightMm'], 'maxHeightMm', 'Most height');
+  if (maxWidthMm !== null && maxHeightMm !== null && maxHeightMm > maxWidthMm) errs['maxHeightMm'] = 'Most height cannot be more than most width (width is the longer side)';
   done(errs);
-  return { maxWeightG: maxWeightG!, maxThicknessMm, maxSheets };
+  return { maxWeightG: maxWeightG!, maxThicknessMm, maxSheets, maxWidthMm: maxWidthMm!, maxHeightMm: maxHeightMm! };
 }
 
 /** The normalised text of a new anonymous addressee; the field must hold some letters or digits. */

@@ -120,11 +120,12 @@ CREATE TABLE idoc.postal_format (
     rank_order       TINYINT            NOT NULL,  -- smallest = 1; used to step up when limits are exceeded
     max_weight_g     INT                NOT NULL,
     max_thickness_mm DECIMAL(6, 2)      NULL,      -- FileMaker PostalFormats.maxDepth
-    max_length_mm    DECIMAL(7, 2)      NULL,
-    max_width_mm     DECIMAL(7, 2)      NULL,
+    max_width_mm     DECIMAL(7, 2)      NOT NULL,  -- the longer side of the mailpiece (Royal Mail "length"); sizes are compared the long way round
+    max_height_mm    DECIMAL(7, 2)      NOT NULL,  -- the shorter side (Royal Mail "width"); never more than max_width_mm
     max_sheets       INT                NULL,      -- FileMaker proxy limits: Letter 16, Large Letter 125
     CONSTRAINT uq_postal_format_name UNIQUE (name),
-    CONSTRAINT uq_postal_format_rank UNIQUE (rank_order)
+    CONSTRAINT uq_postal_format_rank UNIQUE (rank_order),
+    CONSTRAINT ck_postal_format_size CHECK (max_width_mm > 0 AND max_height_mm > 0 AND max_height_mm <= max_width_mm)
 );
 GO
 
@@ -744,11 +745,11 @@ GO
    =========================================================================== */
 INSERT INTO idoc.settings (settings_id) VALUES (1);
 
-INSERT INTO idoc.postal_format (name, rank_order, max_weight_g, max_thickness_mm, max_sheets) VALUES
-    (N'Letter',        1,  100,  5.00,   16),
-    (N'Large Letter',  2,  750, 25.00,  125),
-    (N'Small Parcel',  3, 2000,  NULL,  NULL),
-    (N'Medium Parcel', 4, 20000, NULL,  NULL);   -- CONFIRM limits against Royal Mail / carrier rules
+INSERT INTO idoc.postal_format (name, rank_order, max_weight_g, max_thickness_mm, max_sheets, max_width_mm, max_height_mm) VALUES
+    (N'Letter',        1,  100,  5.00,   16, 240, 165),
+    (N'Large Letter',  2,  750, 25.00,  125, 353, 250),
+    (N'Small Parcel',  3, 2000,  NULL,  NULL, 450, 350),
+    (N'Medium Parcel', 4, 20000, NULL,  NULL, 610, 460);   -- sizes are Royal Mail's maximums (length x width); CONFIRM the other limits against Royal Mail / carrier rules
 
 -- CONFIRM list with production before go-live
 INSERT INTO idoc.anonymous_addressee (normalised_text) VALUES

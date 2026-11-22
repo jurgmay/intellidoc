@@ -35,12 +35,15 @@ describe.skipIf(!cs)('MssqlReferenceStore', { timeout: 120_000 }, () => {
   it('changes a postal format\'s limits, keeping the order, and logs it in the same transaction', async () => {
     const [letter, large] = await store.formats();
     expect([letter!.name, large!.name]).toEqual(['Letter', 'Large Letter']);
-    await store.updateFormat(letter!.id, { maxWeightG: 120, maxThicknessMm: 6.5, maxSheets: null }, 'sam');
-    expect((await store.formats())[0]).toMatchObject({ maxWeightG: 120, maxThicknessMm: 6.5, maxSheets: null });
-    await expect(store.updateFormat(letter!.id, { maxWeightG: large!.maxWeightG + 1, maxThicknessMm: 5, maxSheets: 16 }, 'sam')).rejects.toThrow(/Large Letter/);
+    expect(letter).toMatchObject({ maxWidthMm: 240, maxHeightMm: 165 }); // Royal Mail's maximum letter, 240 x 165
+    expect(large).toMatchObject({ maxWidthMm: 353, maxHeightMm: 250 });
+    await expect(pool.request().query(`UPDATE idoc.postal_format SET max_height_mm = max_width_mm + 1 WHERE postal_format_id = ${letter!.id}`)).rejects.toThrow(/ck_postal_format_size/);
+    await store.updateFormat(letter!.id, { maxWeightG: 120, maxThicknessMm: 6.5, maxSheets: null, maxWidthMm: 245.5, maxHeightMm: 170 }, 'sam');
+    expect((await store.formats())[0]).toMatchObject({ maxWeightG: 120, maxThicknessMm: 6.5, maxSheets: null, maxWidthMm: 245.5, maxHeightMm: 170 });
+    await expect(store.updateFormat(letter!.id, { maxWeightG: large!.maxWeightG + 1, maxThicknessMm: 5, maxSheets: 16, maxWidthMm: letter!.maxWidthMm, maxHeightMm: letter!.maxHeightMm }, 'sam')).rejects.toThrow(/Large Letter/);
     expect((await store.formats())[0]!.maxWeightG).toBe(120);
     expect(await count(`SELECT COUNT(*) AS n FROM idoc.audit_log WHERE entity = N'reference' AND summary LIKE N'Postal format "Letter"%'`)).toBe(1);
-    await store.updateFormat(letter!.id, { maxWeightG: letter!.maxWeightG, maxThicknessMm: letter!.maxThicknessMm, maxSheets: letter!.maxSheets }, 'sam'); // put it back
+    await store.updateFormat(letter!.id, { maxWeightG: letter!.maxWeightG, maxThicknessMm: letter!.maxThicknessMm, maxSheets: letter!.maxSheets, maxWidthMm: letter!.maxWidthMm, maxHeightMm: letter!.maxHeightMm }, 'sam'); // put it back
   });
 
   it('adds and removes anonymous addressees', async () => {

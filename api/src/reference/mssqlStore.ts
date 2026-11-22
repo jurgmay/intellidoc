@@ -53,10 +53,10 @@ export class MssqlReferenceStore implements ReferenceStore {
   private async formatRows(t: sql.Transaction | null): Promise<FormatView[]> {
     const req = t ? new sql.Request(t) : this.pool.request();
     const rows = (await req.query(`
-      SELECT f.postal_format_id, f.name, f.rank_order, f.max_weight_g, f.max_thickness_mm, f.max_sheets,
+      SELECT f.postal_format_id, f.name, f.rank_order, f.max_weight_g, f.max_thickness_mm, f.max_sheets, f.max_width_mm, f.max_height_mm,
              (SELECT COUNT(*) FROM idoc.postal_service AS s WHERE s.postal_format_id = f.postal_format_id) AS used_by
       FROM idoc.postal_format AS f ORDER BY f.rank_order`)).recordset as R[];
-    return rows.map((r) => ({ id: r.postal_format_id, name: r.name, rank: r.rank_order, maxWeightG: r.max_weight_g, maxThicknessMm: num(r.max_thickness_mm), maxSheets: num(r.max_sheets), usedBy: Number(r.used_by) }));
+    return rows.map((r) => ({ id: r.postal_format_id, name: r.name, rank: r.rank_order, maxWeightG: r.max_weight_g, maxThicknessMm: num(r.max_thickness_mm), maxSheets: num(r.max_sheets), maxWidthMm: Number(r.max_width_mm), maxHeightMm: Number(r.max_height_mm), usedBy: Number(r.used_by) }));
   }
   async formats(): Promise<FormatView[]> { return this.formatRows(null); }
   async updateFormat(id: number, input: FormatInput, by: string): Promise<void> {
@@ -65,7 +65,8 @@ export class MssqlReferenceStore implements ReferenceStore {
       checkFormatLimits(f, input, all.filter((x) => x.id !== id));
       const line = D.describeFormatChange(f, input); if (!line) return;
       await new sql.Request(t).input('i', sql.Int, id).input('w', sql.Int, input.maxWeightG).input('th', sql.Decimal(6, 2), input.maxThicknessMm).input('s', sql.Int, input.maxSheets)
-        .query('UPDATE idoc.postal_format SET max_weight_g = @w, max_thickness_mm = @th, max_sheets = @s WHERE postal_format_id = @i');
+        .input('mw', sql.Decimal(7, 2), input.maxWidthMm).input('mh', sql.Decimal(7, 2), input.maxHeightMm)
+        .query('UPDATE idoc.postal_format SET max_weight_g = @w, max_thickness_mm = @th, max_sheets = @s, max_width_mm = @mw, max_height_mm = @mh WHERE postal_format_id = @i');
       await this.audit(t, by, line);
     });
   }
