@@ -20,6 +20,12 @@ describe.skipIf(!hasDb)('DbActivity', { timeout: 120_000 }, () => {
     const r = await row(id!);
     expect(r).toMatchObject({ state: 'Done', detail: '3 of 3 batches made' }); expect(r.finished_at).not.toBeNull();
   });
+  it('keeps the size of the file and whether a PDF is read, for the time estimate', async () => {
+    const id = await a.start('PDF check', 'big.pdf', null, null, { bytes: 70_000_000, withPdf: true });
+    expect(await row(id!)).toMatchObject({ with_pdf: true }); expect(Number((await row(id!)).bytes)).toBe(70_000_000);
+    const plain = await a.start('Import', 'x.xml');
+    expect(await row(plain!)).toMatchObject({ bytes: null, with_pdf: false });
+  });
   it('keeps the progress detail when finishing with none, and drops a row on request', async () => {
     const id = await a.start('Import', 'a.xml');
     await a.step(id, 0, null, 'Reading'); await a.finish(id, 'Failed');

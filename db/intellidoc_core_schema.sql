@@ -558,6 +558,8 @@ CREATE TABLE idoc.activity (
     detail       NVARCHAR(500)         NULL,       -- what it is on now, or the outcome / error
     step_done    INT                   NULL,
     step_total   INT                   NULL,
+    bytes        BIGINT                NULL,       -- size of the file the work is about (the PDF when one is read), for the queue's time estimate
+    with_pdf     BIT                   NOT NULL CONSTRAINT df_activity_pdf DEFAULT (0),   -- a PDF is read as part of this work
     started_at   DATETIME2(0)          NOT NULL CONSTRAINT df_activity_started DEFAULT (SYSUTCDATETIME()),
     updated_at   DATETIME2(0)          NOT NULL CONSTRAINT df_activity_updated DEFAULT (SYSUTCDATETIME()),
     finished_at  DATETIME2(0)          NULL,

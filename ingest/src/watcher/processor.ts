@@ -7,6 +7,7 @@ import type { PackInk, PdfTracker, Repository } from '../repository.js';
 import { inkPerRange } from '../pdfInk.js';
 import { validatePageRanges } from '../ingest.js';
 import type { Mailer } from '../mail.js';
+import type { Progress } from '../activity.js';
 import type { ReferenceData } from '../reference.js';
 import type { Outcome } from './folderWatcher.js';
 
@@ -34,12 +35,12 @@ export interface ProcessorDeps {
   checkPostcodes?: boolean;
 }
 
-export function makeProcessor(d: ProcessorDeps): (xmlPath: string, pdfPath: string | null) => Promise<Outcome> {
-  return async (xmlPath, pdfPath) => {
+export function makeProcessor(d: ProcessorDeps): (xmlPath: string, pdfPath: string | null, progress?: Progress) => Promise<Outcome> {
+  return async (xmlPath, pdfPath, progress) => {
     try {
       const xml = decodeXml(await readFile(xmlPath));
       const ref = await d.loadReference(); // fresh each time so configuration changes apply to the next file
-      const r = await ingest(xml, basename(xmlPath), pdfPath, { ref, pdf: d.pdf, repo: d.repo }, { checkPostcodes: d.checkPostcodes });
+      const r = await ingest(xml, basename(xmlPath), pdfPath, { ref, pdf: d.pdf, repo: d.repo }, { checkPostcodes: d.checkPostcodes, progress });
       const summary = summarise(r);
       const errors = r.issues.filter((i) => i.severity === 'error');
       if (errors.length > 0) {
@@ -64,12 +65,13 @@ export interface AttachDeps {
 }
 
 /** A PDF turned up for a job that was imported from its XML alone: check it against the pack page ranges and attach it. */
-export function makeAttachProcessor(d: AttachDeps): (pdfPath: string) => Promise<Outcome | { kind: 'unmatched' }> {
-  return async (pdfPath) => {
+export function makeAttachProcessor(d: AttachDeps): (pdfPath: string, progress?: Progress) => Promise<Outcome | { kind: 'unmatched' }> {
+  return async (pdfPath, progress) => {
     const baseName = parse(pdfPath).name;
     try {
       const job = await d.repo.findAwaitingPdf(baseName);
       if (!job) return { kind: 'unmatched' };
+      progress?.(0, null, 'Counting the pages');
       const pages = await d.pdf.pageCount(pdfPath);
       const errors = validatePageRanges(job.packs, pages).filter((i) => i.severity === 'error');
       if (errors.length > 0) {
@@ -81,7 +83,7 @@ export function makeAttachProcessor(d: AttachDeps): (pdfPath: string) => Promise
       // The colour of each page, for pricing. A PDF whose pages cannot be read this way is still accepted; its packs just have no counts.
       let packInk: PackInk[] | undefined;
       try {
-        const ink = await d.pdf.pageInk(pdfPath);
+        const ink = await d.pdf.pageInk(pdfPath, progress);
         if (ink.length === pages) packInk = inkPerRange(ink, job.packs).map((c, i) => ({ guid: job.packs[i]!.guid, ...c }));
       } catch { /* leave the counts empty */ }
       const { alertCount } = await d.repo.markPdfReceived(job.jobId, pages, packInk);

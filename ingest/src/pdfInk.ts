@@ -259,11 +259,18 @@ class PageScan {
 }
 
 /** Looks at every page of a PDF. A page that cannot be read is counted as colour (the dearer, safer reading). */
-export async function analysePageInk(bytes: Uint8Array): Promise<PageInk[]> {
+export async function analysePageInk(bytes: Uint8Array, onProgress?: (done: number, total: number) => void): Promise<PageInk[]> {
   const doc = await PDFDocument.load(bytes, { updateMetadata: false, ignoreEncryption: true, throwOnInvalidObject: false });
-  return doc.getPages().map((p) => {
-    try { return new PageScan(doc.context).page(p.node.get(PDFName.of('Contents')), p.node.Resources()); } catch { return 'colour' as const; }
-  });
+  const pages = doc.getPages();
+  const out: PageInk[] = [];
+  let lastYield = Date.now();
+  for (const p of pages) {
+    try { out.push(new PageScan(doc.context).page(p.node.get(PDFName.of('Contents')), p.node.Resources())); } catch { out.push('colour'); }
+    // A big PDF is thousands of pages of synchronous work: let the program breathe (timers, database updates) about every 200 ms.
+    if (Date.now() - lastYield > 200) { onProgress?.(out.length, pages.length); await new Promise((r) => setImmediate(r)); lastYield = Date.now(); }
+  }
+  onProgress?.(pages.length, pages.length);
+  return out;
 }
 
 /** Colour, mono and blank pages for each pack, from the page list of the whole PDF (page numbers are 1-based and inclusive). */

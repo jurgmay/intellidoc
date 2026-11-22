@@ -67,8 +67,9 @@ const dbActivity = new DbActivity(pool, (m) => log('warn', m));
 const activity: ActivityLog = cfg.dryRun ? noActivity : dbActivity;
 if (!cfg.dryRun) await dbActivity.tidy();
 const watcher = new FolderWatcher(cfg.dirs, {
-  process: (x, p) => tracked(activity, 'Import', x, () => process1(x, p)),
-  processXmlOnly: (x: string) => tracked(activity, 'Import', x, () => process1(x, null)), attachPdf: (p: string) => tracked(activity, 'PDF check', p, () => attach(p)), xmlFirstEnabled: () => live.xmlFirst,
+  process: (x, p) => tracked(activity, 'Import', x, (report) => process1(x, p, report), { sizeOf: p, withPdf: true }),
+  processXmlOnly: (x: string) => tracked(activity, 'Import', x, (report) => process1(x, null, report)),
+  attachPdf: (p: string) => tracked(activity, 'PDF check', p, (report) => attach(p, report), { withPdf: true }), xmlFirstEnabled: () => live.xmlFirst,
   log, now: () => Date.now(),
 }, { stableMs: cfg.stableMs, retryMs: cfg.retryMs, orphanWarnMs: 5 * 60_000, dryRun: cfg.dryRun });
 

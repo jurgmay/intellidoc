@@ -1,3 +1,4 @@
+import type { Progress } from './activity.js';
 import { createHash } from 'node:crypto';
 import { basename } from 'node:path';
 import { parseHpodV6 } from './parser.js';
@@ -12,7 +13,7 @@ import type { Repository } from './repository.js';
 import type { ReferenceData, AccountConfig } from './reference.js';
 import type { IngestIssue, IngestPack, IngestResult, Mailpiece, ParsedPack } from './types.js';
 
-export interface IngestOptions { checkPostcodes?: boolean }
+export interface IngestOptions { checkPostcodes?: boolean; progress?: Progress }
 
 /** Brand: the passthrough "Brand" (taken from the letter template, always right), else the brand in brackets in the envelope text,
  *  else the account's envelope config for the stock code, else a brand name found in the text. */
@@ -53,13 +54,14 @@ export async function ingest(
   const parsed = parseHpodV6(xml);
   // XML-first: with no PDF yet the job is saved from the XML alone. The ranges are still checked for gaps and overlaps against
   // themselves; they are checked against the real PDF when it arrives (attachPdf).
+  if (pdfPath !== null) opts.progress?.(0, null, 'Counting the pages');
   const pdfPages = pdfPath === null ? parsed.reduce((m, p) => Math.max(m, p.endPage), 0) : await pdf.pageCount(pdfPath);
   issues.push(...validatePageRanges(parsed, pdfPages));
   // What each page carries (colour, mono, blank), for pricing. A PDF that cannot be read this way does not stop the job: its packs just have no counts yet.
   let inkPages: PageInk[] | null = null;
   if (pdfPath !== null) {
     try {
-      inkPages = await pdf.pageInk(pdfPath);
+      inkPages = await pdf.pageInk(pdfPath, opts.progress);
       if (inkPages.length !== pdfPages) inkPages = null;
     } catch (e) {
       issues.push({ severity: 'warning', message: `The colour of the pages could not be read: ${(e as Error).message}` });
