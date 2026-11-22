@@ -1,11 +1,15 @@
 import sql from 'mssql';
 
+/** Told how far a long step has got: how many of how many (total null when not known) and what it is doing. */
+export type Progress = (done: number, total: number | null, detail: string) => void;
+
 export type ActivityKind = 'Import' | 'PDF check' | 'Print files';
 export type ActivityState = 'Running' | 'Done' | 'Failed' | 'Abandoned';
 
 /** Where progress goes. The real one writes idoc.activity; the Activity screen reads it. */
 export interface ActivityLog {
-  start(kind: ActivityKind, label: string, jobId?: number | null, total?: number | null): Promise<number | null>;
+  /** `meta.bytes` is the size of the file the work is about; `withPdf` says a PDF is read as part of it. Both feed the queue's time estimate. */
+  start(kind: ActivityKind, label: string, jobId?: number | null, total?: number | null, meta?: { bytes?: number | null; withPdf?: boolean }): Promise<number | null>;
   step(id: number | null, done: number, total: number | null, detail: string): Promise<void>;
   finish(id: number | null, state: 'Done' | 'Failed', detail?: string): Promise<void>;
   /** Forget a row that turned out to be nothing (e.g. a lone PDF no job was waiting for). */
@@ -26,9 +30,10 @@ export class DbActivity implements ActivityLog {
     try { const r = await f(); this.failing = false; return r; }
     catch (e) { if (!this.failing) this.onError(`Could not record progress: ${(e as Error).message}`); this.failing = true; return fallback; }
   }
-  start(kind: ActivityKind, label: string, jobId: number | null = null, total: number | null = null): Promise<number | null> {
+  start(kind: ActivityKind, label: string, jobId: number | null = null, total: number | null = null, meta: { bytes?: number | null; withPdf?: boolean } = {}): Promise<number | null> {
     return this.safely(async () => (await this.pool.request().input('k', sql.NVarChar(20), kind).input('l', sql.NVarChar(300), label.slice(0, 300)).input('j', sql.BigInt, jobId).input('t', sql.Int, total)
-      .query<{ id: number }>(`INSERT INTO idoc.activity (kind, label, job_id, state, step_done, step_total) OUTPUT INSERTED.activity_id AS id VALUES (@k, @l, @j, N'Running', 0, @t)`)).recordset[0]!.id, null);
+      .input('b', sql.BigInt, meta.bytes ?? null).input('w', sql.Bit, meta.withPdf ?? false)
+      .query<{ id: number }>(`INSERT INTO idoc.activity (kind, label, job_id, state, step_done, step_total, bytes, with_pdf) OUTPUT INSERTED.activity_id AS id VALUES (@k, @l, @j, N'Running', 0, @t, @b, @w)`)).recordset[0]!.id, null);
   }
   async step(id: number | null, done: number, total: number | null, detail: string): Promise<void> {
     if (id === null) return;

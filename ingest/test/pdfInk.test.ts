@@ -21,6 +21,17 @@ async function build(pages: ((p: PDFPage, doc: PDFDocument) => void | Promise<vo
 }
 const kinds = async (...pages: Parameters<typeof build>[0]) => analysePageInk(await build(pages));
 
+describe('analysePageInk progress', () => {
+  it('reports the last page when it finishes, and gives the same answer with or without a listener', async () => {
+    const bytes = await build([(p) => p.drawRectangle({ x: 0, y: 0, width: 10, height: 10, color: rgb(1, 0, 0) }), () => {}, (p) => p.drawRectangle({ x: 0, y: 0, width: 10, height: 10, color: rgb(0, 0, 0) })]);
+    const seen: [number, number][] = [];
+    const withListener = await analysePageInk(bytes, (d, t) => seen.push([d, t]));
+    expect(withListener).toEqual(await analysePageInk(bytes));
+    expect(withListener).toEqual(['colour', 'blank', 'mono']);
+    expect(seen.at(-1)).toEqual([3, 3]);
+  });
+});
+
 describe('analysePageInk', () => {
   it('blank page: nothing on it, or only white, or only spaces', async () => {
     expect(await kinds(() => {}, (p) => p.drawRectangle({ x: 0, y: 0, width: 595, height: 842, color: rgb(1, 1, 1) }), (p) => p.drawRectangle({ x: 0, y: 0, width: 50, height: 50, color: cmyk(0, 0, 0, 0) }),
