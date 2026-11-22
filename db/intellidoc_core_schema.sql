@@ -748,8 +748,8 @@ INSERT INTO idoc.settings (settings_id) VALUES (1);
 INSERT INTO idoc.postal_format (name, rank_order, max_weight_g, max_thickness_mm, max_sheets, max_length_mm, max_width_mm) VALUES
     (N'Letter',        1,  100,  5.00,   16, 240, 165),
     (N'Large Letter',  2,  750, 25.00,  125, 353, 250),
-    (N'Small Parcel',  3, 2000,  NULL,  NULL, 450, 350),
-    (N'Medium Parcel', 4, 20000, NULL,  NULL, 610, 460);   -- sizes are Royal Mail's maximums (length x width); CONFIRM the other limits against Royal Mail / carrier rules
+    (N'Small Parcel',  3, 2000, 160.00, NULL, 450, 350),
+    (N'Medium Parcel', 4, 20000, 460.00, NULL, 610, 460);   -- Royal Mail's maximums: weight, length x width x thickness (depth); sheets have no limit
 
 -- CONFIRM list with production before go-live
 INSERT INTO idoc.anonymous_addressee (normalised_text) VALUES

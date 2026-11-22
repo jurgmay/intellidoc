@@ -37,6 +37,9 @@ describe.skipIf(!cs)('MssqlReferenceStore', { timeout: 120_000 }, () => {
     expect([letter!.name, large!.name]).toEqual(['Letter', 'Large Letter']);
     expect(letter).toMatchObject({ maxLengthMm: 240, maxWidthMm: 165 }); // Royal Mail's maximum letter, 240 x 165
     expect(large).toMatchObject({ maxLengthMm: 353, maxWidthMm: 250 });
+    const [, , small, medium] = await store.formats(); // the parcel formats, Royal Mail's maximums: weight, thickness (depth), length x width
+    expect(small).toMatchObject({ name: 'Small Parcel', maxWeightG: 2000, maxThicknessMm: 160, maxLengthMm: 450, maxWidthMm: 350 });
+    expect(medium).toMatchObject({ name: 'Medium Parcel', maxWeightG: 20000, maxThicknessMm: 460, maxLengthMm: 610, maxWidthMm: 460 });
     await expect(pool.request().query(`UPDATE idoc.postal_format SET max_width_mm = max_length_mm + 1 WHERE postal_format_id = ${letter!.id}`)).rejects.toThrow(/ck_postal_format_size/);
     await store.updateFormat(letter!.id, { maxWeightG: 120, maxThicknessMm: 6.5, maxSheets: null, maxLengthMm: 245.5, maxWidthMm: 170 }, 'sam');
     expect((await store.formats())[0]).toMatchObject({ maxWeightG: 120, maxThicknessMm: 6.5, maxSheets: null, maxLengthMm: 245.5, maxWidthMm: 170 });
