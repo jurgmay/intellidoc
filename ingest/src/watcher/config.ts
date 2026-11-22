@@ -1,5 +1,6 @@
 import { join, resolve } from 'node:path';
 import type { WatcherDirs } from './folderWatcher.js';
+import { smtpFromEnv } from '../mail.js';
 
 export interface Config {
   connectionString: string;
@@ -49,9 +50,6 @@ export function loadConfig(env: NodeJS.ProcessEnv, argv: string[]): Config {
     pdfWaitMinutes: num('PDF_WAIT_MINUTES', 30),
     pdfReminderMinutes: num('PDF_REMINDER_MINUTES', num('PDF_WAIT_MINUTES', 30)),
     alertTo: (env['ALERT_TO'] ?? '').split(/[;,]/).map((x) => x.trim()).filter(Boolean),
-    smtp: env['SMTP_HOST'] ? {
-      host: env['SMTP_HOST'], port: num('SMTP_PORT', 587), secure: env['SMTP_SECURE'] === '1', user: env['SMTP_USER'] || undefined, pass: env['SMTP_PASS'] || undefined,
-      from: env['SMTP_FROM'] || env['SMTP_USER'] || (() => { throw new ConfigError('SMTP_FROM (or SMTP_USER) is needed with SMTP_HOST'); })(),
-    } : undefined,
+    smtp: (() => { try { return smtpFromEnv(env); } catch (e) { throw new ConfigError((e as Error).message); } })(),
   };
 }

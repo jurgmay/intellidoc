@@ -9,23 +9,26 @@ import { JobsPage, printFilesLabel } from './JobsPage';
 
 const job = (id: number, over: object = {}) => ({
   id, customerCode: 'ACME', customerName: 'Acme Energy Ltd', baseName: `ACME_${id}`, pdfFileName: `ACME_${id}.pdf`, receivedAt: '2026-11-20T09:30:00.000Z', status: 'Received',
-  packCount: 10, pageCount: 30, pdfError: null, batchCount: 2, composedBatchCount: 0, ...over,
+  packCount: 10, pageCount: 30, pdfError: null, batchCount: 2, composedBatchCount: 0, runSheetsEmailedAt: null, ...over,
 });
 const detail = (id: number) => ({ ...job(id), batches: [
   { id: 1, batchCode: 7001, status: 'Created', mailpieceCount: 6, files: [{ fileName: '7001_1.pdf', segment: 1, mailpieces: 6, pages: 20 }] },
   { id: 2, batchCode: 7002, status: 'Created', mailpieceCount: 4, files: [] }] });
 
 let calls: { url: string; method: string; body?: any }[]; // eslint-disable-line @typescript-eslint/no-explicit-any
-let rows: object[]; let canCompose: boolean; let composeFails: string | null;
+let rows: object[]; let canCompose: boolean; let composeFails: string | null; let runSheetEmail: object | null;
 beforeEach(() => {
-  calls = []; canCompose = true; composeFails = null;
+  calls = []; canCompose = true; composeFails = null; runSheetEmail = null;
   rows = [job(3), job(2, { composedBatchCount: 2 }), job(1, { status: 'PDF Rejected', pdfError: 'Pack 12 is past the end', composedBatchCount: 0 })];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
     const method = init?.method ?? 'GET';
     calls.push({ url, method, body: init?.body ? JSON.parse(init.body) : undefined });
+    if (method === 'POST' && url.endsWith('/email-run-sheets')) return composeFails
+      ? new Response(JSON.stringify({ error: composeFails }), { status: 409 })
+      : new Response(JSON.stringify({ sent: true, to: ['print@latcham.example'], cc: ['ops@acme.example'], testMode: false, error: null }), { status: 200 });
     if (method === 'POST') return composeFails
       ? new Response(JSON.stringify({ error: composeFails }), { status: 409 })
-      : new Response(JSON.stringify({ batches: [{ batchCode: 7001, files: ['7001_1.pdf'], mrdfFile: null, skipped: null }, { batchCode: 7002, files: [], mrdfFile: null, skipped: 'already composed' }] }), { status: 200 });
+      : new Response(JSON.stringify({ runSheetEmail, batches: [{ batchCode: 7001, files: ['7001_1.pdf'], mrdfFile: null, skipped: null }, { batchCode: 7002, files: [], mrdfFile: null, skipped: 'already composed' }] }), { status: 200 });
     if (/^\/api\/jobs\/\d+$/.test(url)) return new Response(JSON.stringify(detail(Number(url.split('/').pop()))), { status: 200 });
     return new Response(JSON.stringify({ rows, canCompose, composeUnavailable: canCompose ? null : 'COMPOSE_OUT_DIR is not set on the API server.' }), { status: 200 });
   }));
@@ -94,5 +97,35 @@ describe('JobsPage', () => {
     expect(await screen.findByText('Job 3: ACME_3.pdf')).toBeInTheDocument();
     expect(screen.getByText('7001_1.pdf')).toBeInTheDocument();
     expect(screen.getByText('None yet')).toBeInTheDocument();
+  });
+  it('downloads and e-mails the run sheets from the details', async () => {
+    show();
+    await userEvent.click(within(await rowOf(3)).getByRole('button', { name: 'Details' }));
+    expect(await screen.findByText('Run sheets not e-mailed yet.')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Download run sheets' })).toHaveAttribute('href', '/api/jobs/3/run-sheets.pdf');
+    await userEvent.click(screen.getByRole('button', { name: 'E-mail run sheets' }));
+    await waitFor(() => expect(calls.find((c) => c.url === '/api/jobs/3/email-run-sheets')).toMatchObject({ method: 'POST' }));
+    expect(await screen.findByText('Run sheets e-mailed for job 3')).toBeInTheDocument();
+    expect(screen.getByText('print@latcham.example, ops@acme.example')).toBeInTheDocument();
+  });
+  it('shows why the run sheets could not be e-mailed', async () => {
+    composeFails = 'No run sheet e-mail recipients are set (Settings).';
+    show();
+    await userEvent.click(within(await rowOf(3)).getByRole('button', { name: 'Details' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'E-mail run sheets' }));
+    expect(await screen.findByText('No run sheet e-mail recipients are set (Settings).')).toBeInTheDocument();
+  });
+  it('tells the user when the e-mail sent with the print files did not go', async () => {
+    runSheetEmail = { sent: false, to: [], cc: [], testMode: false, error: 'No mail server is set up on this server.' };
+    show();
+    await userEvent.click(within(await rowOf(3)).getByRole('button', { name: 'Make print files' }));
+    expect(await screen.findByText('Run sheets not e-mailed')).toBeInTheDocument();
+    expect(await screen.findByText('No mail server is set up on this server.')).toBeInTheDocument();
+  });
+  it('says Resend once the run sheets have been e-mailed', async () => {
+    rows = [job(5, { runSheetsEmailedAt: '2026-11-21T10:05:00.000Z', composedBatchCount: 2 })];
+    show();
+    await userEvent.click(within(await rowOf(5)).getByRole('button', { name: 'Details' }));
+    expect(await screen.findByRole('button', { name: 'E-mail run sheets' })).toBeInTheDocument();
   });
 });

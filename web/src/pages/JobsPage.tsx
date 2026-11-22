@@ -2,11 +2,23 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert, Badge, Button, Group, Loader, Modal, Paper, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconAlertCircle } from '@tabler/icons-react';
-import { composeJob, getJob, JOB_STATUSES, listJobs, type JobDetail, type JobRow } from '../api/jobs';
+import { composeJob, emailRunSheets, getJob, JOB_STATUSES, listJobs, runSheetsUrl, type JobDetail, type JobRow, type RunSheetEmail } from '../api/jobs';
 
 const STATUS_COLOUR: Record<string, string> = { Received: 'green', 'Awaiting PDF': 'yellow', 'PDF Rejected': 'red' };
 const when = (iso: string): string => new Date(iso).toLocaleString('en-GB', { timeZone: 'Europe/London', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`;
+
+/** Who the run sheets went to, for a notification. */
+export function emailSummary(r: RunSheetEmail): string {
+  return `${r.testMode ? 'Test mode: ' : ''}${[...r.to, ...r.cc].join(', ')}`;
+}
+
+/** The notification for the e-mail sent as the print files were made, or null when none was attempted. */
+function batches_email(res: { runSheetEmail: RunSheetEmail | null }): { color: string; title: string; message: string; autoClose?: false } | null {
+  const r = res.runSheetEmail;
+  if (!r) return null;
+  return r.sent ? { color: 'green', title: 'Run sheets e-mailed', message: emailSummary(r) } : { color: 'orange', title: 'Run sheets not e-mailed', message: r.error ?? 'Unknown problem', autoClose: false };
+}
 
 /** What a job's print files look like in the list: none yet, all made, or some. */
 export function printFilesLabel(j: JobRow): string {
@@ -35,12 +47,24 @@ export function JobsPage() {
   async function make(j: JobRow, onlyNew: boolean) {
     setConfirm(null); setWorking(j.id);
     try {
-      const { batches } = await composeJob(j.id, onlyNew);
+      const res = await composeJob(j.id, onlyNew); const { batches } = res;
       const made = batches.filter((b) => b.files.length > 0);
       notifications.show({ color: 'green', title: `Print files made for job ${j.id}`, message: `${plural(made.length, 'batch', 'batches')}, ${plural(made.flatMap((b) => b.files).length, 'file', 'files')}${batches.some((b) => b.skipped) ? `; ${batches.filter((b) => b.skipped).length} left alone` : ''}.` });
+      if (batches_email(res)) notifications.show(batches_email(res)!);
       await load();
       if (open?.id === j.id) setOpen(await getJob(j.id));
     } catch (e) { notifications.show({ color: 'red', title: 'Print files not made', message: (e as Error).message, autoClose: false }); }
+    finally { setWorking(null); }
+  }
+
+  async function sendRunSheets(j: JobRow) {
+    setWorking(j.id);
+    try {
+      const r = await emailRunSheets(j.id);
+      notifications.show({ color: 'green', title: `Run sheets e-mailed for job ${j.id}`, message: emailSummary(r) });
+      await load();
+      if (open?.id === j.id) setOpen(await getJob(j.id));
+    } catch (e) { notifications.show({ color: 'red', title: 'Run sheets not e-mailed', message: (e as Error).message, autoClose: false }); }
     finally { setWorking(null); }
   }
 
@@ -111,6 +135,17 @@ export function JobsPage() {
         {open && (
           <Stack>
             <Text size="sm">{open.customerName} ({open.customerCode}), received {when(open.receivedAt)}. Status: {open.status}.</Text>
+            {open.batchCount > 0 && (
+              <Group justify="space-between">
+                <Text size="sm">{open.runSheetsEmailedAt ? `Run sheets e-mailed ${when(open.runSheetsEmailedAt)}.` : 'Run sheets not e-mailed yet.'}</Text>
+                <Group gap="xs">
+                  <Button component="a" href={runSheetsUrl(open.id)} size="xs" variant="default">Download run sheets</Button>
+                  <Button size="xs" variant="default" loading={working === open.id} disabled={working !== null} onClick={() => { void sendRunSheets(open); }}>
+                    {open.runSheetsEmailedAt ? 'Resend run sheets' : 'E-mail run sheets'}
+                  </Button>
+                </Group>
+              </Group>
+            )}
             {open.pdfError && <Alert color="red" icon={<IconAlertCircle size={16} />}>{open.pdfError}</Alert>}
             <Table withTableBorder>
               <Table.Thead><Table.Tr><Table.Th ta="center">Batch</Table.Th><Table.Th>Status</Table.Th><Table.Th ta="right">Mailpieces</Table.Th><Table.Th>Print files</Table.Th></Table.Tr></Table.Thead>

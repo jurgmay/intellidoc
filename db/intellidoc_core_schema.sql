@@ -37,6 +37,8 @@ CREATE TABLE idoc.settings (
     pdf_wait_minutes                    INT           NOT NULL CONSTRAINT df_settings_pdf_wait DEFAULT (30),   -- first "PDF missing" alert after this long
     pdf_reminder_minutes                INT           NOT NULL CONSTRAINT df_settings_pdf_remind DEFAULT (30), -- then a reminder this often
     alert_recipients                    NVARCHAR(1000) NOT NULL CONSTRAINT df_settings_alert_to DEFAULT (N''), -- e-mail addresses, comma or semicolon separated
+    email_run_sheets                    BIT           NOT NULL CONSTRAINT df_settings_email_rs DEFAULT (0),                    -- e-mail a job's run sheets when its print files are first made
+    run_sheet_recipients                NVARCHAR(1000) NOT NULL CONSTRAINT df_settings_rs_to DEFAULT (N''),      -- the first is the To, the rest are Cc (the customer's notification addresses are added to Cc)
     -- PDF composition (the print files). The marks are measured in millimetres from the top left of the trim box, the way FileMaker did it.
     -- The first-time values are placeholders: set them to the press / enclosing machine's real positions on the Settings page.
     auto_compose                        BIT           NOT NULL CONSTRAINT df_settings_auto_compose DEFAULT (0),               -- the watcher makes the print files itself when a job is Received (needs COMPOSE_OUT_DIR)
@@ -419,6 +421,7 @@ CREATE TABLE idoc.job (
     pdf_last_alert_at DATETIME2(0)  NULL,
     pdf_alert_count   INT           NOT NULL CONSTRAINT df_job_alerts DEFAULT (0),
     pdf_error         NVARCHAR(2000) NULL,
+    run_sheets_emailed_at DATETIME2(0) NULL,  -- when the run sheets were e-mailed to production (automatically once, or by the Resend button)
     CONSTRAINT uq_job_base UNIQUE (account_id, base_name),
     CONSTRAINT ck_job_status CHECK (status IN (N'Received', N'Awaiting PDF', N'PDF Rejected'))
 );

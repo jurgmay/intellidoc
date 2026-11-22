@@ -86,6 +86,18 @@ export const SETTINGS: SettingDef[] = [
     appliesTo: 'The watcher re-reads this every minute; no restart needed.',
   },
   {
+    key: 'emailRunSheets', column: 'email_run_sheets', group: 'PDF and alerts', label: 'E-mail run sheets when print files are made', type: 'boolean',
+    description: 'When on, the first time the print files of a job are made, one e-mail goes to the run sheet recipients (below) with the job\'s run sheets in one PDF and a summary of the job. The customer\'s notification addresses are copied in. A customer marked as Testing sends it to the alert recipients only. A job is e-mailed once; use Resend on the Jobs page to send it again.',
+    usedBy: 'Making print files (the watcher and the Jobs page). The mail server (SMTP_HOST ...) is set in the .env file of the watcher and of the API; nothing is sent without it.',
+    appliesTo: 'Next job whose print files are made.',
+  },
+  {
+    key: 'runSheetRecipients', column: 'run_sheet_recipients', group: 'PDF and alerts', label: 'Run sheet e-mail recipients', type: 'emails',
+    description: 'Who gets the run sheets, usually production. The first address is the To; the others are Cc. Separate addresses with commas.',
+    usedBy: 'The run sheet e-mail, and the Resend button on the Jobs page.',
+    appliesTo: 'Next run sheet e-mail.',
+  },
+  {
     key: 'autoCompose', column: 'auto_compose', group: 'Print file marks', label: 'Make print files automatically', type: 'boolean',
     description: 'When on, the folder watcher makes the print PDFs of a job as soon as it is Received, and again for any job it could not do. When off, print files are made only by running the compose command. Off until the marks below have been checked on a printed proof.',
     usedBy: 'Folder watcher: after each job is Received. It also needs the COMPOSE_OUT_DIR folder in the watcher .env file; without it nothing is made, whatever this says.',

@@ -30,7 +30,7 @@ describe.skipIf(!cs)('MssqlJobStore', { timeout: 120_000 }, () => {
 
   it('lists the job with its customer, status and how many batches have print files', async () => {
     const [j] = (await store.list({ search: null, status: null, limit: 10 })).filter((x) => x.id === jobId);
-    expect(j).toMatchObject({ customerCode: code, baseName: 'job-list', pdfFileName: 'job-list.pdf', composedBatchCount: 0 });
+    expect(j).toMatchObject({ customerCode: code, baseName: 'job-list', pdfFileName: 'job-list.pdf', composedBatchCount: 0, runSheetsEmailedAt: null });
     expect(j!.batchCount).toBeGreaterThan(0);
     expect(new Date(j!.receivedAt).getTime()).not.toBeNaN();
   });

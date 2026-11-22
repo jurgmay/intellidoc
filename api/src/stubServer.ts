@@ -96,7 +96,7 @@ reprice.counts = { inScope: 412, alreadyPriced: 380, wouldPrice: 31, noModel: 1,
 const jobs = new MemoryJobStore();
 const job = (id: number, status: 'Received' | 'Awaiting PDF' | 'PDF Rejected', composed: number, over: object = {}) => ({
   id, customerCode: 'ACME', customerName: 'Acme Energy Ltd', baseName: `ACME_statements_${id}`, pdfFileName: `ACME_statements_${id}.pdf`, receivedAt: `2026-11-2${id % 3}T09:30:00.000Z`,
-  status, packCount: 400, pageCount: 1200, pdfError: null, batchCount: 2, composedBatchCount: composed,
+  status, packCount: 400, pageCount: 1200, pdfError: null, batchCount: 2, composedBatchCount: composed, runSheetsEmailedAt: composed > 0 ? '2026-11-21T10:05:00.000Z' : null,
   batches: [1, 2].map((n) => ({ id: id * 10 + n, batchCode: 7000 + id * 10 + n, status: 'Created', mailpieceCount: 200,
     files: n <= composed ? [{ fileName: `${7000 + id * 10 + n}_1.pdf`, segment: 1, mailpieces: 200, pages: 602 }] : [] })), ...over });
 jobs.jobs.push(job(3, 'Received', 0), job(2, 'Received', 2), job(1, 'PDF Rejected', 0, { pdfError: 'Pack 12 ends on page 900 but the PDF has 880 pages' }));

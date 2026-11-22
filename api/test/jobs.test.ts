@@ -14,7 +14,7 @@ import { MemorySettingsStore } from '../src/settings/store.js';
 
 const job = (id: number, over: Partial<JobDetail> = {}): JobDetail => ({
   id, customerCode: 'ACME', customerName: 'Acme Energy Ltd', baseName: `ACME_${id}`, pdfFileName: `ACME_${id}.pdf`, receivedAt: '2026-11-20T09:30:00.000Z', status: 'Received',
-  packCount: 10, pageCount: 30, pdfError: null, batchCount: 1, composedBatchCount: 0, batches: [{ id: id * 10, batchCode: 7000 + id, status: 'Created', mailpieceCount: 10, files: [] }], ...over,
+  packCount: 10, pageCount: 30, pdfError: null, batchCount: 1, composedBatchCount: 0, runSheetsEmailedAt: null, batches: [{ id: id * 10, batchCode: 7000 + id, status: 'Created', mailpieceCount: 10, files: [] }], ...over,
 });
 let app: FastifyInstance; let store: MemoryJobStore; let composer: MemoryJobComposer;
 
@@ -52,14 +52,50 @@ describe('jobs API', () => {
   });
 });
 
+describe('run sheets', () => {
+  it('e-mails the run sheets of a job on request and says who got them', async () => {
+    composer.emailResult = { sent: true, to: ['a@x.example'], cc: ['b@x.example'], testMode: false, error: null };
+    const r = await post('/api/jobs/1/email-run-sheets');
+    expect(r.statusCode).toBe(200); expect(r.json()).toMatchObject({ sent: true, to: ['a@x.example'], cc: ['b@x.example'] });
+    expect(composer.emailCalls).toEqual([1]);
+  });
+  it('turns a failed e-mail into a readable 409', async () => {
+    composer.emailResult = { sent: false, to: [], cc: [], testMode: false, error: 'No run sheet e-mail recipients are set (Settings).' };
+    const r = await post('/api/jobs/1/email-run-sheets');
+    expect(r.statusCode).toBe(409); expect(r.json().error).toBe('No run sheet e-mail recipients are set (Settings).');
+  });
+  it('will not e-mail a job with no batches, or one that does not exist', async () => {
+    store.jobs = [job(5, { batchCount: 0, batches: [] })];
+    expect((await post('/api/jobs/5/email-run-sheets')).statusCode).toBe(409);
+    expect((await post('/api/jobs/99/email-run-sheets')).statusCode).toBe(404);
+  });
+  it('downloads the merged run sheets as a PDF named like the e-mail attachment', async () => {
+    composer.pdf = { fileName: '7001 - IntelliDoc Run Sheet - Acme - 1 batch (7001 - 7001).pdf', bytes: new Uint8Array([37, 80, 68, 70]) };
+    const r = await get('/api/jobs/1/run-sheets.pdf');
+    expect(r.statusCode).toBe(200);
+    expect(r.headers['content-type']).toBe('application/pdf');
+    expect(r.headers['content-disposition']).toBe('attachment; filename="7001 - IntelliDoc Run Sheet - Acme - 1 batch (7001 - 7001).pdf"');
+    expect(r.rawPayload.subarray(0, 4).toString()).toBe('%PDF');
+  });
+  it('says so when the run sheets cannot be made', async () => {
+    const r = await get('/api/jobs/1/run-sheets.pdf');
+    expect(r.statusCode).toBe(409); expect(r.json().error).toMatch(/Could not make the run sheets/);
+    expect((await get('/api/jobs/99/run-sheets.pdf')).statusCode).toBe(404);
+  });
+});
+
 describe('making print files', () => {
   it('composes a Received job and returns what was made; onlyNew defaults to off', async () => {
     const r = await post('/api/jobs/1/compose');
     expect(r.statusCode).toBe(200);
-    expect(r.json()).toEqual({ batches: [{ batchCode: 7001, files: ['7001_1.pdf'], mrdfFile: null, skipped: null }] });
+    expect(r.json()).toEqual({ batches: [{ batchCode: 7001, files: ['7001_1.pdf'], mrdfFile: null, skipped: null }], runSheetEmail: null });
     expect(composer.calls).toEqual([{ jobId: 1, onlyNew: false }]);
     await post('/api/jobs/1/compose', { onlyNew: true });
     expect(composer.calls[1]).toEqual({ jobId: 1, onlyNew: true });
+  });
+  it('passes on what happened to the run sheet e-mail', async () => {
+    composer.emailResult = { sent: false, to: [], cc: [], testMode: false, error: 'No mail server' };
+    expect((await post('/api/jobs/1/compose')).json().runSheetEmail).toMatchObject({ sent: false, error: 'No mail server' });
   });
   it('refuses a job that is not Received, and says why', async () => {
     const r = await post('/api/jobs/2/compose');

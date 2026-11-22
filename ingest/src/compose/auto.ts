@@ -2,6 +2,7 @@ import type sql from 'mssql';
 import { composeJob, type ComposedBatch } from './job.js';
 import { jobsToCompose, loadComposeSettings } from './db.js';
 import type { GreyConverter } from './grey.js';
+import type { Mailer } from '../mail.js';
 
 export interface AutoComposerOptions {
   pool: sql.ConnectionPool;
@@ -11,6 +12,8 @@ export interface AutoComposerOptions {
   /** Where MRDF files go (the inserter's input folder). */
   mrdfDir?: string;
   grey: GreyConverter | null;
+  /** Sends the run sheet e-mail (when it is on in Settings) as a job's print files are first made. */
+  mailer?: Mailer;
   log: (level: 'info' | 'warn' | 'error', msg: string) => void;
   /** Told once when a job has failed several times in a row. */
   notify?: (subject: string, text: string) => Promise<void>;
@@ -45,7 +48,7 @@ export class AutoComposer {
         const f = this.failures.get(jobId);
         if (f && this.now() < f.retryAt) continue;
         try {
-          const batches = await (this.o.compose ?? ((id) => composeJob({ pool: this.o.pool, jobId: id, pdfDir: this.o.pdfDir, outDir: this.o.outDir, mrdfDir: this.o.mrdfDir, grey: this.o.grey, onlyNew: true })))(jobId);
+          const batches = await (this.o.compose ?? ((id) => composeJob({ pool: this.o.pool, jobId: id, pdfDir: this.o.pdfDir, outDir: this.o.outDir, mrdfDir: this.o.mrdfDir, grey: this.o.grey, onlyNew: true, mailer: this.o.mailer, onRunSheetEmail: (r) => this.o.log(r.sent ? 'info' : 'warn', r.sent ? `Job ${id}: run sheets e-mailed to ${[...r.to, ...r.cc].join(', ')}` : `Job ${id}: run sheets not e-mailed: ${r.error}`) })))(jobId);
           const made = batches.filter((b) => b.files.length > 0);
           this.o.log('info', `Job ${jobId}: print files made for ${made.length} batch${made.length === 1 ? '' : 'es'} (${made.flatMap((b) => b.files).length} files)`);
           this.failures.delete(jobId);
