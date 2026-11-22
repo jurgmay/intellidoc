@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { MemoryReportStore } from '../src/reports/memoryStore.js';
+import { MemoryReferenceStore } from '../src/reference/memoryStore.js';
 import { MemoryRecipientStore } from '../src/recipients/memoryStore.js';
 import { MemoryCustomerStore } from '../src/customers/memoryStore.js';
 import { MemoryRepriceStore } from '../src/reprice/memoryStore.js';
@@ -21,7 +22,7 @@ beforeEach(async () => {
   store = new MemoryCustomerStore();
   acme = store.seed({ code: 'ACME', name: 'Acme Ltd' });
   store.seed({ code: 'NWB', name: 'Northwest Bank', misJobNumber: '24102' });
-  app = await buildApp({ settings: new MemorySettingsStore(), customers: store, costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: new MemoryRecipientStore(), reports: new MemoryReportStore() });
+  app = await buildApp({ settings: new MemorySettingsStore(), customers: store, costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: new MemoryRecipientStore(), reports: new MemoryReportStore(), reference: new MemoryReferenceStore() });
 });
 
 const call = (method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, payload?: unknown) => app.inject({ method, url, payload: payload as object });

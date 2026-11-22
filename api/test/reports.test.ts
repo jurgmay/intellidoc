@@ -9,6 +9,7 @@ import { MemoryCostingStore } from '../src/costing/memoryStore.js';
 import { MemoryRecipientStore } from '../src/recipients/memoryStore.js';
 import { buildUsageReport, eachDay } from '../src/reports/aggregate.js';
 import { MemoryReportStore } from '../src/reports/memoryStore.js';
+import { MemoryReferenceStore } from '../src/reference/memoryStore.js';
 import { chartBrands, usagePdf } from '../src/reports/pdf.js';
 import type { UsageLine } from '../src/reports/types.js';
 import { MemorySettingsStore } from '../src/settings/store.js';
@@ -28,7 +29,7 @@ beforeEach(async () => {
   // the same mail with what it cost: production at 60% of sell, postage at 90%
   store.marginLines_.set(5, store.lines.get(5)!.map((l) => ({ day: l.day, brand: l.brand, format: l.format, service: l.service, mailpieces: l.mailpieces, priced: l.priced,
     productionSell: l.productionSell, postageSell: l.postageSell, productionCost: l.productionSell * 0.6, postageCost: l.postageSell * 0.9 })));
-  app = await buildApp({ settings: new MemorySettingsStore(), customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: new MemoryRecipientStore(), reports: store });
+  app = await buildApp({ settings: new MemorySettingsStore(), customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: new MemoryRecipientStore(), reports: store, reference: new MemoryReferenceStore() });
 });
 const get = (qs: string) => app.inject({ method: 'GET', url: `/api/reports/usage?${qs}` });
 

@@ -1,0 +1,117 @@
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { MantineProvider } from '@mantine/core';
+import { Notifications } from '@mantine/notifications';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { theme } from '../theme';
+import { AnonymousTab, PaperTab, PostalFormatsTab } from './ReferenceTabs';
+
+let calls: { url: string; method: string; body?: any }[]; // eslint-disable-line @typescript-eslint/no-explicit-any
+let failNext: Response | null;
+let papers: object[]; let formats: object[]; let names: string[];
+
+const wrap = (ui: React.ReactElement) => render(<MantineProvider theme={theme}><Notifications />{ui}</MantineProvider>);
+beforeEach(() => {
+  calls = []; failNext = null;
+  papers = [{ id: 1, name: 'A4 White', batchName: 'A4 WHITE', paperCode: null, usedBy: 3 }, { id: 2, name: 'A4 Plain', batchName: 'A4 PLAIN', paperCode: 'P1', usedBy: 0 }];
+  formats = [{ id: 1, name: 'Letter', rank: 1, maxWeightG: 100, maxThicknessMm: 5, maxSheets: 16, usedBy: 2 }, { id: 2, name: 'Large Letter', rank: 2, maxWeightG: 750, maxThicknessMm: null, maxSheets: null, usedBy: 1 }];
+  names = ['THEOCCUPIER', 'THERESIDENT'];
+  vi.stubGlobal('fetch', vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
+    calls.push({ url, method: init?.method ?? 'GET', body: init?.body ? JSON.parse(init.body) : undefined });
+    if (failNext && init?.method) { const r = failNext; failNext = null; return r; }
+    if (url === '/api/reference/history') return new Response(JSON.stringify({ rows: [{ id: 1, changedAt: '2026-11-20T10:00:00Z', changedBy: 'sam', summary: 'Anonymous addressee THETENANT added' }] }), { status: 200 });
+    if (url === '/api/reference/papers') return new Response(JSON.stringify({ papers }), { status: 200 });
+    if (url === '/api/reference/postal-formats') return new Response(JSON.stringify({ formats }), { status: 200 });
+    if (url === '/api/reference/anonymous' && (init?.method ?? 'GET') === 'GET') return new Response(JSON.stringify({ names }), { status: 200 });
+    return new Response(init?.method === 'POST' ? JSON.stringify({ text: 'X' }) : null, { status: init?.method === 'POST' ? 201 : 204 });
+  }));
+});
+afterEach(() => vi.unstubAllGlobals());
+const sent = (method: string) => calls.filter((c) => c.method === method);
+
+describe('PaperTab', () => {
+  it('lists papers, and only an unused one can be deleted', async () => {
+    wrap(<PaperTab />);
+    const row = (await screen.findByText('A4 White')).closest('tr')!;
+    expect(within(row).getByText('3 print options')).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: 'Delete' })).toBeDisabled();
+    expect(within(screen.getByText('A4 Plain').closest('tr')!).getByRole('button', { name: 'Delete' })).toBeEnabled();
+    expect(screen.getByText(/Anonymous addressee THETENANT added/)).toBeInTheDocument(); // the shared recent changes list
+  });
+  it('saves a new batch name and an empty code as null', async () => {
+    wrap(<PaperTab />);
+    await userEvent.click(within((await screen.findByText('A4 Plain')).closest('tr')!).getByRole('button', { name: 'Edit' }));
+    const batch = screen.getByLabelText('Batch name'); await userEvent.clear(batch); await userEvent.type(batch, 'A4 WHITE');
+    await userEvent.clear(screen.getByLabelText('Paper code'));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(sent('PUT')).toHaveLength(1));
+    expect(sent('PUT')[0]).toMatchObject({ url: '/api/reference/papers/2', body: { batchName: 'A4 WHITE', paperCode: null } });
+  });
+  it('shows a field error from the server', async () => {
+    wrap(<PaperTab />);
+    await userEvent.click(within((await screen.findByText('A4 Plain')).closest('tr')!).getByRole('button', { name: 'Edit' }));
+    failNext = new Response(JSON.stringify({ errors: { batchName: 'Batch name is required' } }), { status: 422 });
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect((await screen.findAllByText('Batch name is required')).length).toBeGreaterThan(0); // under the field, and in the notification
+  });
+  it('deletes after a confirmation', async () => {
+    wrap(<PaperTab />);
+    await userEvent.click(within((await screen.findByText('A4 Plain')).closest('tr')!).getByRole('button', { name: 'Delete' }));
+    expect(screen.getByText(/Delete the paper A4 Plain\?/)).toBeInTheDocument();
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(sent('DELETE')).toHaveLength(1));
+    expect(sent('DELETE')[0]!.url).toBe('/api/reference/papers/2');
+  });
+});
+
+describe('PostalFormatsTab', () => {
+  it('shows the limits, with "no limit" where there is none', async () => {
+    wrap(<PostalFormatsTab />);
+    const large = (await screen.findByText('Large Letter')).closest('tr')!;
+    expect(within(large).getAllByText('no limit')).toHaveLength(2);
+    expect(within(screen.getByText('Letter').closest('tr')!).getByText('100 g')).toBeInTheDocument();
+  });
+  it('saves changed limits, and an emptied one becomes null', async () => {
+    wrap(<PostalFormatsTab />);
+    await userEvent.click(within((await screen.findByText('Letter')).closest('tr')!).getByRole('button', { name: 'Edit' }));
+    const w = screen.getByLabelText('Most weight (g)'); await userEvent.clear(w); await userEvent.type(w, '120');
+    await userEvent.clear(screen.getByLabelText('Most sheets'));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(sent('PUT')).toHaveLength(1));
+    expect(sent('PUT')[0]).toMatchObject({ url: '/api/reference/postal-formats/1', body: { maxWeightG: 120, maxThicknessMm: 5, maxSheets: null } });
+  });
+  it('shows the ordering error from the server', async () => {
+    wrap(<PostalFormatsTab />);
+    await userEvent.click(within((await screen.findByText('Letter')).closest('tr')!).getByRole('button', { name: 'Edit' }));
+    failNext = new Response(JSON.stringify({ errors: { maxWeightG: 'Most weight cannot be more than Large Letter (750)' } }), { status: 422 });
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect((await screen.findAllByText(/cannot be more than Large Letter/)).length).toBeGreaterThan(0);
+  });
+});
+
+describe('AnonymousTab', () => {
+  it('lists the stored names and adds one by what was typed', async () => {
+    wrap(<AnonymousTab />);
+    expect(await screen.findByText('THEOCCUPIER')).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText('New anonymous addressee'), 'The Home-Owner');
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(sent('POST')).toHaveLength(1));
+    expect(sent('POST')[0]).toMatchObject({ url: '/api/reference/anonymous', body: { text: 'The Home-Owner' } });
+    await waitFor(() => expect(screen.getByLabelText('New anonymous addressee')).toHaveValue(''));
+  });
+  it('shows why an addition was refused and keeps the text', async () => {
+    wrap(<AnonymousTab />);
+    await userEvent.type(await screen.findByLabelText('New anonymous addressee'), 'the occupier');
+    failNext = new Response(JSON.stringify({ error: 'THEOCCUPIER is already on the list.' }), { status: 409 });
+    await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+    expect((await screen.findAllByText('THEOCCUPIER is already on the list.')).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText('New anonymous addressee')).toHaveValue('the occupier');
+  });
+  it('removes a name after a confirmation, encoding it in the URL', async () => {
+    wrap(<AnonymousTab />);
+    await userEvent.click(within((await screen.findByText('THERESIDENT')).closest('tr')!).getByRole('button', { name: 'Remove' }));
+    await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(sent('DELETE')).toHaveLength(1));
+    expect(sent('DELETE')[0]!.url).toBe('/api/reference/anonymous/THERESIDENT');
+  });
+});

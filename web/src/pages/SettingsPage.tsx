@@ -8,6 +8,7 @@ import { SettingRow } from './SettingRow';
 import { BatchCodeCard } from './BatchCodeCard';
 import { ChangeLog } from './ChangeLog';
 import { PostalRatesTab } from './PostalRatesTab';
+import { AnonymousTab, PaperTab, PostalFormatsTab } from './ReferenceTabs';
 
 export function SettingsPage() {
   const [data, setData] = useState<SettingsPayload | null>(null);
@@ -16,8 +17,8 @@ export function SettingsPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [logVersion, setLogVersion] = useState(0);
-  /** The postal rates are only fetched once their tab has been opened. */
-  const [postalSeen, setPostalSeen] = useState(false);
+  /** The other tabs fetch their data only once they have been opened. */
+  const [seen, setSeen] = useState<ReadonlySet<string>>(new Set());
 
   const apply = useCallback((p: SettingsPayload) => {
     setData(p);
@@ -51,10 +52,13 @@ export function SettingsPage() {
         <Title order={2}>Settings</Title>
         <Text c="dimmed" size="sm">What each setting does and where the app uses it. Changes are recorded in the change log.</Text>
       </div>
-      <Tabs defaultValue="settings" onChange={(v) => { if (v === 'postal') setPostalSeen(true); }}>
+      <Tabs defaultValue="settings" onChange={(v) => { if (v) setSeen((x) => new Set(x).add(v)); }}>
         <Tabs.List>
           <Tabs.Tab value="settings">Settings</Tabs.Tab>
           <Tabs.Tab value="postal">Postal rates</Tabs.Tab>
+          <Tabs.Tab value="formats">Postal formats</Tabs.Tab>
+          <Tabs.Tab value="papers">Paper</Tabs.Tab>
+          <Tabs.Tab value="anonymous">Anonymous addressees</Tabs.Tab>
           <Tabs.Tab value="log">Change log</Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="settings" pt="lg">
@@ -82,7 +86,10 @@ export function SettingsPage() {
             </Group>
           </Paper>
         </Tabs.Panel>
-        <Tabs.Panel value="postal" pt="lg">{postalSeen && <PostalRatesTab />}</Tabs.Panel>
+        <Tabs.Panel value="postal" pt="lg">{seen.has('postal') && <PostalRatesTab />}</Tabs.Panel>
+        <Tabs.Panel value="formats" pt="lg">{seen.has('formats') && <PostalFormatsTab />}</Tabs.Panel>
+        <Tabs.Panel value="papers" pt="lg">{seen.has('papers') && <PaperTab />}</Tabs.Panel>
+        <Tabs.Panel value="anonymous" pt="lg">{seen.has('anonymous') && <AnonymousTab />}</Tabs.Panel>
         <Tabs.Panel value="log" pt="lg"><ChangeLog version={logVersion} /></Tabs.Panel>
       </Tabs>
     </Stack>

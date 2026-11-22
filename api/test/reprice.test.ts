@@ -6,6 +6,7 @@ import { MemoryCustomerStore } from '../src/customers/memoryStore.js';
 import { MemoryPostalStore } from '../src/postal/memoryStore.js';
 import { MemoryRecipientStore } from '../src/recipients/memoryStore.js';
 import { MemoryReportStore } from '../src/reports/memoryStore.js';
+import { MemoryReferenceStore } from '../src/reference/memoryStore.js';
 import { MemoryRepriceStore } from '../src/reprice/memoryStore.js';
 import { MemorySettingsStore } from '../src/settings/store.js';
 
@@ -14,7 +15,7 @@ const post = (url: string, payload: unknown) => app.inject({ method: 'POST', url
 
 beforeEach(async () => {
   store = new MemoryRepriceStore(); store.customers.add(7); store.counts = { inScope: 100, alreadyPriced: 80, wouldPrice: 20, noModel: 2, unknownColours: 1 };
-  app = await buildApp({ settings: new MemorySettingsStore(), customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: store, recipients: new MemoryRecipientStore(), reports: new MemoryReportStore() });
+  app = await buildApp({ settings: new MemorySettingsStore(), customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: store, recipients: new MemoryRecipientStore(), reports: new MemoryReportStore(), reference: new MemoryReferenceStore() });
 });
 
 describe('re-price', () => {
