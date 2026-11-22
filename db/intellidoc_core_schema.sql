@@ -120,12 +120,12 @@ CREATE TABLE idoc.postal_format (
     rank_order       TINYINT            NOT NULL,  -- smallest = 1; used to step up when limits are exceeded
     max_weight_g     INT                NOT NULL,
     max_thickness_mm DECIMAL(6, 2)      NULL,      -- FileMaker PostalFormats.maxDepth
-    max_width_mm     DECIMAL(7, 2)      NOT NULL,  -- the longer side of the mailpiece (Royal Mail "length"); sizes are compared the long way round
-    max_height_mm    DECIMAL(7, 2)      NOT NULL,  -- the shorter side (Royal Mail "width"); never more than max_width_mm
+    max_length_mm    DECIMAL(7, 2)      NOT NULL,  -- Royal Mail length: the longer side of the mailpiece, whichever way round it is held
+    max_width_mm     DECIMAL(7, 2)      NOT NULL,  -- Royal Mail width: the shorter side; never more than max_length_mm
     max_sheets       INT                NULL,      -- FileMaker proxy limits: Letter 16, Large Letter 125
     CONSTRAINT uq_postal_format_name UNIQUE (name),
     CONSTRAINT uq_postal_format_rank UNIQUE (rank_order),
-    CONSTRAINT ck_postal_format_size CHECK (max_width_mm > 0 AND max_height_mm > 0 AND max_height_mm <= max_width_mm)
+    CONSTRAINT ck_postal_format_size CHECK (max_length_mm > 0 AND max_width_mm > 0 AND max_width_mm <= max_length_mm)
 );
 GO
 
@@ -745,7 +745,7 @@ GO
    =========================================================================== */
 INSERT INTO idoc.settings (settings_id) VALUES (1);
 
-INSERT INTO idoc.postal_format (name, rank_order, max_weight_g, max_thickness_mm, max_sheets, max_width_mm, max_height_mm) VALUES
+INSERT INTO idoc.postal_format (name, rank_order, max_weight_g, max_thickness_mm, max_sheets, max_length_mm, max_width_mm) VALUES
     (N'Letter',        1,  100,  5.00,   16, 240, 165),
     (N'Large Letter',  2,  750, 25.00,  125, 353, 250),
     (N'Small Parcel',  3, 2000,  NULL,  NULL, 450, 350),

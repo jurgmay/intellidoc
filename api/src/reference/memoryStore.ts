@@ -10,9 +10,9 @@ export class MemoryReferenceStore implements ReferenceStore {
     { id: 2, name: 'A4 Plain', batchName: 'A4 PLAIN', paperCode: null, usedBy: 0 },
   ];
   formatRows: FormatView[] = [
-    { id: 1, name: 'Letter', rank: 1, maxWeightG: 100, maxThicknessMm: 5, maxSheets: 16, maxWidthMm: 240, maxHeightMm: 165, usedBy: 2 },
-    { id: 2, name: 'Large Letter', rank: 2, maxWeightG: 750, maxThicknessMm: 25, maxSheets: 125, maxWidthMm: 353, maxHeightMm: 250, usedBy: 1 },
-    { id: 3, name: 'Small Parcel', rank: 3, maxWeightG: 2000, maxThicknessMm: 80, maxSheets: null, maxWidthMm: 450, maxHeightMm: 350, usedBy: 0 },
+    { id: 1, name: 'Letter', rank: 1, maxWeightG: 100, maxThicknessMm: 5, maxSheets: 16, maxLengthMm: 240, maxWidthMm: 165, usedBy: 2 },
+    { id: 2, name: 'Large Letter', rank: 2, maxWeightG: 750, maxThicknessMm: 25, maxSheets: 125, maxLengthMm: 353, maxWidthMm: 250, usedBy: 1 },
+    { id: 3, name: 'Small Parcel', rank: 3, maxWeightG: 2000, maxThicknessMm: 80, maxSheets: null, maxLengthMm: 450, maxWidthMm: 350, usedBy: 0 },
   ];
   names = ['THEOCCUPIER', 'THERESIDENT'];
   log: HistoryEntry[] = [];

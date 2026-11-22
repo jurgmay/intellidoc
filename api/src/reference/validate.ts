@@ -48,11 +48,11 @@ export function parseFormat(body: Body): FormatInput {
     else maxThicknessMm = Math.round(t * 100) / 100;
   }
   const maxSheets = whole(errs, body?.['maxSheets'], 'maxSheets', 'Most sheets', 1_000_000, false);
+  const maxLengthMm = size(errs, body?.['maxLengthMm'], 'maxLengthMm', 'Most length');
   const maxWidthMm = size(errs, body?.['maxWidthMm'], 'maxWidthMm', 'Most width');
-  const maxHeightMm = size(errs, body?.['maxHeightMm'], 'maxHeightMm', 'Most height');
-  if (maxWidthMm !== null && maxHeightMm !== null && maxHeightMm > maxWidthMm) errs['maxHeightMm'] = 'Most height cannot be more than most width (width is the longer side)';
+  if (maxLengthMm !== null && maxWidthMm !== null && maxWidthMm > maxLengthMm) errs['maxWidthMm'] = 'Most width cannot be more than most length (length is the longer side)';
   done(errs);
-  return { maxWeightG: maxWeightG!, maxThicknessMm, maxSheets, maxWidthMm: maxWidthMm!, maxHeightMm: maxHeightMm! };
+  return { maxWeightG: maxWeightG!, maxThicknessMm, maxSheets, maxLengthMm: maxLengthMm!, maxWidthMm: maxWidthMm! };
 }
 
 /** The normalised text of a new anonymous addressee; the field must hold some letters or digits. */
