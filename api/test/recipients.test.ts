@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { MemoryReportStore } from '../src/reports/memoryStore.js';
+import { MemoryReferenceStore } from '../src/reference/memoryStore.js';
 import { MemoryCustomerStore } from '../src/customers/memoryStore.js';
 import { MemoryRepriceStore } from '../src/reprice/memoryStore.js';
 import { MemoryPostalStore } from '../src/postal/memoryStore.js';
@@ -28,7 +29,7 @@ beforeEach(async () => {
     row(2, [1, 2], { addressLines: ['Mr Joe Patel', '3 High Street', 'York'], postcode: 'YO1 7HH', releaseDate: '2026-11-15T09:00:00', references: { 'Tenant Reference': 'T-2040', 'Property Reference': 'T-1001' } }),
     row(3, [3], { addressLines: ['Mr Joe Patel', '3 High Street', 'York'], postcode: 'YO1 7HH', references: { 'Tenant Reference': 'T-1001' } }),
   ];
-  app = await buildApp({ settings: new MemorySettingsStore(), customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: store, reports: new MemoryReportStore() });
+  app = await buildApp({ settings: new MemorySettingsStore(), customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: store, reports: new MemoryReportStore(), reference: new MemoryReferenceStore() });
 });
 
 const get = (qs: string) => app.inject({ method: 'GET', url: `/api/recipients/search?${qs}` });

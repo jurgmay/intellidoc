@@ -9,6 +9,7 @@ import { CHARGES } from '../src/costing/types.js';
 import { MemoryCustomerStore } from '../src/customers/memoryStore.js';
 import { MemoryRecipientStore } from '../src/recipients/memoryStore.js';
 import { MemoryReportStore } from '../src/reports/memoryStore.js';
+import { MemoryReferenceStore } from '../src/reference/memoryStore.js';
 import { MemorySettingsStore } from '../src/settings/store.js';
 
 let app: FastifyInstance; let store: MemoryCostingStore;
@@ -22,7 +23,7 @@ beforeEach(async () => {
   store.customers.set(TOP, { id: TOP, code: 'TOP', name: 'Top', mode: 'OWN', inheritsAll: false, parentId: null });
   store.envelopeStock = [{ id: 10, code: 'C5', description: 'C5 window', size: 'C5' }, { id: 11, code: 'C4', description: 'C4 window', size: 'C4' }];
   store.postalRates = [{ id: 1, label: 'RM 2nd letter', format: 'Letter', cost: 0.6, sell: 0.65 }, { id: 2, label: 'RM 1st letter', format: 'Letter', cost: 0.8, sell: 0.9 }];
-  app = await buildApp({ settings: new MemorySettingsStore(), customers: new MemoryCustomerStore(), costing: store, postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: new MemoryRecipientStore(), reports: new MemoryReportStore() });
+  app = await buildApp({ settings: new MemorySettingsStore(), customers: new MemoryCustomerStore(), costing: store, postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: new MemoryRecipientStore(), reports: new MemoryReportStore(), reference: new MemoryReferenceStore() });
 });
 const body = (over: Record<string, unknown> = {}) => ({ name: '2026', validFrom: '2026-01-01', validTo: null, isActive: true, copyFromId: null, ...over });
 const post = (customer: number, b: unknown) => app.inject({ method: 'POST', url: `/api/customers/${customer}/costing-models`, payload: b as object });

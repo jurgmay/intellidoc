@@ -91,8 +91,8 @@ paper.batch_name | sorted insert stock ids | batching_value | enclosing_route
 
 ## 7. Open items
 
-1. `anonymous_addressee`: global list for now. The seed values need your review, and say if any account needs its own.
-2. Postal format limits in the seed data (Medium Parcel especially).
+1. `anonymous_addressee`: global list for now, editable on the Settings page (Anonymous addressees tab). The seed values need your review, and say if any account needs its own.
+2. Postal format limits in the seed data (Medium Parcel especially); they can now be corrected on the Settings page (Postal formats tab).
 3. `sheet_count` for duplex packs where the last page is blank (National Grid shows 47 near-blank fourth pages).
 4. `Coverage` is ignored, as in FileMaker.
 5. `pack_sequence_rule` mapping from `PackSequenceRules.description` / `sequence`.

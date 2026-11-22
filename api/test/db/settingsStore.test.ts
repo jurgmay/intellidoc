@@ -1,4 +1,5 @@
 import { MemoryReportStore } from '../../src/reports/memoryStore.js';
+import { MemoryReferenceStore } from '../../src/reference/memoryStore.js';
 import { MemoryRecipientStore } from '../../src/recipients/memoryStore.js';
 import { MemoryCustomerStore } from '../../src/customers/memoryStore.js';
 import { MemoryRepriceStore } from '../../src/reprice/memoryStore.js';
@@ -28,7 +29,7 @@ describe.skipIf(!cs)('MssqlSettingsStore', { timeout: 120_000 }, () => {
   });
 
   it('saves through the API, audits the change, and the database enforces sensible limits', async () => {
-    const app = await buildApp({ settings: store, customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: new MemoryRecipientStore(), reports: new MemoryReportStore() });
+    const app = await buildApp({ settings: store, customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: new MemoryRecipientStore(), reports: new MemoryReportStore(), reference: new MemoryReferenceStore() });
     const r = await app.inject({ method: 'PUT', url: '/api/settings', payload: { values: { pdfWaitMinutes: 45, xmlFirstEnabled: false, alertRecipients: 'ops@latcham.co.uk' } } });
     expect(r.statusCode).toBe(200);
     expect(await store.read()).toMatchObject({ pdfWaitMinutes: 45, xmlFirstEnabled: false, alertRecipients: 'ops@latcham.co.uk' });
@@ -38,7 +39,7 @@ describe.skipIf(!cs)('MssqlSettingsStore', { timeout: 120_000 }, () => {
   });
 
   it('batch code: shows the next number and can be moved up but not onto a used number', async () => {
-    const app = await buildApp({ settings: store, customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: new MemoryRecipientStore(), reports: new MemoryReportStore() });
+    const app = await buildApp({ settings: store, customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: new MemoryRecipientStore(), reports: new MemoryReportStore(), reference: new MemoryReferenceStore() });
     expect((await store.batchCode()).highestUsed).toBeNull();
     const ok = await app.inject({ method: 'PUT', url: '/api/settings/batch-code', payload: { next: 5000 } });
     expect(ok.json()).toEqual({ highestUsed: null, next: 5000 });
