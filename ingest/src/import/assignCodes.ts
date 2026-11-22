@@ -1,4 +1,5 @@
 import sql from 'mssql';
+import { longTimeout } from '../mssql/devDb.js';
 import { allocateCodes } from './stockCodes.js';
 
 /**
@@ -11,7 +12,7 @@ const apply = process.argv.includes('--apply');
 const start = Number(process.argv.find((a) => a.startsWith('--start='))?.slice(8) ?? 10001);
 const cs = process.env['INTELLIDOC_DB'];
 if (!cs) { console.error('Set INTELLIDOC_DB first'); process.exit(2); }
-const pool = new sql.ConnectionPool(cs);
+const pool = new sql.ConnectionPool(longTimeout(cs));
 await pool.connect();
 const tx = new sql.Transaction(pool);
 await tx.begin();

@@ -1,5 +1,6 @@
 import { writeFileSync } from 'node:fs';
 import sql from 'mssql';
+import { longTimeout } from '../mssql/devDb.js';
 import { applyPlan } from './apply.js';
 import { planFromDir, summarise } from './dryRun.js';
 
@@ -20,6 +21,6 @@ console.log(`\n${plan.warnings.length} warnings written to ${report}`);
 if (!args.includes('--apply')) { console.log('Dry run only. Add --apply to load into INTELLIDOC_DB.'); process.exit(0); }
 const cs = process.env['INTELLIDOC_DB'];
 if (!cs) { console.error('Set INTELLIDOC_DB first'); process.exit(2); }
-const pool = new sql.ConnectionPool(cs);
+const pool = new sql.ConnectionPool(longTimeout(cs));
 await pool.connect();
 try { console.log('Loaded:', JSON.stringify(await applyPlan(pool, plan))); } finally { await pool.close(); }

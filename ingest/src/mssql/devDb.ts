@@ -20,6 +20,9 @@ SELECT @s += N'DROP SEQUENCE idoc.' + QUOTENAME(name) + N';' FROM sys.sequences 
 EXEC sp_executesql @s;
 IF SCHEMA_ID(N'idoc') IS NOT NULL DROP SCHEMA idoc;`;
 
+/** The connection string with a 10 minute request timeout (unless it sets one): dropping or loading a database that holds a day of mail takes longer than the driver's 15 seconds. */
+export function longTimeout(cs: string): string { return /request\s*timeout\s*=/i.test(cs) ? cs : `${cs.replace(/;?\s*$/, '')};Request Timeout=600000`; }
+
 export async function schemaExists(pool: sql.ConnectionPool): Promise<boolean> {
   return (await pool.request().query(`SELECT SCHEMA_ID(N'idoc') AS id`)).recordset[0].id !== null;
 }
