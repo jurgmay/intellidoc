@@ -62,7 +62,9 @@ export async function priceMailpieces(pool: sql.ConnectionPool, filter: PriceFil
     FROM idoc.mailpiece AS m
     INNER JOIN idoc.batch AS b ON b.batch_id = m.batch_id
     CROSS APPLY (SELECT SUM(CASE WHEN p.colour_pages IS NULL OR p.mono_pages IS NULL OR p.blank_pages IS NULL THEN 1 ELSE 0 END) AS unknown_packs,
-                        (SELECT COALESCE(x.colour_pages, 0) AS colour, COALESCE(x.mono_pages, 0) AS mono, COALESCE(x.blank_pages, 0) AS blank FROM idoc.pack AS x
+                        (SELECT COALESCE(x.colour_pages, 0) AS colour, COALESCE(x.mono_pages, 0) AS mono, COALESCE(x.blank_pages, 0) AS blank,
+                                CASE WHEN o.colour LIKE N'Mono%' THEN CAST(1 AS BIT) ELSE CAST(0 AS BIT) END AS forceMono -- same rule as the composer (/^mono/i)
+                         FROM idoc.pack AS x INNER JOIN idoc.option_set AS o ON o.option_set_id = x.option_set_id
                          WHERE x.mailpiece_id = m.mailpiece_id ORDER BY x.document_sequence, x.pack_id FOR JSON PATH) AS packs_json
                  FROM idoc.pack AS p WHERE p.mailpiece_id = m.mailpiece_id) AS pk
     LEFT JOIN idoc.postal_format AS f ON f.postal_format_id = m.postal_format_id

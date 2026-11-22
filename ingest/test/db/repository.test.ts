@@ -379,6 +379,12 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     await setMode('ORIGINAL');
     await priceJob(pool, jobA);
     expect(Number((await mps(jobA))[0]!.production_sell)).toBeCloseTo(0.3, 4);
+    // a pack whose own option is Mono is billed as mono even though its pages arrived in colour: 0.20 + 2 x 0.05
+    const mono = buildXml([{ ...person('Sam', 'Price'), colour: 'Mono' }]);
+    await ingest(mono.xml, 'job-price-mono.xml', 'job-price-mono.pdf', { ref, pdf: new FakePdf(mono.pages, '', ['colour', 'colour']), repo });
+    const jobM = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-price-mono'`);
+    await priceJob(pool, jobM);
+    expect(Number((await mps(jobM))[0]!.production_sell)).toBeCloseTo(0.3, 4);
 
     // XML first: nothing is priced until the PDF arrives
     const b = buildXml([person('Rae', 'Price')]);
