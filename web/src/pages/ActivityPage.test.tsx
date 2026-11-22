@@ -69,6 +69,25 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 const show = (ms = 40) => render(<MantineProvider theme={theme}><MemoryRouter><ActivityPage refreshMs={ms} /></MemoryRouter></MantineProvider>);
 
+describe('ActivityPage while loading', () => {
+  it('shows the table with a loading row straight away, before the first answer arrives', async () => {
+    let release!: () => void;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { release = () => resolve(new Response(JSON.stringify(data()), { status: 200 })); })));
+    show(1000);
+    expect(screen.getByRole('columnheader', { name: 'File' })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Loading…');
+    expect(screen.queryByText('Nothing in the inbox and nothing running.')).toBeNull();
+    release();
+    expect(await screen.findByText('Nothing in the inbox and nothing running.')).toBeInTheDocument();
+    expect(screen.queryByText('Loading…')).toBeNull();
+  });
+  it('drops the loading row and shows the error when the first request fails', async () => {
+    fail = true; show();
+    expect(await screen.findByText('Database down')).toBeInTheDocument();
+    expect(screen.queryByText('Loading…')).toBeNull();
+  });
+});
+
 describe('ActivityPage estimates', () => {
   it('shows how long the inbox should take, and what is left of the file being checked', async () => {
     current = data({ queue: { basedOn: 40, seconds: 840, partial: false },
@@ -98,6 +117,7 @@ describe('ActivityPage', () => {
     current = data({ inbox: [{ stem: 'a', xmlName: 'a.xml', xmlBytes: 2048, pdfName: 'a.pdf', pdfBytes: 5, modifiedAt: new Date().toISOString() }, { stem: 'b', xmlName: 'b.xml', xmlBytes: 9000, pdfName: null, pdfBytes: null, modifiedAt: new Date().toISOString() }],
       running: [act(1, { kind: 'Print files', state: 'Running', label: 'Job 3: j3.pdf', detail: 'Batch 70 (1 of 4): file 2 of 3 built', done: 0, total: 4 })] });
     show();
+    await screen.findByText('a.xml');   // the table is there from the start; wait for its first rows
     const ra = (await screen.findAllByRole('row')).find((r) => within(r).queryByText('a.xml'))!;
     expect(within(ra).getByText('Arrived')).toBeInTheDocument(); expect(within(ra).getByText('2 KB')).toBeInTheDocument();
     const rb = (await screen.findAllByRole('row')).find((r) => within(r).queryByText('b.xml'))!;

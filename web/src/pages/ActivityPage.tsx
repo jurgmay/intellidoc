@@ -89,7 +89,7 @@ export function ActivityPage({ refreshMs = 3000 }: { refreshMs?: number }) {
   const count = (s: Stage) => lines.filter((l) => l.stage === s).length;
   return (
     <Stack>
-      <Group justify="space-between"><Title order={2}>Activity</Title>{!data && !error && <Loader size="sm" />}</Group>
+      <Group justify="space-between"><Title order={2}>Activity</Title></Group>
       <Text size="sm" c="dimmed">Updates every few seconds. The inbox is taken smallest XML first.</Text>
       {error && <Alert color="red" icon={<IconAlertCircle size={16} />}>{error}</Alert>}
       {data?.inboxUnavailable && <Alert color="yellow" icon={<IconAlertCircle size={16} />} title="The inbox cannot be shown">{data.inboxUnavailable}</Alert>}
@@ -104,7 +104,7 @@ export function ActivityPage({ refreshMs = 3000 }: { refreshMs?: number }) {
           {ORDER.map((s) => <Badge key={s} color={COLOUR[s]} variant="light">{count(s)} {s.toLowerCase()}</Badge>)}
         </Group>
       )}
-      {data && (
+      {(
         <Paper withBorder>
           <Table highlightOnHover>
             <Table.Thead><Table.Tr><Table.Th>Status</Table.Th><Table.Th>File</Table.Th><Table.Th ta="right">Size</Table.Th><Table.Th>PDF</Table.Th><Table.Th>Progress</Table.Th><Table.Th>Time</Table.Th></Table.Tr></Table.Thead>
@@ -123,7 +123,8 @@ export function ActivityPage({ refreshMs = 3000 }: { refreshMs?: number }) {
                   <Table.Td>{l.stage === 'Making print files' || l.stage === 'Processing' ? `running ${elapsed(l.at, now)}${l.seconds !== null ? `, about ${duration(l.seconds)} left` : ''}` : l.stage === 'Waiting' ? `here ${elapsed(l.at, now)}` : clock(l.at)}</Table.Td>
                 </Table.Tr>
               ))}
-              {lines.length === 0 && <Table.Tr><Table.Td colSpan={6}><Text c="dimmed" ta="center">Nothing in the inbox and nothing running.</Text></Table.Td></Table.Tr>}
+              {!data && !error && <Table.Tr><Table.Td colSpan={6}><Group justify="center" gap="xs" py="md" role="status"><Loader size="sm" /><Text c="dimmed">Loading…</Text></Group></Table.Td></Table.Tr>}
+              {data && lines.length === 0 && <Table.Tr><Table.Td colSpan={6}><Text c="dimmed" ta="center">Nothing in the inbox and nothing running.</Text></Table.Td></Table.Tr>}
             </Table.Tbody>
           </Table>
         </Paper>
