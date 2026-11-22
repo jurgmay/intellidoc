@@ -6,7 +6,7 @@ type R = Record<string, any>; // eslint-disable-line @typescript-eslint/no-expli
 
 const like = (s: string): string => `%${s.replace(/[\\%_[]/g, (c) => `\\${c}`)}%`;
 
-const ROW = `j.job_id, a.account_code, a.name AS account_name, j.base_name, j.pdf_file_name, j.export_date, j.status, j.pack_count, j.page_count, j.pdf_error,
+const ROW = `j.job_id, a.account_code, a.name AS account_name, j.base_name, j.pdf_file_name, j.export_date, j.status, j.pack_count, j.page_count, j.pdf_error, j.run_sheets_emailed_at,
   (SELECT COUNT(*) FROM idoc.batch b WHERE b.job_id = j.job_id) AS batch_count,
   (SELECT COUNT(*) FROM idoc.batch b WHERE b.job_id = j.job_id AND EXISTS (SELECT 1 FROM idoc.batch_file f WHERE f.batch_id = b.batch_id)) AS composed_count
   FROM idoc.job AS j INNER JOIN idoc.account AS a ON a.account_id = j.account_id`;
@@ -16,6 +16,7 @@ function row(r: R): JobRow {
     id: Number(r['job_id']), customerCode: r['account_code'], customerName: r['account_name'], baseName: r['base_name'], pdfFileName: r['pdf_file_name'],
     receivedAt: (r['export_date'] as Date).toISOString(), status: r['status'] as JobStatus, packCount: r['pack_count'] ?? null, pageCount: r['page_count'] ?? null, pdfError: r['pdf_error'] ?? null,
     batchCount: r['batch_count'], composedBatchCount: r['composed_count'],
+    runSheetsEmailedAt: r['run_sheets_emailed_at'] ? (r['run_sheets_emailed_at'] as Date).toISOString() : null,
   };
 }
 

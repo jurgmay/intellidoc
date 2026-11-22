@@ -13,6 +13,9 @@ const LABEL = rgb(65 / 255, 176 / 255, 214 / 255);
 const RULE = rgb(0.86, 0.88, 0.92);
 const RED = rgb(0.9, 0.1, 0.1);
 const LABEL_W = 42 * MM;
+/** Content stops 20 mm from the bottom; a continuation page starts 20 mm from the top. */
+const BOTTOM = 20 * MM;
+const TOP_NEXT = 20 * MM;
 const require = createRequire(import.meta.url);
 const DEFAULT_LOGO = new URL('../../assets/intellidoc-logo.png', import.meta.url);
 
@@ -84,7 +87,7 @@ export async function renderRunSheet(data: RunSheetData, logoPng?: Uint8Array): 
   const doc = await PDFDocument.create();
   doc.registerFontkit(fontkit);
   doc.setTitle(`Run sheet ${data.batchCode}`);
-  const page = doc.addPage([595.28, 841.89]);
+  let page = doc.addPage([595.28, 841.89]);
   const light = await doc.embedFont(await poppins(400), { subset: true });
   const medium = await doc.embedFont(await poppins(500), { subset: true });
   const semi = await doc.embedFont(await poppins(600), { subset: true });
@@ -106,13 +109,22 @@ export async function renderRunSheet(data: RunSheetData, logoPng?: Uint8Array): 
   if (data.brand) { page.drawText(safe(data.brand), { x: LEFT, y, size: 12, font: light, color: BLUE }); }
   y -= 14 * MM;
 
+  /** A row takes one line per wrapped value line (an empty value takes two), 4.6 mm each, plus 3.8 mm for the rule and the gap. */
+  const rowHeight = (r: Row): number => {
+    const lines = r.values.length ? r.values.reduce((n, v) => n + wrap(safe(v), light, 8.5, WIDTH - LABEL_W).length, 0) : 2;
+    return lines * 4.6 * MM + 3.8 * MM;
+  };
   const section = (title: string, rows: Row[]): void => {
-    page.drawText(title, { x: LEFT, y, size: 11, font: semi, color: BLUE });
-    y -= 7 * MM;
+    const heading = (t: string): void => { page.drawText(t, { x: LEFT, y, size: 11, font: semi, color: BLUE }); y -= 7 * MM; };
+    if (y - 7 * MM - rowHeight(rows[0]!) < BOTTOM) { page = doc.addPage([595.28, 841.89]); y = page.getHeight() - TOP_NEXT; }
+    heading(title);
     for (const r of rows) {
+      if (y - rowHeight(r) < BOTTOM) { page = doc.addPage([595.28, 841.89]); y = page.getHeight() - TOP_NEXT; heading(`${title} (continued)`); }
       page.drawText(safe(r.label), { x: LEFT, y, size: 8.5, font: medium, color: LABEL });
       for (const v of r.values.length ? r.values : ['']) {
         for (const l of wrap(safe(v), light, 8.5, WIDTH - LABEL_W)) {
+          // a row longer than a page carries on over the page
+          if (y - 4.6 * MM < BOTTOM) { page = doc.addPage([595.28, 841.89]); y = page.getHeight() - TOP_NEXT; heading(`${title} (continued)`); page.drawText(safe(`${r.label} (continued)`), { x: LEFT, y, size: 8.5, font: medium, color: LABEL }); }
           page.drawText(l, { x: LEFT + LABEL_W, y, size: 8.5, font: light, color: r.red ? RED : rgb(0, 0, 0) });
           y -= 4.6 * MM;
         }
@@ -143,12 +155,13 @@ export async function renderRunSheet(data: RunSheetData, logoPng?: Uint8Array): 
     { label: 'Postal format', values: [data.postalFormat] }, { label: 'Weight bands', values: data.weightBands },
     { label: 'Return address', values: data.returnAddress ? [data.returnAddress] : [] });
   section('Fulfilment details', fulfil);
-  footer(page, light, data);
+  const pages = doc.getPages();
+  pages.forEach((p, i) => footer(p, light, data, i + 1, pages.length));
   return doc.save();
 }
 
-function footer(page: PDFPage, font: PDFFont, data: RunSheetData): void {
-  page.drawText(safe(`Batch ${data.batchCode}`), { x: LEFT, y: 10 * MM, size: 7, font, color: rgb(0.5, 0.5, 0.5) });
+function footer(page: PDFPage, font: PDFFont, data: RunSheetData, n: number, of: number): void {
+  page.drawText(safe(of > 1 ? `Batch ${data.batchCode} - page ${n} of ${of}` : `Batch ${data.batchCode}`), { x: LEFT, y: 10 * MM, size: 7, font, color: rgb(0.5, 0.5, 0.5) });
 }
 
 /** Merges single-page PDFs (already rendered) into one document, in the order given. */

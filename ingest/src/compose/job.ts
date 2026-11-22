@@ -6,6 +6,8 @@ import { applyDuePendingJobNumbers } from '../mssql/jobNumbers.js';
 import { buildRunSheet, paperFacts } from '../runsheet/data.js';
 import { renderRunSheet } from '../runsheet/pdf.js';
 import { loadRunSheetInputs } from '../runsheet/query.js';
+import type { Mailer } from '../mail.js';
+import { emailRunSheets, loadEmailSettings, type RunSheetEmailResult } from '../runsheet/email.js';
 import { composeBatch } from './compose.js';
 import type { BatchToCompose } from './db.js';
 import type { BatchPlan } from './plan.js';
@@ -26,6 +28,13 @@ export interface ComposeJobOptions {
   grey: GreyConverter | null;
   /** Leave alone a batch that already has print files (the automatic run); the default composes again. */
   onlyNew?: boolean;
+  /**
+   * With a mailer, and "E-mail run sheets" on in Settings, the run sheets are e-mailed once, when the job's print files are first made.
+   * A job that has been e-mailed (idoc.job.run_sheets_emailed_at) is not e-mailed again. A failure to send never fails the compose.
+   */
+  mailer?: Mailer;
+  /** Told what happened to the e-mail (only when one was attempted). */
+  onRunSheetEmail?: (r: RunSheetEmailResult) => void;
 }
 export interface ComposedBatch { batchCode: number; files: string[]; mrdfFile?: string; skipped?: string }
 
@@ -38,7 +47,14 @@ export async function findSourcePdf(dir: string, name: string): Promise<string> 
   return join(dir, withTime.sort((a, b) => b.t - a.t)[0]!.f);
 }
 
-export const printFileName = (batchCode: number, segment: number): string => `${batchCode}_${segment}.pdf`;
+/**
+ * The print file's name, as the run sheet's File name row says it: "77440 - IntelliDoc - Uinsure - 81899 - Batch 16 of 23.pdf"
+ * (runSheetName). A batch in several files gets " - Segment 1 of 2" before the .pdf, as FileMaker named them.
+ */
+export function printFileName(runSheetName: string, segment: number, segments: number): string {
+  if (segments <= 1) return runSheetName;
+  return `${runSheetName.replace(/\.pdf$/i, '')} - Segment ${segment} of ${segments}.pdf`;
+}
 
 /** Composes the print file(s) of every batch of a job that is still Created. Safe to run again: it replaces its own files and records. */
 export async function composeJob(o: ComposeJobOptions): Promise<ComposedBatch[]> {
@@ -56,14 +72,15 @@ export async function composeJob(o: ComposeJobOptions): Promise<ComposedBatch[]>
     if (o.onlyNew && (await recordedFiles(o.pool, b.batchId)).length > 0) { result.push({ batchCode: b.batchCode, files: [], skipped: 'already composed' }); continue; }
     const input = runInputs.find((r) => Number(r.batchCode) === b.batchCode);
     if (!input) throw new Error(`No run sheet data for batch ${b.batchCode}`);
-    const runSheet = await renderRunSheet(buildRunSheet(input), o.logo);
+    const runData = buildRunSheet(input);
+    const runSheet = await renderRunSheet(runData, o.logo);
     const runPages = (await PDFDocument.load(runSheet)).getPageCount();
     const plan = planBatch(b.mailpieces, { maxPagesPerPdf: settings.maxPagesPerPdf, runSheetPages: runPages + (runPages % 2) });
     if (!plan.segments.length) { result.push({ batchCode: b.batchCode, files: [], skipped: 'no mailpieces to print' }); continue; }
 
     const kw = batchKeywords({ archive: b.archive, edgeToEdge: !!b.paperName && paperFacts(b.paperName).edgeToEdge });
     const files = await composeBatch({
-      batchCode: b.batchCode, source, runSheet, plan, marks: settings.marks, grey: o.grey, fileName: (n) => printFileName(b.batchCode, n),
+      batchCode: b.batchCode, source, runSheet, plan, marks: settings.marks, grey: o.grey, fileName: (n, total) => printFileName(runData.fileName, n, total),
       keywords: kw ? [kw] : undefined, mrdf: b.mrdf !== null,
     });
     const old = await recordedFiles(o.pool, b.batchId);
@@ -74,7 +91,19 @@ export async function composeJob(o: ComposeJobOptions): Promise<ComposedBatch[]>
     if (b.mrdf && o.mrdfDir) mrdfFile = await writeMrdfFile(o.pool, o.mrdfDir, b, plan);
     result.push({ batchCode: b.batchCode, files: files.map((f) => join(o.outDir, f.fileName)), ...(mrdfFile ? { mrdfFile } : {}) });
   }
+  if (o.mailer && result.some((r) => r.files.length > 0)) await maybeEmailRunSheets(o);
   return result;
+}
+
+async function maybeEmailRunSheets(o: ComposeJobOptions): Promise<void> {
+  try {
+    if (!(await loadEmailSettings(o.pool)).enabled) return;
+    const sent = (await o.pool.request().input('j', sql.BigInt, o.jobId).query<{ at: Date | null }>('SELECT run_sheets_emailed_at AS at FROM idoc.job WHERE job_id = @j')).recordset[0]?.at;
+    if (sent) return;
+    o.onRunSheetEmail?.(await emailRunSheets(o.pool, o.jobId, o.mailer!, o.logo));
+  } catch (e) {
+    o.onRunSheetEmail?.({ sent: false, to: [], cc: [], testMode: false, attachment: null, error: (e as Error).message });
+  }
 }
 
 /** Writes <batchCode>.txt for the batch (ANSI, CRLF), through a temporary name so the inserter never picks up half a file. */

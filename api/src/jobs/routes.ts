@@ -19,7 +19,22 @@ export function jobRoutes(app: FastifyInstance, { store, composer }: JobDeps): v
     if (running.has(id)) throw new ConflictError(`Print files for job ${id} are already being made. Wait for that to finish.`);
     running.add(id);
     try {
-      return { batches: await composer.compose(id, onlyNew).catch((e: Error) => { throw new ConflictError(`Could not make the print files for job ${id}: ${e.message}`); }) };
+      return await composer.compose(id, onlyNew).catch((e: Error) => { throw new ConflictError(`Could not make the print files for job ${id}: ${e.message}`); });
     } finally { running.delete(id); }
+  });
+  app.post<{ Params: { id: string } }>('/api/jobs/:id/email-run-sheets', async (req) => {
+    const id = idOf(req.params.id);
+    const job = await store.get(id);
+    if (job.batchCount === 0) throw new ConflictError(`Job ${id} has no batches, so there are no run sheets to send.`);
+    const r = await composer.emailRunSheets(id).catch((e: Error) => { throw new ConflictError(`Could not e-mail the run sheets for job ${id}: ${e.message}`); });
+    if (!r.sent) throw new ConflictError(r.error ?? 'The run sheets were not sent.');
+    return r;
+  });
+  app.get<{ Params: { id: string } }>('/api/jobs/:id/run-sheets.pdf', async (req, reply) => {
+    const id = idOf(req.params.id);
+    const job = await store.get(id);
+    if (job.batchCount === 0) throw new ConflictError(`Job ${id} has no batches, so there are no run sheets.`);
+    const f = await composer.runSheetsPdf(id).catch((e: Error) => { throw new ConflictError(`Could not make the run sheets for job ${id}: ${e.message}`); });
+    return reply.header('Content-Type', 'application/pdf').header('Content-Disposition', `attachment; filename="${f.fileName.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, "'")}"`).send(Buffer.from(f.bytes));
   });
 }

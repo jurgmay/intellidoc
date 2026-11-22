@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type sql from 'mssql';
 import { PDFDocument } from 'pdf-lib';
@@ -82,14 +82,16 @@ describe.skipIf(!hasDb)('composeJob', { timeout: 120_000 }, () => {
     const [b] = await composeJob({ pool, jobId, pdfDir, outDir, grey: null });
     expect(await jobsToCompose(pool)).not.toContain(jobId);
     expect(b!.skipped).toBeUndefined();
-    const file = join(outDir, `${batchCode}_1.pdf`);
+    const file = b!.files[0]!;
+    expect(dirname(file)).toBe(outDir);
+    expect(basename(file)).toMatch(new RegExp(`(^| - )IntelliDoc - .* - ${batchCode} - Batch 1 of 1\\.pdf$`)); // the name the run sheet gives
     expect(existsSync(file)).toBe(true);
 
     const mps = (await pool.request().query(`SELECT mailpiece_id, sequence_number, pack_count FROM idoc.mailpiece WHERE batch_id = ${batchId} ORDER BY sequence_number`)).recordset;
     expect(mps.map((m) => m.sequence_number)).toEqual([1, 2]);
     const f = (await pool.request().query(`SELECT * FROM idoc.batch_file WHERE batch_id = ${batchId}`)).recordset;
     expect(f).toHaveLength(1);
-    expect(f[0]).toMatchObject({ segment_number: 1, file_name: `${batchCode}_1.pdf`, mailpiece_count: 2, first_sequence: 1, last_sequence: 2 });
+    expect(f[0]).toMatchObject({ segment_number: 1, file_name: basename(file), mailpiece_count: 2, first_sequence: 1, last_sequence: 2 });
     const doc = await PDFDocument.load(new Uint8Array(readFileSync(file)));
     expect(doc.getPageCount()).toBe(f[0].page_count);
     const run = f[0].page_count - 8; // run sheet (padded to even) + Ann 3+1 and 2, Bob 1+1

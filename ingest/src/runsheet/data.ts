@@ -77,6 +77,11 @@ export function weightBandLines(bands: (number | null)[]): string[] {
     .map(([band, count]) => `${count.toLocaleString('en-GB')} x ${band === null ? 'unbanded' : `${band}g`}`);
 }
 
+/** Warehouse stock (code WH...) shows "code : description". A provisional code (not yet in stock control) is not shown: description only, as in FileMaker. */
+export function envelopeText(code: string, description: string): string {
+  return /^WH/i.test(code.trim()) ? `${code.trim()} : ${description}` : description;
+}
+
 export function postalServiceText(name: string, code: string | null): string {
   return code ? `${name} (${code})` : name;
 }
@@ -100,7 +105,7 @@ export function buildRunSheet(i: RunSheetInput): RunSheetData {
     totalMailpieces: i.mailpieces,
     totalPages: i.pages,
     department: i.department.replace(/\b[a-z]/g, (c) => c.toUpperCase()),
-    envelope: `${i.envelopeCode} : ${i.envelopeDescription}`,
+    envelope: envelopeText(i.envelopeCode, i.envelopeDescription),
     inserts: i.inserts.map((x) => `${x.code} : ${x.description}${x.quantity > 1 ? ` (x${x.quantity})` : ''}`),
     postalProvider: i.postalProvider,
     postalService: postalServiceText(i.postalServiceName, i.serviceCode),

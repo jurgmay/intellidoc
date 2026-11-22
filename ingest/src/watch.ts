@@ -75,7 +75,7 @@ await watcher.init();
 if (!cfg.dryRun && !cfg.once) {
   const dog = new PdfWatchdog(real, mailer, { get waitMinutes() { return live.pdfWaitMinutes; }, get reminderMinutes() { return live.pdfReminderMinutes; }, get to() { return live.alertTo; }, inbox: cfg.dirs.inbox }, log);
   const composer = cfg.composeOutDir
-    ? new AutoComposer({ pool, pdfDir: cfg.dirs.processed, outDir: cfg.composeOutDir, mrdfDir: cfg.mrdfOutDir, grey: new GhostscriptGrey(), log, notify: (subject, text) => mailer.send(live.alertTo, subject, text) })
+    ? new AutoComposer({ pool, pdfDir: cfg.dirs.processed, outDir: cfg.composeOutDir, mrdfDir: cfg.mrdfOutDir, grey: new GhostscriptGrey(), mailer, log, notify: (subject, text) => mailer.send(live.alertTo, subject, text) })
     : null;
   if (composer) log('info', `Print files go to ${cfg.composeOutDir} when "Make print files automatically" is on in Settings`);
   if (composer && !cfg.mrdfOutDir) log('warn', 'MRDF_OUT_DIR is not set: customers that use MRDF get the page codes but no MRDF file');

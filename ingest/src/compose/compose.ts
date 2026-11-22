@@ -16,7 +16,8 @@ export interface ComposeInput {
   marks: MarkSettings;
   /** Needed only when a page that is in colour has to be printed mono. */
   grey: GreyConverter | null;
-  fileName: (segmentNumber: number) => string;
+  /** The file name of a segment, given its number and how many segments the batch has. */
+  fileName: (segmentNumber: number, segmentCount: number) => string;
   /** PDF keywords, e.g. imposition:SRA4. */
   keywords?: string[];
   /** The customer uses MRDF: every sheet front also carries the MRDF Data Matrix and OCR code (needs marks.mrdf). */
@@ -67,7 +68,7 @@ async function composeSegment(input: ComposeInput, seg: PlannedSegment,
   ctx: { src: PDFDocument; runDoc: PDFDocument | null; greyDoc: PDFDocument | null; greyIndex: Map<number, number>; font: Uint8Array }): Promise<ComposedFile> {
   const out = await PDFDocument.create();
   out.registerFontkit(fontkit);
-  const fileName = input.fileName(seg.segmentNumber);
+  const fileName = input.fileName(seg.segmentNumber, input.plan.segments.length);
 
   // Copy what this segment needs in as few calls as possible, then place it in order
   const fromSrc: number[] = [], fromGrey: number[] = [], fromRun: number[] = [];

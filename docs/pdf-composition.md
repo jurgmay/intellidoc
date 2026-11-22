@@ -30,7 +30,7 @@ It reads the customer's PDF from the watcher's `processed` folder, so a job is c
 
 ## What it does
 
-* One PDF per batch, named `<batchCode>_<segment>.pdf`. A file is closed after the mailpiece that takes it past **Most pages in one print file** (Settings, default 10 000; the run sheet and padding count), so a file can run over by one mailpiece. The rest of the batch continues in the next file.
+* One PDF per batch, named as the run sheet's *File name* row says, as FileMaker did: `<job no> - IntelliDoc - <customer> - <batch code> - Batch <n> of <m>.pdf`. A batch that needs several files has ` - Segment <x> of <y>` before the `.pdf`. (Print files made before this change keep their old `<batchCode>_<segment>.pdf` names until they are made again; the old files are removed then.) A file is closed after the mailpiece that takes it past **Most pages in one print file** (Settings, default 10 000; the run sheet and padding count), so a file can run over by one mailpiece. The rest of the batch continues in the next file.
 * Segment 1 starts with the batch's run sheet, plus a blank page when the run sheet has an odd number of pages.
 * Mailpieces are in **sequence order**. Sequence numbers (`mailpiece.sequence_number`, 1..n per batch) are given the first time a batch is composed: lightest weight band first, then source PDF order; mailpieces with an unknown band go last. They are never renumbered; a mailpiece added later gets the next number. Cancelled mailpieces are left out and get none.
 * Packs in a mailpiece: with address matching, by document sequence; otherwise by submitting account, release date, then source order.
@@ -66,11 +66,24 @@ Things to know:
 * Weight and postage in each record are FileMaker's constants (000.933 and 00.355), not the mailpiece's real values.
 * The page-code positions are placeholders until set from a printed proof, like the other marks.
 
+## Run sheets
+
+* **Envelope row**: the envelope's stock code is shown only for `WH…` codes; an insert is always `code : description` (FileMaker's wording).
+* **More than one page**: a run sheet that does not fit on a page continues on the next, with "(continued)" on a repeated section heading. A row is kept together when it fits on a page; a row longer than a page (a very long insert list) is split line by line. The footer reads "Batch X - page n of m" only when there is more than one page. The composer counts the run sheet's pages (padded to an even number) when it plans the file.
+* **E-mail** (FileMaker's *Email Run Sheets*). Switch on **E-mail run sheets** in Settings (PDF and alerts) and set **Run sheet recipients**. The first time a job's print files are made (by the watcher or the Jobs screen) one e-mail goes out for the job: subject = the job name, body = the customer in capitals, the totals (mailpieces, packs, sheets, pages as colour/mono/blank, as printed after the colour mode), `ALL MAILPIECES TO BE ARCHIVED` for an archiving customer, then each batch (postal service - envelope - department, mailpieces, pages, weight bands, file name). The attachment is the run sheets of all batches in one PDF, named `<job no> - IntelliDoc Run Sheet(s) - <customer> - N batch(es) (<first> - <last>).pdf`.
+  * **To** is the first run sheet recipient; **Cc** is the rest plus the customer's notification e-mail addresses (the `emails` setting of the customer, inherited as usual).
+  * A customer (or its owning account) marked **Testing** is sent to the alert recipients only, with `[TEST] ` before the subject, and nobody else is copied.
+  * It is sent once: `idoc.job.run_sheets_emailed_at` records it. Making the files again does not send another. A problem (no recipients, no mail server, the mail server refusing) is logged (watcher) or shown in a notification (Jobs screen) and never stops the print files being made; nothing is recorded, so the next compose tries again.
+  * The Jobs screen **Details** has **Download run sheets** (the same merged PDF) and **E-mail run sheets** / **Resend run sheets**, which send now whether or not the setting is on, and again even if it was sent before.
+  * The mail server is `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` in the watcher's `.env` and in the API's `.env`. Without `SMTP_HOST` nothing is sent and the reason is shown.
+
 ## Settings
 
 The Settings page has two groups, **Print file marks** and **MRDF page codes**. **Print file marks** (box positions, font size, dot, most pages per file). FileMaker kept these in its Settings table, which was not in the DDR, so **the starting values are placeholders** (except the dot, which FileMaker fixed in the script). Check them against a printed proof and correct them there.
 
 ## Not built, and differences from FileMaker
+
+* Run sheet gaps still open: spoil run sheets, scan/archive run sheets, the comments row, the UINSURE stock-items page and the QA tick lines.
 
 * **MRDF**: reading what the inserter sends back (FileMaker's output, select and lock folders and the `MRDF_OutputRecords` / `MRDF_SelectRecords` tables) is not built. Only the files the inserter is given are (see MRDF below).
 * `forceA4PageSize` is not implemented on purpose: FileMaker's script has the code commented out, so it never ran.
