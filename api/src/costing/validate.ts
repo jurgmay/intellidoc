@@ -18,17 +18,21 @@ function money(errs: Record<string, string>, key: string, label: string, v: unkn
   if (Math.abs(Math.round(v * 1e4) / 1e4 - v) > 1e-9) { errs[key] = `${label} can have at most 4 decimal places`; return 0; }
   return Math.round(v * 1e4) / 1e4;
 }
-function header(errs: Record<string, string>, body: Body): { name: string; validFrom: string; validTo: string | null; isActive: boolean } {
+/** A new model needs a first day. An existing one may have none (a draft from the FileMaker import) but cannot be switched on without one. */
+function header(errs: Record<string, string>, body: Body, startRequired: boolean): { name: string; validFrom: string | null; validTo: string | null; isActive: boolean } {
   const rawName = body?.['name'];
   const name = typeof rawName === 'string' ? rawName.trim() : '';
   if (!name) errs['name'] = 'Name is required'; else if (name.length > 200) errs['name'] = 'Name can be at most 200 characters';
-  const from = body?.['validFrom']; const to = body?.['validTo'] ?? null;
-  if (!isDate(from)) errs['validFrom'] = 'Enter the first day the prices apply';
+  const rawFrom = body?.['validFrom']; const from = rawFrom === undefined || rawFrom === '' ? null : rawFrom; const to = body?.['validTo'] ?? null;
+  if (from === null) { if (startRequired) errs['validFrom'] = 'Enter the first day the prices apply'; }
+  else if (!isDate(from)) errs['validFrom'] = 'Enter a valid first day';
   if (to !== null && !isDate(to)) errs['validTo'] = 'Enter a valid last day, or leave it empty';
   if (isDate(from) && isDate(to) && to < from) errs['validTo'] = 'The last day cannot be before the first day';
+  if (from === null && to !== null && !errs['validTo']) errs['validTo'] = 'Give it a first day before a last day';
   const active = body?.['isActive'];
   if (typeof active !== 'boolean') errs['isActive'] = 'Active must be on or off';
-  return { name, validFrom: isDate(from) ? from : '', validTo: isDate(to) ? to : null, isActive: active === true };
+  else if (active && from === null && !errs['validFrom']) errs['isActive'] = 'Give it a first day before switching it on';
+  return { name, validFrom: isDate(from) ? from : null, validTo: isDate(to) ? to : null, isActive: active === true };
 }
 
 export function parseMode(body: Body): CostingMode {
@@ -39,16 +43,16 @@ export function parseMode(body: Body): CostingMode {
 
 export function parseNewModel(body: Body): NewModelInput {
   const errs: Record<string, string> = {};
-  const h = header(errs, body);
+  const h = header(errs, body, true);
   const c = body?.['copyFromId'] ?? null;
   if (c !== null && !(Number.isInteger(c) && (c as number) > 0)) errs['copyFromId'] = 'Choose a model to copy, or none';
   done(errs);
-  return { ...h, copyFromId: c as number | null };
+  return { ...h, validFrom: h.validFrom as string, copyFromId: c as number | null };
 }
 
 export function parseModel(body: Body): ModelInput {
   const errs: Record<string, string> = {};
-  const h = header(errs, body);
+  const h = header(errs, body, false);
   const rawComments = body?.['comments'] ?? null;
   let comments: string | null = null;
   if (rawComments !== null) {

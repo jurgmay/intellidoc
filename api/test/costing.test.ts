@@ -62,6 +62,22 @@ describe('costing models', () => {
     expect(m.charges.map((c: { code: string }) => c.code)).toEqual(CHARGES.map((c) => c.code));
     expect(m.charges.every((c: { cost: number; sellPrice: number }) => c.cost === 0 && c.sellPrice === 0)).toBe(true);
   });
+  it('a draft with no dates can be kept, never prices mail, and needs a first day before it is switched on', async () => {
+    const a = (await post(ODEVO, body())).json().id; const b = (await post(ODEVO, body({ name: 'Other', validFrom: '2027-01-01' }))).json().id;
+    expect((await put(a, full({ name: 'Draft A', validFrom: null, isActive: false }))).statusCode).toBe(200);
+    expect((await put(b, full({ name: 'Draft B', validFrom: null, isActive: false }))).statusCode).toBe(200);   // two drafts do not clash
+    const o = (await app.inject({ method: 'GET', url: `/api/customers/${ODEVO}/costing` })).json();
+    expect(o.models.map((m: { validFrom: string | null }) => m.validFrom)).toEqual([null, null]);
+    expect(o.inForceId).toBeNull();
+    const switchOn = await put(a, full({ name: 'Draft A', validFrom: null, isActive: true }));
+    expect(switchOn.statusCode).toBe(422);
+    expect(JSON.stringify(switchOn.json())).toMatch(/first day before switching it on/);
+    expect((await put(a, full({ name: 'Draft A', validFrom: null, validTo: '2026-12-31', isActive: false }))).statusCode).toBe(422);
+    expect((await put(a, full({ name: 'Draft A', validFrom: '2026-02-01', isActive: true }))).statusCode).toBe(200);
+  });
+  it('a new model still needs a first day', async () => {
+    expect((await post(ODEVO, body({ validFrom: null }))).statusCode).toBe(422);
+  });
   it('two models cannot start on the same day', async () => {
     await post(ODEVO, body());
     const r = await post(ODEVO, body({ name: 'Again' }));

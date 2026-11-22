@@ -1,4 +1,5 @@
 import { type Row, flag, json, lc, num } from './mer.js';
+import { buildCostingPlan, type PlanCostingModel } from './costingPlan.js';
 
 /**
  * Turns the four FileMaker exports into a plan of rows to load. Pure: no database access, so the dry run and
@@ -52,6 +53,8 @@ export interface Plan {
   /** FileMaker ids of stock items that must NOT exist (business decision); apply deletes them if present and unreferenced. */
   excludedStock: string[];
   accounts: PlanAccount[]; brands: PlanBrand[]; sizes: PlanSize[]; stock: PlanStock[]; rates: PlanRate[]; envelopes: PlanEnvelope[];
+  /** Price lists to add (switched off, no dates) and the accounts that take their parent's prices instead of having a list of their own. */
+  costing: PlanCostingModel[]; costingInherit: string[];
   warnings: string[]; skipped: Record<string, number>;
 }
 export interface Exports { customers: Row[]; brands: Row[]; stock: Row[]; envelopes: Row[] }
@@ -244,7 +247,9 @@ export function buildPlan(x: Exports): Plan {
       rate: { provider, format, service, maxG }, externalName: (r['externalName'] ?? '').trim() || null, reference, isOversticker: flag(r['isOverSticker']) });
   }
   if (fallbackBand) skipped['envelopesBandFromService'] = fallbackBand;
-  return { excludedStock, accounts, brands, sizes: [...sizes.values()], stock, rates: [...rates.values()], envelopes, warnings, skipped };
+  const { models: costing, inherit: costingInherit } = buildCostingPlan(x, accounts, envelopes, new Set(stock.map((s) => s.legacyId)), (a) => settingsOwner(accById, a), (w) => warnings.push(w),
+    (k) => { skipped[k] = (skipped[k] ?? 0) + 1; });
+  return { excludedStock, accounts, brands, sizes: [...sizes.values()], stock, rates: [...rates.values()], envelopes, costing, costingInherit, warnings, skipped };
 }
 
 export function summarise(p: Plan): string[] {
@@ -256,6 +261,7 @@ export function summarise(p: Plan): string[] {
     `Stock      ${p.stock.length} items (${p.stock.filter((s) => s.code === null).length} without a code, ${p.stock.filter((s) => s.code && !/^WH/i.test(s.code)).length} with a provisional non-WH code), ${p.sizes.length} envelope sizes`,
     `Postal     ${new Set(p.rates.map((r) => r.provider)).size} providers, ${new Set(p.rates.map((r) => `${r.provider}|${r.format}|${r.service}`)).size} services, ${p.rates.length} weight-band rates`,
     `Envelopes  ${p.envelopes.length}`,
+    `Prices     ${p.costing.length} price lists to add (switched off, no dates; ${p.costing.reduce((n, m) => n + m.envelopes.length, 0)} envelope prices), ${p.costingInherit.length} accounts use their parent's prices`,
   ];
   for (const [k, v] of Object.entries(p.skipped)) L.push(`  note: ${k} = ${v}`);
   return L;

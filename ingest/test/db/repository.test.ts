@@ -236,7 +236,7 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     await expect(pool.request().query(`INSERT INTO idoc.account (account_code, name, costing_mode) VALUES (N'COST_BAD', N'x', N'INHERIT')`)).rejects.toThrow(/ck_account_costing/); // no parent to inherit from
     await expect(pool.request().query(`UPDATE idoc.account SET costing_mode = N'EXTEND' WHERE account_id = ${kid}`)).rejects.toThrow(/ck_account_costing/);
     await expect(pool.request().query(`INSERT INTO idoc.costing_model_rate (costing_model_id, charge_code) VALUES (${m2}, N'GEO')`)).rejects.toThrow(/ck_cmr_code/);
-    await expect(model(root, 'Same start', '2026-07-01', null)).rejects.toThrow(/uq_costing_model_start/);
+    await expect(model(root, 'Same start', '2026-07-01', null)).rejects.toThrow(/ux_costing_model_start/);
     await expect(model(root, 'Backwards', '2027-01-01', '2026-01-01')).rejects.toThrow(/ck_costing_model_dates/);
   });
 

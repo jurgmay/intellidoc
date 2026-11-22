@@ -29,4 +29,23 @@ describe.skipIf(!hasDb)('reference import', { timeout: 120_000 }, () => {
       WHERE si.stock_code = N'WHIMP1'`)).recordset;   // the test seed has its own envelopes; look at ours only
     expect(r).toEqual([{ delivery_band: '2nd Class', stock_code: 'WHIMP1', is_warehouse_code: true, max_weight_g: 100 }]);
   });
+
+  it('adds price lists as switched-off drafts with no dates, and never touches an account that already has one', async () => {
+    const leaf = { cost: 0.04, sellPrice: 0.07, adjustment: 0 };
+    const withPrices = buildPlan({
+      customers: [{ ...{ id: A, id_parentAccount: '', id_groupingAccount: '', accountCode: 'IMPORT_CUST', accountName: 'Import customer', isDeleted: '0', notificationEmails: 'x@y.co',
+        envelopesJSON: JSON.stringify({ k: { id: E, stockCode: 'WHIMP1' } }), id_costingModel: 'm1', costingModelJSON: JSON.stringify({ printing: { colourPage: leaf } }) } }],
+      brands: [{ id: BR, id_customer: A, name: 'Brand 1' }],
+      stock: [{ id: S, id_customer: A, id_parent: '', id_brand: BR, stockCode: 'WHIMP1', type: 'Outer Envelope', description: 'C5 Envelope', isActive: '1', size: 'C5', weight: '8', thickness: '0', cost: '0.05', sellPrice: '0.1' }],
+      envelopes: [{ id: E, id_customer: A, id_brand: BR, id_stockItem: S, isDeleted: '0', postalProvider: 'Royal Mail', postalFormat: 'Letter', postalService: '2nd Class', externalService: '2nd Class', maxWeight: '100', externalName: 'C5 Envelope' }],
+    });
+    const first = await applyPlan(pool, withPrices);
+    expect(first.costingModels).toBe(1);
+    const q = `SELECT m.valid_from, m.valid_to, m.is_active, (SELECT COUNT(*) FROM idoc.costing_model_rate WHERE costing_model_id = m.costing_model_id) AS rates,
+      (SELECT COUNT(*) FROM idoc.costing_model_envelope WHERE costing_model_id = m.costing_model_id) AS envs
+      FROM idoc.costing_model m JOIN idoc.account a ON a.account_id = m.account_id WHERE a.account_code = N'IMPORT_CUST'`;
+    expect((await pool.request().query(q)).recordset).toEqual([{ valid_from: null, valid_to: null, is_active: false, rates: 1, envs: 1 }]);
+    expect((await applyPlan(pool, withPrices)).costingModels).toBe(0);     // re-run adds nothing
+    expect((await pool.request().query(q)).recordset.length).toBe(1);
+  });
 });

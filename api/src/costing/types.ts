@@ -25,7 +25,7 @@ export const CHARGE_CODES: readonly string[] = CHARGES.map((c) => c.code);
 export type CostingMode = 'OWN' | 'INHERIT';
 export interface AccountRef { id: number; code: string; name: string }
 export interface ModelSummary {
-  id: number; name: string; validFrom: string; validTo: string | null; isActive: boolean;
+  id: number; name: string; /** null: a draft with no dates (from the FileMaker import), never in force */ validFrom: string | null; validTo: string | null; isActive: boolean;
   /** Mailpieces that have been priced with it. */
   mailpieceCount: number;
 }
@@ -51,7 +51,7 @@ export interface ModelDetail extends ModelSummary {
   charges: ChargeValue[]; envelopes: EnvelopePrice[]; postage: PostagePrice[];
 }
 export interface ModelInput {
-  name: string; validFrom: string; validTo: string | null; isActive: boolean; comments: string | null;
+  name: string; validFrom: string | null; validTo: string | null; isActive: boolean; comments: string | null;
   charges: { code: ChargeCode; cost: number; sellPrice: number; adjustment: number }[];
   envelopes: { stockItemId: number; cost: number; sellPrice: number; adjustment: number }[];
   postage: { postalRateId: number; adjustment: number }[];

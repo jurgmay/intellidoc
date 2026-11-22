@@ -803,7 +803,8 @@ GO
 /* ===========================================================================
    12. COSTING MODELS
    A costing model is a named price list that belongs to a customer (the account that holds the settings) and applies between two
-   dates. A customer can have several over time; the one in force on the production date prices the mailpiece. A sub-account that
+   dates. A model with no first day is a draft (the FileMaker import creates them): it is switched off and prices nothing until it is given a
+   first day and switched on. A customer can have several over time; the one in force on the production date prices the mailpiece. A sub-account that
    inherits (costing_mode INHERIT, or inherits_settings = 1) uses the nearest ancestor's model (idoc.v_account_setting_source,
    setting 'costing'). Every charge has a cost (what it costs Latcham), a sell price (what the customer pays) and an adjustment
    (a per-customer change added to the sell price). Postage rates and their suggested sell price live on idoc.postal_rate.
@@ -812,15 +813,16 @@ CREATE TABLE idoc.costing_model (
     costing_model_id INT IDENTITY(1, 1) NOT NULL CONSTRAINT pk_costing_model PRIMARY KEY,
     account_id       INT                NOT NULL CONSTRAINT fk_costing_model_account REFERENCES idoc.account (account_id),
     name             NVARCHAR(200)      NOT NULL,
-    valid_from       DATE               NOT NULL,
+    valid_from       DATE               NULL,       -- NULL = a draft with no dates yet (never in force)
     valid_to         DATE               NULL,       -- NULL = until replaced
     is_active        BIT                NOT NULL CONSTRAINT df_costing_model_active DEFAULT (1),
     copied_from_id   INT                NULL CONSTRAINT fk_costing_model_copy REFERENCES idoc.costing_model (costing_model_id),
     comments         NVARCHAR(1000)     NULL,
     created_at       DATETIME2(0)       NOT NULL CONSTRAINT df_costing_model_created DEFAULT (SYSUTCDATETIME()),
-    CONSTRAINT uq_costing_model_start UNIQUE (account_id, valid_from),
-    CONSTRAINT ck_costing_model_dates CHECK (valid_to IS NULL OR valid_to >= valid_from)
+    CONSTRAINT ck_costing_model_dates CHECK (valid_to IS NULL OR valid_to >= valid_from),
+    CONSTRAINT ck_costing_model_draft CHECK (valid_from IS NOT NULL OR (is_active = 0 AND valid_to IS NULL))
 );
+CREATE UNIQUE INDEX ux_costing_model_start ON idoc.costing_model (account_id, valid_from) WHERE valid_from IS NOT NULL;
 GO
 
 CREATE TABLE idoc.costing_model_rate (

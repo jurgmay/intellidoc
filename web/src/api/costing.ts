@@ -3,7 +3,7 @@ import { api } from './client';
 export type ChargeCode = string;
 export type CostingMode = 'OWN' | 'INHERIT';
 export interface AccountRef { id: number; code: string; name: string }
-export interface ModelSummary { id: number; name: string; validFrom: string; validTo: string | null; isActive: boolean; mailpieceCount: number }
+export interface ModelSummary { id: number; name: string; validFrom: string | null; validTo: string | null; isActive: boolean; mailpieceCount: number }
 export interface CostingOverview {
   customerId: number; mode: CostingMode; inheritsAll: boolean; source: AccountRef | null;
   models: ModelSummary[]; sourceModels: ModelSummary[]; inForceId: number | null;
@@ -16,7 +16,7 @@ export interface ModelDetail extends ModelSummary {
   charges: ChargeValue[]; envelopes: EnvelopePrice[]; postage: PostagePrice[];
 }
 export interface ModelInput {
-  name: string; validFrom: string; validTo: string | null; isActive: boolean; comments: string | null;
+  name: string; validFrom: string | null; validTo: string | null; isActive: boolean; comments: string | null;
   charges: { code: ChargeCode; cost: number; sellPrice: number; adjustment: number }[];
   envelopes: { stockItemId: number; cost: number; sellPrice: number; adjustment: number }[];
   postage: { postalRateId: number; adjustment: number }[];

@@ -20,7 +20,7 @@ export class MemoryCostingStore implements CostingStore {
   private log(customerId: number, by: string, summary: string): void { this.audit.push({ customerId, by, summary }); }
   private summary(m: Model): ModelSummary { return { id: m.id, name: m.input.name, validFrom: m.input.validFrom, validTo: m.input.validTo, isActive: m.input.isActive, mailpieceCount: m.mailpieceCount }; }
   private modelsOf(customerId: number): ModelSummary[] {
-    return [...this.models.values()].filter((m) => m.customerId === customerId).sort((a, b) => b.input.validFrom.localeCompare(a.input.validFrom)).map((m) => this.summary(m));
+    return [...this.models.values()].filter((m) => m.customerId === customerId).sort((a, b) => (b.input.validFrom ?? '').localeCompare(a.input.validFrom ?? '')).map((m) => this.summary(m));
   }
   /** The account whose models price this customer's mail. */
   private sourceOf(c: Cust): Cust {
@@ -33,7 +33,7 @@ export class MemoryCostingStore implements CostingStore {
     const c = this.cust(customerId); const src = this.sourceOf(c);
     const from = src.id === c.id ? null : { id: src.id, code: src.code, name: src.name };
     const day = this.today();
-    const inForce = this.modelsOf(src.id).filter((m) => m.isActive && m.validFrom <= day && (m.validTo === null || m.validTo >= day))[0];
+    const inForce = this.modelsOf(src.id).filter((m) => m.isActive && m.validFrom !== null && m.validFrom <= day && (m.validTo === null || m.validTo >= day))[0];
     return { customerId, mode: c.mode, inheritsAll: c.inheritsAll, source: from, models: this.modelsOf(c.id), sourceModels: from ? this.modelsOf(src.id) : [], inForceId: inForce?.id ?? null };
   }
 
@@ -58,8 +58,8 @@ export class MemoryCostingStore implements CostingStore {
     };
   }
 
-  private clash(customerId: number, validFrom: string, exceptId: number | null): void {
-    if ([...this.models.values()].some((m) => m.customerId === customerId && m.id !== exceptId && m.input.validFrom === validFrom)) throw new ConflictError('This customer already has a costing model starting on that day.');
+  private clash(customerId: number, validFrom: string | null, exceptId: number | null): void {
+    if (validFrom !== null && [...this.models.values()].some((m) => m.customerId === customerId && m.id !== exceptId && m.input.validFrom === validFrom)) throw new ConflictError('This customer already has a costing model starting on that day.');
   }
 
   async create(customerId: number, input: NewModelInput, by: string): Promise<number> {

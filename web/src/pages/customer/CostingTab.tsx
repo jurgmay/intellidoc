@@ -9,13 +9,14 @@ import { orNull, run, type TabProps } from './shared';
 
 const today = (): string => new Date().toISOString().slice(0, 10);
 function status(m: ModelSummary, inForceId: number | null): { label: string; color: string } {
+  if (m.validFrom === null) return { label: 'Draft: no dates yet', color: 'orange' };
   if (!m.isActive) return { label: 'Switched off', color: 'gray' };
   if (m.id === inForceId) return { label: 'In force', color: 'teal' };
   if (m.validTo !== null && m.validTo < today()) return { label: 'Ended', color: 'gray' };
   if (m.validFrom > today()) return { label: 'Not started', color: 'blue' };
   return { label: 'Replaced by a later model', color: 'yellow' };
 }
-const dates = (m: ModelSummary): string => `${m.validFrom} to ${m.validTo ?? 'until replaced'}`;
+const dates = (m: ModelSummary): string => (m.validFrom === null ? 'Not set' : `${m.validFrom} to ${m.validTo ?? 'until replaced'}`);
 
 function ModelTable({ models, inForceId, onOpen }: { models: ModelSummary[]; inForceId: number | null; onOpen?: (id: number) => void }) {
   return (
@@ -70,7 +71,7 @@ export function CostingTab({ detail }: TabProps) {
     if (!res.ok) { setErrors(res.fieldErrors ?? {}); setGeneral(res.fieldErrors ? null : res.message ?? 'Not saved'); }
   };
   const own = o.mode === 'OWN' && !o.inheritsAll;
-  const copyOptions = [...o.models, ...o.sourceModels].map((m) => ({ value: String(m.id), label: `${m.name} (${m.validFrom})` }));
+  const copyOptions = [...o.models, ...o.sourceModels].map((m) => ({ value: String(m.id), label: m.validFrom === null ? `${m.name} (draft)` : `${m.name} (${m.validFrom})` }));
 
   return (
     <Stack>
