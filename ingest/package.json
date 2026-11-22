@@ -18,6 +18,8 @@
     "import:ref:env": "tsx --env-file=.env src/import/cli.ts",
     "stock:codes": "tsx src/import/assignCodes.ts",
     "runsheets": "tsx src/runsheet/cli.ts",
+    "compose": "tsx src/compose/cli.ts",
+    "compose:env": "tsx --env-file=.env src/compose/cli.ts",
     "runsheets:env": "tsx --env-file=.env src/runsheet/cli.ts",
     "stock:codes:env": "tsx --env-file=.env src/import/assignCodes.ts"
   },

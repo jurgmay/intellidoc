@@ -8,6 +8,9 @@ import { buildCostingPlan, type PlanCostingModel } from './costingPlan.js';
  * Deliberately NOT read: hpodAccountLogin / hpodAccountPassword / hpodAccountEmail (credentials) and every
  * stock-control quantity (quantityInStock, quantityUsed, lastUsed, totalUsage, averageUsagePerMonth, minimumStockLevel).
  */
+/** FileMaker colourMode values: 0 no change, 1 all mono, 2 colour first page of each pack, 3 colour first page of each mailpiece. */
+const FM_COLOUR_MODES: Record<number, string> = { 0: 'ORIGINAL', 1: 'ALL_MONO', 2: 'FIRST_PACK_PAGE', 3: 'FIRST_MAILPIECE_PAGE' };
+
 export interface PlanAccount {
   legacyId: string; code: string; name: string; parentLegacyId: string | null;
   /** true: the settings are read from the parent (resolved up the tree). false: this account holds its own (a customer). */
@@ -17,6 +20,8 @@ export interface PlanAccount {
   isAddressMatching: boolean; isArchiveMailpieces: boolean; isCreateOutputFiles: boolean;
   isSso: boolean; isSameDayService: boolean; isUseMrdf: boolean; isTesting: boolean; isDeleted: boolean;
   misJobNumber: string | null; returnAddress: string | null;
+  /** Mapped from the FileMaker colourMode (0/1/2/3). Written when the account is first created only. */
+  colourMode: string;
   packSequenceKey: string | null; batchingKey: string | null;
   emails: string[];
   matchRules: { isInclude: boolean; key: string; value: string | null }[];
@@ -106,8 +111,9 @@ export function buildPlan(x: Exports): Plan {
     const batchingKey = (r['batchingPassthroughKey'] ?? '').trim() || bt?.passthroughKey || null;
     if (batchingKey && (bt?.passthroughValue || (r['batchingPassthroughValue'] ?? '').trim()))
       warnings.push(`Account ${code}: batching key "${batchingKey}" has a fixed value "${bt?.passthroughValue ?? r['batchingPassthroughValue']}"; the value is not imported (see notes)`);
-    const fmColour = num(r['colourMode']);
-    if (fmColour !== null && fmColour !== 0) warnings.push(`Account ${code}: FileMaker colour mode ${fmColour} is not imported (only 0 is understood); set it on the Details tab`);
+    const fmColour = num(r['colourMode']) ?? 0;
+    const colourMode = FM_COLOUR_MODES[fmColour] ?? 'ORIGINAL';
+    if (!(fmColour in FM_COLOUR_MODES)) warnings.push(`Account ${code}: FileMaker colour mode ${fmColour} is not understood; imported as ORIGINAL`);
     accounts.push({
       legacyId, code, name: (r['accountName'] ?? '').trim() || code,
       parentLegacyId: parent && byId.has(parent) && parent !== legacyId ? parent : null, inheritsSettings: grouping !== null, invoicingLegacyId: invoicing,
@@ -115,7 +121,7 @@ export function buildPlan(x: Exports): Plan {
       isCreateOutputFiles: flag(r['isCreateOutputFiles']),
       isSso: flag(r['isSSO']), isSameDayService: flag(r['isSameDayService']), isUseMrdf: flag(r['isUseMRDF']),
       isTesting: flag(r['isTesting']), isDeleted: flag(r['isDeleted']),
-      misJobNumber: (r['misJobNumber'] ?? '').trim() || null, returnAddress: (r['returnAddress'] ?? '').trim() || null,
+      colourMode, misJobNumber: (r['misJobNumber'] ?? '').trim() || null, returnAddress: (r['returnAddress'] ?? '').trim() || null,
       packSequenceKey: (r['packSequencePassthroughKey'] ?? '').trim() || ps?.passthroughKey || null, batchingKey,
       emails: [...new Set((r['notificationEmails'] ?? '').split(/[\s;,]+/).map((e) => e.trim().toLowerCase()).filter((e) => e.includes('@')))],
       matchRules, sequenceRules: (ps?.sequences ?? []).map((s) => ({ value: s.passthroughValue, sequence: s.sequenceNumber })),

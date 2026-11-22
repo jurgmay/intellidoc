@@ -68,9 +68,11 @@ describe('costing import plan', () => {
 });
 
 describe('colour mode in the import', () => {
-  it('imports nothing for 0 and warns about any other FileMaker value', () => {
-    const p = buildPlan({ customers: [cust({ id: P, accountCode: 'P', accountName: 'P', id_groupingAccount: P, colourMode: '0' }), cust({ id: Q, accountCode: 'Q', accountName: 'Q', id_groupingAccount: Q, colourMode: '2' })], brands: [], stock: [], envelopes: [] });
-    expect(p.warnings.filter((w) => /colour mode/.test(w))).toEqual(['Account Q: FileMaker colour mode 2 is not imported (only 0 is understood); set it on the Details tab']);
+  it('maps the FileMaker colour modes and warns about unknown values', () => {
+    const c = (id: string, mode: string) => cust({ id, accountCode: id, accountName: id, id_groupingAccount: id, colourMode: mode });
+    const p = buildPlan({ customers: [c(P, '0'), c(Q, '1'), c('R', '2'), c('S', '3'), c('T', '9')], brands: [], stock: [], envelopes: [] });
+    const m = (code: string) => p.accounts.find((a) => a.code === code)!.colourMode;
+    expect([m(P), m(Q), m('R'), m('S'), m('T')]).toEqual(['ORIGINAL', 'ALL_MONO', 'FIRST_PACK_PAGE', 'FIRST_MAILPIECE_PAGE', 'ORIGINAL']);
+    expect(p.warnings.filter((w) => /colour mode/.test(w))).toEqual(['Account T: FileMaker colour mode 9 is not understood; imported as ORIGINAL']);
   });
 });
-

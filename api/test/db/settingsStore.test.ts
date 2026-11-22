@@ -23,7 +23,8 @@ describe.skipIf(!cs)('MssqlSettingsStore', { timeout: 120_000 }, () => {
 
   it('reads every setting with the right type', async () => {
     const v = await store.read();
-    expect(v).toMatchObject({ a4SheetWeightG: 5.625, machineEnclosingMaxSheets: 12, machineEnclosingEnvelopeSize: 'C5', xmlFirstEnabled: true, pdfWaitMinutes: 30, alertRecipients: '' });
+    expect(v).toMatchObject({ a4SheetWeightG: 5.625, machineEnclosingMaxSheets: 12, machineEnclosingEnvelopeSize: 'C5', xmlFirstEnabled: true, pdfWaitMinutes: 30, alertRecipients: '',
+      maxPagesPerPdf: 10000, markSeqFontPt: 8, markDotXMm: 205.5, markDotYMm: 269, markDotDiameterMm: 2 });
   });
 
   it('saves through the API, audits the change, and the database enforces sensible limits', async () => {
