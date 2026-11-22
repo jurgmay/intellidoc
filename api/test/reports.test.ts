@@ -13,7 +13,8 @@ import { chartBrands, usagePdf } from '../src/reports/pdf.js';
 import type { UsageLine } from '../src/reports/types.js';
 import { MemorySettingsStore } from '../src/settings/store.js';
 
-const L = (day: string, brand: string, format: string, service: string, mailpieces: number, packs = mailpieces, sheets = mailpieces * 2): UsageLine => ({ day, brand, format, service, mailpieces, packs, sheets });
+const L = (day: string, brand: string, format: string, service: string, mailpieces: number, packs = mailpieces, sheets = mailpieces * 2, priced = mailpieces): UsageLine =>
+  ({ day, brand, format, service, mailpieces, packs, sheets, priced, productionSell: priced * 0.25, postageSell: priced * 0.75 });
 let app: FastifyInstance;
 let store: MemoryReportStore;
 
@@ -22,7 +23,7 @@ beforeEach(async () => {
   store.accounts = [{ id: 5, code: 'ODEVO', name: 'Odevo' }, { id: 6, code: 'EMPTY', name: 'Empty Co' }];
   store.lines.set(5, [
     L('2026-11-02', 'Home', 'Letter', '2nd Class', 10, 12, 30), L('2026-11-02', 'Business', 'Letter', '1st Class', 4), L('2026-11-02', 'Home', 'Large Letter', '2nd Class', 1),
-    L('2026-11-04', 'Home', 'Letter', '2nd Class', 7), L('2026-11-30', 'Home', 'Letter', '2nd Class', 99), // outside the range asked for below
+    L('2026-11-04', 'Home', 'Letter', '2nd Class', 7, 7, 14, 5), L('2026-11-30', 'Home', 'Letter', '2nd Class', 99), // outside the range asked for below
   ]);
   app = await buildApp({ settings: new MemorySettingsStore(), customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: new MemoryRecipientStore(), reports: store });
 });
@@ -33,19 +34,26 @@ describe('usage report', () => {
     const r = (await get('invoicingAccountId=5&from=2026-11-01&to=2026-11-05')).json();
     expect(r.account).toEqual({ id: 5, code: 'ODEVO', name: 'Odevo' });
     expect(r.days.map((d: { day: string }) => d.day)).toEqual(['2026-11-01', '2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05']);
-    expect(r.days[0]).toMatchObject({ mailpieces: 0, packs: 0, sheets: 0, byBrand: {} });
+    expect(r.days[0]).toMatchObject({ mailpieces: 0, packs: 0, sheets: 0, totalSell: 0, byBrand: {} });
     expect(r.days[1]).toMatchObject({ mailpieces: 15, packs: 17, sheets: 30 + 8 + 2, byBrand: { Home: 11, Business: 4 } });
-    expect(r.brands).toEqual([{ brand: 'Home', mailpieces: 18, packs: 20, sheets: 30 + 2 + 14 }, { brand: 'Business', mailpieces: 4, packs: 4, sheets: 8 }]);
-    expect(r.postage).toEqual([
+    expect(r.brands).toMatchObject([{ brand: 'Home', mailpieces: 18, packs: 20, sheets: 30 + 2 + 14 }, { brand: 'Business', mailpieces: 4, packs: 4, sheets: 8 }]);
+    expect(r.postage).toMatchObject([
       { format: 'Large Letter', service: '2nd Class', mailpieces: 1, packs: 1, sheets: 2 },
       { format: 'Letter', service: '1st Class', mailpieces: 4, packs: 4, sheets: 8 },
       { format: 'Letter', service: '2nd Class', mailpieces: 17, packs: 19, sheets: 44 },
     ]);
-    expect(r.totals).toEqual({ mailpieces: 22, packs: 24, sheets: 54 });
+    expect(r.totals).toMatchObject({ mailpieces: 22, packs: 24, sheets: 54 });
+  });
+  it('adds up what would be invoiced, and counts mail that has no price yet instead of hiding it', async () => {
+    const r = (await get('invoicingAccountId=5&from=2026-11-01&to=2026-11-05')).json();
+    // 20 of the 22 mailpieces are priced: production 0.25 and postage 0.75 each
+    expect(r.totals).toEqual({ mailpieces: 22, packs: 24, sheets: 54, productionSell: 5, postageSell: 15, totalSell: 20, unpriced: 2 });
+    expect(r.days[3]).toMatchObject({ day: '2026-11-04', mailpieces: 7, unpriced: 2, productionSell: 1.25, postageSell: 3.75, totalSell: 5 });
+    expect(r.brands.find((b: { brand: string }) => b.brand === 'Business')).toMatchObject({ productionSell: 1, postageSell: 3, totalSell: 4, unpriced: 0 });
   });
   it('gives zeros for an account that produced nothing', async () => {
     const r = (await get('invoicingAccountId=6&from=2026-11-01&to=2026-11-02')).json();
-    expect(r.totals).toEqual({ mailpieces: 0, packs: 0, sheets: 0 });
+    expect(r.totals).toEqual({ mailpieces: 0, packs: 0, sheets: 0, productionSell: 0, postageSell: 0, totalSell: 0, unpriced: 0 });
     expect(r.days).toHaveLength(2);
   });
   it('needs an account and both days, and checks them', async () => {

@@ -1,7 +1,8 @@
 import { api } from './client';
 
 export interface InvoicingAccount { id: number; code: string; name: string }
-export interface Counts { mailpieces: number; packs: number; sheets: number }
+/** Sell values are in pounds (what would be invoiced). `unpriced` mailpieces add nothing to them. */
+export interface Counts { mailpieces: number; packs: number; sheets: number; productionSell: number; postageSell: number; totalSell: number; unpriced: number }
 export interface UsageReport {
   account: InvoicingAccount; from: string; to: string;
   days: ({ day: string; byBrand: Record<string, number> } & Counts)[];

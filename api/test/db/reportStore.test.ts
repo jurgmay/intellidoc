@@ -49,6 +49,17 @@ describe.skipIf(!cs)('MssqlReportStore', { timeout: 120_000 }, () => {
     expect(await store.usageLines({ invoicingAccountId: 999999, from: today, to: today })).toBeNull();
   });
 
+  it('adds up production and postage sell for priced mailpieces, and counts the unpriced ones', async () => {
+    const all = await scalar(`SELECT COUNT(*) AS n FROM idoc.mailpiece`);
+    await pool.request().query(`UPDATE idoc.mailpiece SET production_sell = 0.5, postage_sell = 1.25, priced_at = SYSUTCDATETIME()`);
+    await pool.request().query(`UPDATE TOP (1) idoc.mailpiece SET priced_at = NULL, production_sell = NULL, postage_sell = NULL`);
+    const t = (await report()).totals;
+    expect(t.unpriced).toBe(1);
+    expect(t.productionSell).toBeCloseTo((all - 1) * 0.5, 4);
+    expect(t.postageSell).toBeCloseTo((all - 1) * 1.25, 4);
+    expect(t.totalSell).toBeCloseTo((all - 1) * 1.75, 4);
+  });
+
   it('leaves out cancelled mailpieces and cancelled batches, and keeps the brand name as at production', async () => {
     const before = (await report()).totals.mailpieces;
     await pool.request().query(`UPDATE TOP (1) idoc.mailpiece SET is_cancelled = 1 WHERE brand_name = N'Remus'`);

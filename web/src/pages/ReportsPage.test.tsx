@@ -6,11 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { theme } from '../theme';
 import { ReportsPage } from './ReportsPage';
 
+const money = (production: number, postage: number, unpriced: number) => ({ productionSell: production, postageSell: postage, totalSell: production + postage, unpriced });
 const report = {
   account: { id: 5, code: 'ODEVO', name: 'Odevo' }, from: '2026-11-01', to: '2026-11-02',
-  days: [{ day: '2026-11-01', mailpieces: 0, packs: 0, sheets: 0, byBrand: {} }, { day: '2026-11-02', mailpieces: 15, packs: 17, sheets: 40, byBrand: { Home: 15 } }],
-  brands: [{ brand: 'Home', mailpieces: 15, packs: 17, sheets: 40 }], postage: [{ format: 'Letter', service: '2nd Class', mailpieces: 15, packs: 17, sheets: 40 }],
-  totals: { mailpieces: 15, packs: 17, sheets: 40 },
+  days: [{ day: '2026-11-01', mailpieces: 0, packs: 0, sheets: 0, ...money(0, 0, 0), byBrand: {} }, { day: '2026-11-02', mailpieces: 15, packs: 17, sheets: 40, ...money(12.5, 30, 2), byBrand: { Home: 15 } }],
+  brands: [{ brand: 'Home', mailpieces: 15, packs: 17, sheets: 40, ...money(12.5, 30, 2) }], postage: [{ format: 'Letter', service: '2nd Class', mailpieces: 15, packs: 17, sheets: 40, ...money(12.5, 30, 2) }],
+  totals: { mailpieces: 15, packs: 17, sheets: 40, ...money(12.5, 30, 2) },
 };
 let urls: string[];
 let respond: (url: string) => { status: number; json: unknown };
@@ -45,6 +46,11 @@ describe('ReportsPage', () => {
     expect(urls).toContain('/api/reports/usage?invoicingAccountId=5&from=2026-11-01&to=2026-11-02');
     expect(screen.getByText('02/11/2026')).toBeInTheDocument();
     expect(screen.getByText('2nd Class')).toBeInTheDocument();
+    // what would be invoiced, and a warning for the mail with no price
+    expect(screen.getAllByText('£12.50').length).toBeGreaterThan(0);   // the tile and the tables
+    expect(screen.getAllByText('£30.00').length).toBeGreaterThan(0);   // the tile and the tables
+    expect(screen.getAllByText('£42.50').length).toBeGreaterThan(0);   // the tile and the tables
+    expect(screen.getByText(/2 of 15 mailpieces have no price/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /PDF/ })).toHaveAttribute('href', '/api/reports/usage.pdf?invoicingAccountId=5&from=2026-11-01&to=2026-11-02');
   });
   it('shows the server\'s message next to the field', async () => {

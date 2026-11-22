@@ -1,7 +1,11 @@
 import type { Counts, InvoicingAccount, UsageLine, UsageReport } from './types.js';
 
-const zero = (): Counts => ({ mailpieces: 0, packs: 0, sheets: 0 });
-const add = (a: Counts, l: UsageLine): void => { a.mailpieces += l.mailpieces; a.packs += l.packs; a.sheets += l.sheets; };
+const zero = (): Counts => ({ mailpieces: 0, packs: 0, sheets: 0, productionSell: 0, postageSell: 0, totalSell: 0, unpriced: 0 });
+const r4 = (v: number): number => Math.round(v * 10_000) / 10_000;      // no floating point dust in sums of money
+const add = (a: Counts, l: UsageLine): void => {
+  a.mailpieces += l.mailpieces; a.packs += l.packs; a.sheets += l.sheets; a.unpriced += l.mailpieces - l.priced;
+  a.productionSell = r4(a.productionSell + l.productionSell); a.postageSell = r4(a.postageSell + l.postageSell); a.totalSell = r4(a.productionSell + a.postageSell);
+};
 
 /** Every date from `from` to `to`, both included, as YYYY-MM-DD. */
 export function eachDay(from: string, to: string): string[] {

@@ -17,7 +17,7 @@ export class MssqlReportStore implements ReportStore {
     if (!acct) return null;
     const r = await this.pool.request().input('id', sql.Int, q.invoicingAccountId).input('from', sql.Date, q.from).input('to', sql.Date, q.to).query(`
       SELECT CONVERT(NVARCHAR(10), usage_day, 23) AS day, brand, postal_format AS format, postal_service AS service,
-             mailpieces, packs, sheets
+             mailpieces, packs, sheets, priced, production_sell AS productionSell, postage_sell AS postageSell
       FROM idoc.v_usage_daily WHERE invoicing_account_id = @id AND usage_day BETWEEN @from AND @to
       ORDER BY usage_day, brand, postal_format, postal_service`);
     return { account: acct, lines: r.recordset as UsageLine[] };

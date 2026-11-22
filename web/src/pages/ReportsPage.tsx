@@ -6,6 +6,7 @@ import { getUsage, listInvoicingAccounts, usagePdfUrl, type InvoicingAccount, ty
 
 const iso = (d: Date): string => d.toISOString().slice(0, 10);
 const nf = (v: number): string => v.toLocaleString('en-GB');
+const gbp = (v: number): string => v.toLocaleString('en-GB', { style: 'currency', currency: 'GBP' });
 const shortDay = (d: string): string => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}`;
 
 /** Bars for the days of the report. Plain HTML so it also prints. */
@@ -59,7 +60,7 @@ export function ReportsPage() {
               href={account ? usagePdfUrl({ invoicingAccountId: Number(account), from, to }) : undefined} disabled={!account}>PDF</Button>
           </Group>
         </form>
-        <Text size="xs" c="dimmed" mt="xs">Counted on the day the mailpieces were produced (UK time). Cancelled mailpieces and batches are left out.</Text>
+        <Text size="xs" c="dimmed" mt="xs">Counted on the day the mailpieces were produced (UK time). Cancelled mailpieces and batches are left out. Amounts are the sell price (excluding VAT) of production and postage, as priced when the mail was produced.</Text>
       </Paper>
 
       {error && <Alert color="red" icon={<IconAlertCircle size={16} />}>{error}</Alert>}
@@ -67,28 +68,34 @@ export function ReportsPage() {
 
       {report && (
         <Stack>
-          <SimpleGrid cols={3}>
-            {([['Mailpieces', report.totals.mailpieces], ['Packs', report.totals.packs], ['Sheets', report.totals.sheets]] as const).map(([l, v]) => (
-              <Paper key={l} withBorder p="md"><Text size="sm" c="dimmed">{l}</Text><Text size="xl" fw={700}>{nf(v)}</Text></Paper>
+          <SimpleGrid cols={{ base: 2, md: 3, lg: 6 }}>
+            {([['Mailpieces', nf(report.totals.mailpieces)], ['Packs', nf(report.totals.packs)], ['Sheets', nf(report.totals.sheets)],
+              ['Production', gbp(report.totals.productionSell)], ['Postage', gbp(report.totals.postageSell)], ['Total', gbp(report.totals.totalSell)]] as const).map(([l, v]) => (
+              <Paper key={l} withBorder p="md"><Text size="sm" c="dimmed">{l}</Text><Text size="xl" fw={700}>{v}</Text></Paper>
             ))}
           </SimpleGrid>
+          {report.totals.unpriced > 0 && (
+            <Alert color="yellow" icon={<IconAlertCircle size={16} />} title="Some mail is not priced">
+              {nf(report.totals.unpriced)} of {nf(report.totals.mailpieces)} mailpieces have no price, so they add nothing to the amounts. Use Price mail again once the price list is in place.
+            </Alert>
+          )}
           <Paper withBorder p="md"><Text fw={600} mb="xs">Mailpieces per day</Text><Bars report={report} /></Paper>
           <SimpleGrid cols={{ base: 1, lg: 2 }} style={{ alignItems: 'start' }}>
             <Table withTableBorder striped>
-              <Table.Thead><Table.Tr><Table.Th>Day</Table.Th><Table.Th ta="right">Mailpieces</Table.Th><Table.Th ta="right">Packs</Table.Th><Table.Th ta="right">Sheets</Table.Th></Table.Tr></Table.Thead>
+              <Table.Thead><Table.Tr><Table.Th>Day</Table.Th><Table.Th ta="right">Mailpieces</Table.Th><Table.Th ta="right">Packs</Table.Th><Table.Th ta="right">Sheets</Table.Th><Table.Th ta="right">Production</Table.Th><Table.Th ta="right">Postage</Table.Th><Table.Th ta="right">Total</Table.Th></Table.Tr></Table.Thead>
               <Table.Tbody>
-                {report.days.filter((d) => d.mailpieces > 0).map((d) => <Table.Tr key={d.day}><Table.Td>{shortDay(d.day)}</Table.Td><Table.Td ta="right">{nf(d.mailpieces)}</Table.Td><Table.Td ta="right">{nf(d.packs)}</Table.Td><Table.Td ta="right">{nf(d.sheets)}</Table.Td></Table.Tr>)}
-                {report.totals.mailpieces === 0 && <Table.Tr><Table.Td colSpan={4}><Text c="dimmed">Nothing was produced in this period.</Text></Table.Td></Table.Tr>}
+                {report.days.filter((d) => d.mailpieces > 0).map((d) => <Table.Tr key={d.day}><Table.Td>{shortDay(d.day)}</Table.Td><Table.Td ta="right">{nf(d.mailpieces)}</Table.Td><Table.Td ta="right">{nf(d.packs)}</Table.Td><Table.Td ta="right">{nf(d.sheets)}</Table.Td><Table.Td ta="right">{gbp(d.productionSell)}</Table.Td><Table.Td ta="right">{gbp(d.postageSell)}</Table.Td><Table.Td ta="right">{gbp(d.totalSell)}</Table.Td></Table.Tr>)}
+                {report.totals.mailpieces === 0 && <Table.Tr><Table.Td colSpan={7}><Text c="dimmed">Nothing was produced in this period.</Text></Table.Td></Table.Tr>}
               </Table.Tbody>
             </Table>
             <Stack>
               <Table withTableBorder striped>
-                <Table.Thead><Table.Tr><Table.Th>Brand</Table.Th><Table.Th ta="right">Mailpieces</Table.Th><Table.Th ta="right">Packs</Table.Th><Table.Th ta="right">Sheets</Table.Th></Table.Tr></Table.Thead>
-                <Table.Tbody>{report.brands.map((b) => <Table.Tr key={b.brand}><Table.Td>{b.brand}</Table.Td><Table.Td ta="right">{nf(b.mailpieces)}</Table.Td><Table.Td ta="right">{nf(b.packs)}</Table.Td><Table.Td ta="right">{nf(b.sheets)}</Table.Td></Table.Tr>)}</Table.Tbody>
+                <Table.Thead><Table.Tr><Table.Th>Brand</Table.Th><Table.Th ta="right">Mailpieces</Table.Th><Table.Th ta="right">Packs</Table.Th><Table.Th ta="right">Sheets</Table.Th><Table.Th ta="right">Production</Table.Th><Table.Th ta="right">Postage</Table.Th><Table.Th ta="right">Total</Table.Th></Table.Tr></Table.Thead>
+                <Table.Tbody>{report.brands.map((b) => <Table.Tr key={b.brand}><Table.Td>{b.brand}</Table.Td><Table.Td ta="right">{nf(b.mailpieces)}</Table.Td><Table.Td ta="right">{nf(b.packs)}</Table.Td><Table.Td ta="right">{nf(b.sheets)}</Table.Td><Table.Td ta="right">{gbp(b.productionSell)}</Table.Td><Table.Td ta="right">{gbp(b.postageSell)}</Table.Td><Table.Td ta="right">{gbp(b.totalSell)}</Table.Td></Table.Tr>)}</Table.Tbody>
               </Table>
               <Table withTableBorder striped>
-                <Table.Thead><Table.Tr><Table.Th>Format</Table.Th><Table.Th>Service</Table.Th><Table.Th ta="right">Mailpieces</Table.Th></Table.Tr></Table.Thead>
-                <Table.Tbody>{report.postage.map((p) => <Table.Tr key={`${p.format}|${p.service}`}><Table.Td>{p.format}</Table.Td><Table.Td>{p.service}</Table.Td><Table.Td ta="right">{nf(p.mailpieces)}</Table.Td></Table.Tr>)}</Table.Tbody>
+                <Table.Thead><Table.Tr><Table.Th>Format</Table.Th><Table.Th>Service</Table.Th><Table.Th ta="right">Mailpieces</Table.Th><Table.Th ta="right">Total</Table.Th></Table.Tr></Table.Thead>
+                <Table.Tbody>{report.postage.map((p) => <Table.Tr key={`${p.format}|${p.service}`}><Table.Td>{p.format}</Table.Td><Table.Td>{p.service}</Table.Td><Table.Td ta="right">{nf(p.mailpieces)}</Table.Td><Table.Td ta="right">{gbp(p.totalSell)}</Table.Td></Table.Tr>)}</Table.Tbody>
               </Table>
             </Stack>
           </SimpleGrid>
