@@ -730,37 +730,6 @@ LEFT JOIN idoc.envelope_size AS es ON es.envelope_size_id = si.envelope_size_id;
 GO
 
 /* ===========================================================================
-   10. USAGE
-   One row per invoicing account, brand, UK calendar day, postal format and service, counted from the production snapshot on the
-   mailpiece. The day is the date the mailpiece was produced (created_at is UTC, the day is the UK day). Mailpieces that are
-   cancelled, or in a cancelled batch, are left out. Brand and invoicing account are as at production.
-   =========================================================================== */
-CREATE VIEW idoc.v_usage_daily AS
-SELECT m.invoicing_account_id,
-       m.invoicing_account_code,
-       m.invoicing_account_name,
-       COALESCE(m.brand_name, N'(no brand)')                                           AS brand,
-       CAST(m.created_at AT TIME ZONE N'UTC' AT TIME ZONE N'GMT Standard Time' AS DATE) AS usage_day,
-       COALESCE(pf.name, N'Unknown')                                                   AS postal_format,
-       COALESCE(sv.name, m.delivery_band, N'Unknown')                                  AS postal_service,
-       COUNT(*)                                                                        AS mailpieces,
-       SUM(m.pack_count)                                                               AS packs,
-       SUM(m.sheet_count)                                                              AS sheets,
-       COUNT(m.priced_at)                                                              AS priced,            -- mailpieces that have a price
-       COALESCE(SUM(m.production_sell), 0)                                             AS production_sell,   -- what would be invoiced (unpriced mail adds nothing)
-       COALESCE(SUM(m.postage_sell), 0)                                                AS postage_sell
-FROM idoc.mailpiece AS m
-LEFT JOIN idoc.batch          AS b  ON b.batch_id = m.batch_id
-LEFT JOIN idoc.postal_format  AS pf ON pf.postal_format_id = m.postal_format_id
-LEFT JOIN idoc.postal_rate    AS r  ON r.postal_rate_id = m.postal_rate_id
-LEFT JOIN idoc.postal_service AS sv ON sv.postal_service_id = r.postal_service_id
-WHERE m.is_cancelled = 0 AND COALESCE(b.current_status, N'') <> N'Cancelled'
-GROUP BY m.invoicing_account_id, m.invoicing_account_code, m.invoicing_account_name, COALESCE(m.brand_name, N'(no brand)'),
-         CAST(m.created_at AT TIME ZONE N'UTC' AT TIME ZONE N'GMT Standard Time' AS DATE),
-         COALESCE(pf.name, N'Unknown'), COALESCE(sv.name, m.delivery_band, N'Unknown');
-GO
-
-/* ===========================================================================
    11. PRODUCTION GATE
    A batch can only be printed, enclosed or despatched once the PDF of its job has arrived and been checked (job.status =
    'Received'). A job that is 'Awaiting PDF' or 'PDF Rejected' holds all of its batches. Cancelling is always allowed.
@@ -879,6 +848,37 @@ ALTER TABLE idoc.mailpiece ADD
     postage_sell     DECIMAL(12, 4) NULL,
     priced_at        DATETIME2(0)   NULL,
     price_warnings   NVARCHAR(500)  NULL;
+GO
+
+/* ===========================================================================
+   14. USAGE (after section 13, whose price columns it sums)
+   One row per invoicing account, brand, UK calendar day, postal format and service, counted from the production snapshot on the
+   mailpiece. The day is the date the mailpiece was produced (created_at is UTC, the day is the UK day). Mailpieces that are
+   cancelled, or in a cancelled batch, are left out. Brand and invoicing account are as at production.
+   =========================================================================== */
+CREATE VIEW idoc.v_usage_daily AS
+SELECT m.invoicing_account_id,
+       m.invoicing_account_code,
+       m.invoicing_account_name,
+       COALESCE(m.brand_name, N'(no brand)')                                           AS brand,
+       CAST(m.created_at AT TIME ZONE N'UTC' AT TIME ZONE N'GMT Standard Time' AS DATE) AS usage_day,
+       COALESCE(pf.name, N'Unknown')                                                   AS postal_format,
+       COALESCE(sv.name, m.delivery_band, N'Unknown')                                  AS postal_service,
+       COUNT(*)                                                                        AS mailpieces,
+       SUM(m.pack_count)                                                               AS packs,
+       SUM(m.sheet_count)                                                              AS sheets,
+       COUNT(m.priced_at)                                                              AS priced,            -- mailpieces that have a price
+       COALESCE(SUM(m.production_sell), 0)                                             AS production_sell,   -- what would be invoiced (unpriced mail adds nothing)
+       COALESCE(SUM(m.postage_sell), 0)                                                AS postage_sell
+FROM idoc.mailpiece AS m
+LEFT JOIN idoc.batch          AS b  ON b.batch_id = m.batch_id
+LEFT JOIN idoc.postal_format  AS pf ON pf.postal_format_id = m.postal_format_id
+LEFT JOIN idoc.postal_rate    AS r  ON r.postal_rate_id = m.postal_rate_id
+LEFT JOIN idoc.postal_service AS sv ON sv.postal_service_id = r.postal_service_id
+WHERE m.is_cancelled = 0 AND COALESCE(b.current_status, N'') <> N'Cancelled'
+GROUP BY m.invoicing_account_id, m.invoicing_account_code, m.invoicing_account_name, COALESCE(m.brand_name, N'(no brand)'),
+         CAST(m.created_at AT TIME ZONE N'UTC' AT TIME ZONE N'GMT Standard Time' AS DATE),
+         COALESCE(pf.name, N'Unknown'), COALESCE(sv.name, m.delivery_band, N'Unknown');
 GO
 
 CREATE TABLE idoc.mailpiece_price_line (
