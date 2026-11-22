@@ -1,3 +1,4 @@
+import { MemoryActivityStore, MemoryInboxReader } from './activity/memoryStore.js';
 import { fileURLToPath } from 'node:url';
 import { buildApp } from './app.js';
 import { MemoryJobComposer, MemoryJobStore } from './jobs/memoryStore.js';
@@ -100,8 +101,19 @@ const job = (id: number, status: 'Received' | 'Awaiting PDF' | 'PDF Rejected', c
   batches: [1, 2].map((n) => ({ id: id * 10 + n, batchCode: 7000 + id * 10 + n, status: 'Created', mailpieceCount: 200,
     files: n <= composed ? [{ fileName: `${7000 + id * 10 + n}_1.pdf`, segment: 1, mailpieces: 200, pages: 602 }] : [] })), ...over });
 jobs.jobs.push(job(3, 'Received', 0), job(2, 'Received', 2), job(1, 'PDF Rejected', 0, { pdfError: 'Pack 12 ends on page 900 but the PDF has 880 pages' }));
+const activityStore = new MemoryActivityStore();
+const ago = (s: number): string => new Date(Date.now() - s * 1000).toISOString();
+activityStore.rows = [
+  { id: 3, kind: 'Print files', label: 'Job 3: ACME_statements_3.pdf', jobId: 3, state: 'Running', detail: 'Batch 7031 (1 of 2): file 4 of 13 built', done: 0, total: 2, startedAt: ago(40), updatedAt: ago(2), finishedAt: null, stalled: false },
+  { id: 2, kind: 'Import', label: 'bad-export.xml', jobId: null, state: 'Failed', detail: 'The XML is not valid', done: null, total: null, startedAt: ago(300), updatedAt: ago(290), finishedAt: ago(290), stalled: false },
+];
+const inbox = new MemoryInboxReader();
+inbox.items = [
+  { stem: 'ODEVO_small', xmlName: 'ODEVO_small.xml', xmlBytes: 14_000, pdfName: 'ODEVO_small.pdf', pdfBytes: 2_000_000, modifiedAt: ago(20) },
+  { stem: 'HIGHLINE_big', xmlName: 'HIGHLINE_big.xml', xmlBytes: 9_400_000, pdfName: null, pdfBytes: null, modifiedAt: ago(45) },
+];
 const composer = new MemoryJobComposer();
 composer.result = [{ batchCode: 7031, files: ['7031_1.pdf'], mrdfFile: null, skipped: null }, { batchCode: 7032, files: ['7032_1.pdf'], mrdfFile: null, skipped: null }];
-const app = await buildApp({ settings: store, customers, costing, postal, reference: new MemoryReferenceStore(), reprice, recipients, reports, jobs: { store: jobs, composer }, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
+const app = await buildApp({ settings: store, customers, costing, postal, reference: new MemoryReferenceStore(), reprice, recipients, reports, jobs: { store: jobs, composer }, activity: { store: activityStore, inbox }, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
 await app.listen({ port: Number(process.env['API_PORT'] ?? 3001), host: '127.0.0.1' });
 console.log('Stub API (no database) on http://127.0.0.1:3001');

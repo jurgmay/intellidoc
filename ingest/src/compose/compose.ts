@@ -22,6 +22,8 @@ export interface ComposeInput {
   keywords?: string[];
   /** The customer uses MRDF: every sheet front also carries the MRDF Data Matrix and OCR code (needs marks.mrdf). */
   mrdf?: boolean;
+  /** Told after each print file is built (how many of how many). */
+  onFile?: (done: number, total: number) => void;
 }
 
 export interface ComposedFile {
@@ -60,7 +62,10 @@ export async function composeBatch(input: ComposeInput): Promise<ComposedFile[]>
 
   const font = await loadOcrbFont();
   const files: ComposedFile[] = [];
-  for (const seg of input.plan.segments) files.push(await composeSegment(input, seg, { src, runDoc, greyDoc, greyIndex, font }));
+  for (const seg of input.plan.segments) {
+    files.push(await composeSegment(input, seg, { src, runDoc, greyDoc, greyIndex, font }));
+    input.onFile?.(files.length, input.plan.segments.length);
+  }
   return files;
 }
 

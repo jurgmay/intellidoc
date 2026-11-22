@@ -129,6 +129,14 @@ describe('composeBatch', () => {
     expect(ink[1]).toBe('blank'); // the blank page that pads the one-page run sheet
   });
 
+  it('tells the caller after each print file is built', async () => {
+    const mps = [mp(1, [pack(1, 1, 3)]), mp(2, [pack(2, 4, 6)])];
+    const plan = planBatch(mps, { maxPagesPerPdf: 3, runSheetPages: 0 });
+    expect(plan.segments).toHaveLength(2);
+    const seen: [number, number][] = [];
+    await composeBatch({ batchCode: 1, source: await sourcePdf(['black', 'black', 'black', 'black', 'black', 'black']), runSheet: null, plan, marks, grey: null, fileName: (n) => `${n}.pdf`, onFile: (d, t) => seen.push([d, t]) });
+    expect(seen).toEqual([[1, 2], [2, 2]]);
+  });
   it('carries the metadata, the Control marks layer and one bookmark per mailpiece', async () => {
     const [f] = await run(new FakeGrey());
     const doc = await PDFDocument.load(f!.bytes);

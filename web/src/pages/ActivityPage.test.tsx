@@ -1,0 +1,91 @@
+import { render, screen, waitFor, within } from '@testing-library/react';
+import { MantineProvider } from '@mantine/core';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ActivityData } from '../api/activity';
+import { theme } from '../theme';
+import { ActivityPage, buildLines, elapsed, size } from './ActivityPage';
+
+const job = (id: number, over: object = {}) => ({ id, customerCode: 'ACME', customerName: 'Acme', baseName: `j${id}`, pdfFileName: `j${id}.pdf`, receivedAt: `2026-11-22T10:0${id}:00.000Z`, status: 'Received',
+  packCount: 1, pageCount: 2, pdfError: null, batchCount: 2, composedBatchCount: 2, runSheetsEmailedAt: null, ...over });
+const act = (id: number, over: object = {}) => ({ id, kind: 'Import', label: `f${id}.xml`, jobId: null, state: 'Done', detail: 'Imported', done: null, total: null,
+  startedAt: '2026-11-22T21:00:00.000Z', updatedAt: '2026-11-22T21:00:20.000Z', finishedAt: '2026-11-22T21:00:20.000Z', stalled: false, ...over });
+const data = (o: { inbox?: unknown[]; inboxUnavailable?: string | null; running?: unknown[]; recent?: unknown[]; jobs?: unknown[] } = {}): ActivityData => ({ inbox: [], inboxUnavailable: null, running: [], recent: [], jobs: [], ...o } as ActivityData);
+const NOW = Date.parse('2026-11-22T21:05:00.000Z');
+
+describe('buildLines', () => {
+  it('lists running work first, then the inbox in order, jobs awaiting a PDF, failures, and finished jobs newest first at the bottom', () => {
+    const d = data({
+      running: [act(9, { kind: 'Print files', state: 'Running', label: 'Job 7: j7.pdf', detail: 'Batch 81899 (2 of 5): file 3 of 13 built', done: 1, total: 5 }), act(10, { state: 'Running', label: 'a.xml', detail: null })],
+      inbox: [{ stem: 'small', xmlName: 'small.xml', xmlBytes: 10, pdfName: 'small.pdf', pdfBytes: 5, modifiedAt: '2026-11-22T21:04:00.000Z' }, { stem: 'big', xmlName: 'big.xml', xmlBytes: 900, pdfName: null, pdfBytes: null, modifiedAt: '2026-11-22T21:04:30.000Z' }],
+      jobs: [job(1), job(2, { status: 'Awaiting PDF', composedBatchCount: 0 }), job(3, { composedBatchCount: 0 }), job(4, { status: 'PDF Rejected', pdfError: 'Pack 12 is past the end', composedBatchCount: 0 })],
+      recent: [act(5, { state: 'Failed', detail: 'Bad XML', label: 'bad.xml' })],
+    });
+    const l = buildLines(d, NOW);
+    expect(l.map((x) => `${x.stage}:${x.name}`)).toEqual(['Making print files:Job 7: j7.pdf', 'Processing:a.xml', 'Waiting:small.xml', 'Waiting:big.xml', 'Awaiting PDF:j2.pdf',
+      'Failed:bad.xml', 'Failed:j4.pdf', 'Completed:j3.pdf', 'Completed:j1.pdf']);
+    expect(l[0]!.progress).toEqual({ done: 1, total: 5 });
+    expect(l[2]).toMatchObject({ pdf: 'arrived', bytes: 10 });
+    expect(l[3]).toMatchObject({ pdf: 'waiting' });
+    expect(l[7]!.detail).toMatch(/ready; print files not made yet/);
+    expect(l[8]!.detail).toMatch(/print files made/);
+  });
+  it('does not list a file twice while it is being imported, and drops old failures', () => {
+    const d = data({ running: [act(1, { state: 'Running', label: 'a.xml' })], inbox: [{ stem: 'a', xmlName: 'a.xml', xmlBytes: 1, pdfName: 'a.pdf', pdfBytes: 1, modifiedAt: '2026-11-22T21:00:00.000Z' }],
+      recent: [act(2, { state: 'Failed', finishedAt: '2026-11-22T08:00:00.000Z' })] });
+    expect(buildLines(d, NOW).map((x) => x.name)).toEqual(['a.xml']);
+  });
+  it('flags work that has stopped moving', () => {
+    const l = buildLines(data({ running: [act(1, { state: 'Running', stalled: true })] }), NOW);
+    expect(l[0]).toMatchObject({ stalled: true }); expect(l[0]!.detail).toMatch(/may have stopped/);
+  });
+});
+
+describe('formatting', () => {
+  it('sizes and elapsed times', () => {
+    expect(size(512)).toBe('512 B'); expect(size(2048)).toBe('2 KB'); expect(size(5 * 1_048_576)).toBe('5.0 MB'); expect(size(null)).toBe('');
+    expect(elapsed('2026-11-22T21:04:30.000Z', NOW)).toBe('30s'); expect(elapsed('2026-11-22T21:02:00.000Z', NOW)).toBe('3m 0s'); expect(elapsed('2026-11-22T19:00:00.000Z', NOW)).toBe('2h 5m');
+  });
+});
+
+let current: ActivityData; let fetches: number; let fail: boolean;
+beforeEach(() => {
+  fetches = 0; fail = false; current = data();
+  vi.stubGlobal('fetch', vi.fn(async () => { fetches++; return fail ? new Response(JSON.stringify({ error: 'Database down' }), { status: 500 }) : new Response(JSON.stringify(current), { status: 200 }); }));
+});
+afterEach(() => vi.unstubAllGlobals());
+const show = (ms = 40) => render(<MantineProvider theme={theme}><MemoryRouter><ActivityPage refreshMs={ms} /></MemoryRouter></MantineProvider>);
+
+describe('ActivityPage', () => {
+  it('shows the inbox with whether each PDF has arrived, and print file progress', async () => {
+    current = data({ inbox: [{ stem: 'a', xmlName: 'a.xml', xmlBytes: 2048, pdfName: 'a.pdf', pdfBytes: 5, modifiedAt: new Date().toISOString() }, { stem: 'b', xmlName: 'b.xml', xmlBytes: 9000, pdfName: null, pdfBytes: null, modifiedAt: new Date().toISOString() }],
+      running: [act(1, { kind: 'Print files', state: 'Running', label: 'Job 3: j3.pdf', detail: 'Batch 70 (1 of 4): file 2 of 3 built', done: 0, total: 4 })] });
+    show();
+    const ra = (await screen.findAllByRole('row')).find((r) => within(r).queryByText('a.xml'))!;
+    expect(within(ra).getByText('Arrived')).toBeInTheDocument(); expect(within(ra).getByText('2 KB')).toBeInTheDocument();
+    const rb = (await screen.findAllByRole('row')).find((r) => within(r).queryByText('b.xml'))!;
+    expect(within(rb).getByText('Not yet')).toBeInTheDocument();
+    expect(await screen.findByText(/0 of 4 batches\. Batch 70 \(1 of 4\): file 2 of 3 built/)).toBeInTheDocument();
+  });
+  it('refreshes itself and shows a file moving to completed', async () => {
+    current = data({ inbox: [{ stem: 'a', xmlName: 'a.xml', xmlBytes: 1, pdfName: 'a.pdf', pdfBytes: 1, modifiedAt: new Date().toISOString() }] });
+    show();
+    expect(await screen.findByText('a.xml')).toBeInTheDocument();
+    current = data({ jobs: [job(1, { pdfFileName: 'a.pdf' })] });
+    await waitFor(() => expect(screen.queryByText('a.xml')).toBeNull());
+    expect(await screen.findByText('a.pdf')).toBeInTheDocument();
+    expect(screen.getAllByText('Completed').length).toBeGreaterThan(0);
+    expect(fetches).toBeGreaterThan(1);
+  });
+  it('says why the inbox is missing, and shows an error from the server', async () => {
+    current = data({ inboxUnavailable: 'WATCH_DIR is not set on the API server.' });
+    show();
+    expect(await screen.findByText('WATCH_DIR is not set on the API server.')).toBeInTheDocument();
+    fail = true;
+    expect(await screen.findByText('Database down')).toBeInTheDocument();
+  });
+  it('says so when there is nothing to show', async () => {
+    show();
+    expect(await screen.findByText('Nothing in the inbox and nothing running.')).toBeInTheDocument();
+  });
+});

@@ -5,6 +5,7 @@ import { composeJob } from '../../../ingest/src/compose/job.js';
 import { GhostscriptGrey } from '../../../ingest/src/compose/grey.js';
 import { LogMailer, smtpFromEnv, SmtpMailer, type Mailer } from '../../../ingest/src/mail.js';
 import { emailRunSheets, jobRunSheetsPdf, loadJobEmailSummary, buildRunSheetEmail } from '../../../ingest/src/runsheet/email.js';
+import { DbActivity } from '../../../ingest/src/activity.js';
 import type { ComposeOutcome, JobComposer, RunSheetEmailOutcome } from './types.js';
 
 /**
@@ -33,7 +34,8 @@ export class IngestJobComposer implements JobComposer {
   }
   async compose(jobId: number, onlyNew: boolean): Promise<ComposeOutcome> {
     let runSheetEmail: RunSheetEmailOutcome | null = null;
-    const batches = await composeJob({ pool: await this.db(), jobId, pdfDir: this.pdfDir!, outDir: this.outDir!, mrdfDir: this.mrdfDir, grey: new GhostscriptGrey(), onlyNew,
+    const pool = await this.db();
+    const batches = await composeJob({ pool, activity: new DbActivity(pool), jobId, pdfDir: this.pdfDir!, outDir: this.outDir!, mrdfDir: this.mrdfDir, grey: new GhostscriptGrey(), onlyNew,
       mailer: this.mailer, onRunSheetEmail: (r) => { runSheetEmail = { sent: r.sent, to: r.to, cc: r.cc, testMode: r.testMode, error: r.error }; } });
     return { batches: batches.map((b) => ({ batchCode: b.batchCode, files: b.files.map((f) => basename(f)), mrdfFile: b.mrdfFile ? basename(b.mrdfFile) : null, skipped: b.skipped ?? null })), runSheetEmail };
   }

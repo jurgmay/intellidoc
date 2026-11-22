@@ -21,6 +21,18 @@ The folder watcher can make the print files itself. Once a minute it looks for R
 
 It reads the customer's PDF from the watcher's `processed` folder, so a job is composed a minute or so after it is Received, never while the PDF is still in the inbox. A batch that already has print files is left alone, and so is a batch that is no longer Created. A job that fails (PDF not found, Ghostscript missing, ...) is tried again after 1, 2, 5, 10 and then every 30 minutes, an e-mail goes to the alert recipients once after the third failure in a row, and it is never given up on. The compose command still works at any time and composes the batches again.
 
+## Activity screen
+
+**Activity** in the web app is a live list (it refreshes every 3 seconds), in the order the work happens:
+
+1. **Making print files** and **Processing**: what the watcher or the API is doing now. Print files show a bar (batches done of batches to do) and the step ("Batch 81899 (2 of 5): file 3 of 13 built"); an import or PDF check shows how long it has been running.
+2. **Waiting**: the XML files in the watcher's `inbox`, in the order the watcher takes them (smallest XML first), each with **PDF: Arrived / Not yet**. A PDF with no XML shows as waiting for its XML.
+3. **Awaiting PDF**: jobs whose XML is imported but whose PDF has not arrived (XML-first).
+4. **Failed**: imports and PDF checks that failed in the last 6 hours, and jobs whose PDF was rejected, with the reason.
+5. **Completed**: the newest jobs, newest first, with whether their print files are made.
+
+How it works: the watcher and the composer write what they are doing to `idoc.activity` (a few rows, no business data; finished rows are deleted after 7 days). The API reads that table, lists `WATCH_DIR\inbox` itself (so the API needs `WATCH_DIR`, as for the Jobs screen) and adds the newest jobs. A "Running" row that has not moved for 10 minutes is shown in red as stopped (the program doing it has probably stopped) and is marked Abandoned the next time the watcher starts. Recording progress never stops the work: if the database cannot take the update the watcher logs a warning once and carries on. Make print files from the Jobs screen shows here too. The schema changed (`idoc.activity`), so reset the scratch database (`npm run db:rebuild <folder>`).
+
 ## From the Jobs screen
 
 **Jobs** in the web app lists the newest jobs (search by customer or file name, filter by status) with how many of their batches have print files. A Received job has **Make print files**; once files exist the button reads **Make again** and asks first, with the choice to leave the batches that already have files (`onlyNew`). **Details** shows each batch and its files. The API does the same work as the command line and the watcher (`POST /api/jobs/:id/compose`, `src/jobs/ingestComposer.ts`), so the results are identical.

@@ -7,6 +7,7 @@ import { buildRunSheet, paperFacts } from '../runsheet/data.js';
 import { renderRunSheet } from '../runsheet/pdf.js';
 import { loadRunSheetInputs } from '../runsheet/query.js';
 import type { Mailer } from '../mail.js';
+import { noActivity, type ActivityLog } from '../activity.js';
 import { emailRunSheets, loadEmailSettings, type RunSheetEmailResult } from '../runsheet/email.js';
 import { composeBatch } from './compose.js';
 import type { BatchToCompose } from './db.js';
@@ -33,6 +34,8 @@ export interface ComposeJobOptions {
    * A job that has been e-mailed (idoc.job.run_sheets_emailed_at) is not e-mailed again. A failure to send never fails the compose.
    */
   mailer?: Mailer;
+  /** Where progress is recorded for the Activity screen (default: nowhere). */
+  activity?: ActivityLog;
   /** Told what happened to the e-mail (only when one was attempted). */
   onRunSheetEmail?: (r: RunSheetEmailResult) => void;
 }
@@ -58,7 +61,18 @@ export function printFileName(runSheetName: string, segment: number, segments: n
 
 /** Composes the print file(s) of every batch of a job that is still Created. Safe to run again: it replaces its own files and records. */
 export async function composeJob(o: ComposeJobOptions): Promise<ComposedBatch[]> {
+  const log = o.activity ?? noActivity;
   const job = await loadJobToCompose(o.pool, o.jobId);
+  const todo = job.batches.filter((b) => b.status === 'Created').length;
+  const act = await log.start('Print files', `Job ${o.jobId}: ${job.pdfFileName}`, o.jobId, todo);
+  try {
+    const result = await composeJobBatches(o, job, act, log, todo);
+    await log.finish(act, 'Done', `${result.filter((r) => r.files.length > 0).length} of ${todo} batches made`);
+    return result;
+  } catch (e) { await log.finish(act, 'Failed', (e as Error).message); throw e; }
+}
+
+async function composeJobBatches(o: ComposeJobOptions, job: Awaited<ReturnType<typeof loadJobToCompose>>, act: number | null, log: ActivityLog, todo: number): Promise<ComposedBatch[]> {
   if (job.status !== 'Received') throw new Error(`Job ${o.jobId} is "${job.status}"; only a Received job (its PDF checked) can be composed`);
   const source = new Uint8Array(await readFile(await findSourcePdf(o.pdfDir, job.pdfFileName)));
   const settings = await loadComposeSettings(o.pool);
@@ -67,9 +81,13 @@ export async function composeJob(o: ComposeJobOptions): Promise<ComposedBatch[]>
   await mkdir(o.outDir, { recursive: true });
 
   const result: ComposedBatch[] = [];
+  let batchNo = 0;
   for (const b of job.batches) {
     if (b.status !== 'Created') { result.push({ batchCode: b.batchCode, files: [], skipped: `the batch is ${b.status}` }); continue; }
     if (o.onlyNew && (await recordedFiles(o.pool, b.batchId)).length > 0) { result.push({ batchCode: b.batchCode, files: [], skipped: 'already composed' }); continue; }
+    batchNo++;
+    const at = `Batch ${b.batchCode} (${batchNo} of ${todo})`;
+    await log.step(act, batchNo - 1, todo, `${at}: preparing`);
     const input = runInputs.find((r) => Number(r.batchCode) === b.batchCode);
     if (!input) throw new Error(`No run sheet data for batch ${b.batchCode}`);
     const runData = buildRunSheet(input);
@@ -82,7 +100,9 @@ export async function composeJob(o: ComposeJobOptions): Promise<ComposedBatch[]>
     const files = await composeBatch({
       batchCode: b.batchCode, source, runSheet, plan, marks: settings.marks, grey: o.grey, fileName: (n, total) => printFileName(runData.fileName, n, total),
       keywords: kw ? [kw] : undefined, mrdf: b.mrdf !== null,
+      onFile: (n, total) => { void log.step(act, batchNo - 1, todo, `${at}: file ${n} of ${total} built`); },
     });
+    await log.step(act, batchNo - 1, todo, `${at}: saving`);
     const old = await recordedFiles(o.pool, b.batchId);
     for (const f of files) await writeFile(join(o.outDir, f.fileName), f.bytes);
     await saveComposition(o.pool, b.batchId, plan, files);
@@ -90,6 +110,7 @@ export async function composeJob(o: ComposeJobOptions): Promise<ComposedBatch[]>
     let mrdfFile: string | undefined;
     if (b.mrdf && o.mrdfDir) mrdfFile = await writeMrdfFile(o.pool, o.mrdfDir, b, plan);
     result.push({ batchCode: b.batchCode, files: files.map((f) => join(o.outDir, f.fileName)), ...(mrdfFile ? { mrdfFile } : {}) });
+    await log.step(act, batchNo, todo, `${at}: done`);
   }
   if (o.mailer && result.some((r) => r.files.length > 0)) await maybeEmailRunSheets(o);
   return result;
