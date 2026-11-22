@@ -39,6 +39,7 @@ CREATE TABLE idoc.settings (
     alert_recipients                    NVARCHAR(1000) NOT NULL CONSTRAINT df_settings_alert_to DEFAULT (N''), -- e-mail addresses, comma or semicolon separated
     -- PDF composition (the print files). The marks are measured in millimetres from the top left of the trim box, the way FileMaker did it.
     -- The first-time values are placeholders: set them to the press / enclosing machine's real positions on the Settings page.
+    auto_compose                        BIT           NOT NULL CONSTRAINT df_settings_auto_compose DEFAULT (0),               -- the watcher makes the print files itself when a job is Received (needs COMPOSE_OUT_DIR)
     max_pages_per_pdf                   INT           NOT NULL CONSTRAINT df_settings_max_pages DEFAULT (10000), -- a print file is closed after the mailpiece that takes it past this
     mark_seq_font_pt                    DECIMAL(6, 3) NOT NULL CONSTRAINT df_settings_seq_font DEFAULT (8),      -- the window sequence number, e.g. 1042/000123 (OCR-B)
     mark_seq_left_mm                    DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_seq_left DEFAULT (20),

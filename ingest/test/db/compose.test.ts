@@ -9,7 +9,7 @@ import { MssqlRepository } from '../../src/mssql/repository.js';
 import { loadReferenceData } from '../../src/mssql/reference.js';
 import { ingest } from '../../src/ingest.js';
 import { composeJob } from '../../src/compose/job.js';
-import { loadComposeSettings } from '../../src/compose/db.js';
+import { jobsToCompose, loadComposeSettings } from '../../src/compose/db.js';
 import { buildXml, FakePdf, type PackSpec } from '../helpers.js';
 
 /** Against a REAL scratch SQL Server database (INTELLIDOC_TEST_DB); see setup.ts. */
@@ -29,6 +29,7 @@ describe.skipIf(!hasDb)('composeJob', { timeout: 120_000 }, () => {
 
   it('reads the mark settings and their defaults', async () => {
     const s = await loadComposeSettings(pool);
+    expect(s.autoCompose).toBe(false);
     expect(s.maxPagesPerPdf).toBe(10000);
     expect(s.marks.dot).toEqual({ xMm: 205.5, yMm: 269, diameterMm: 2 });
     expect(s.marks.seq.fontPt).toBe(8);
@@ -43,9 +44,11 @@ describe.skipIf(!hasDb)('composeJob', { timeout: 120_000 }, () => {
     const batchCode = await scalar(`SELECT batch_code AS n FROM idoc.batch WHERE batch_id = ${batchId}`);
     const dir = mkdtempSync(join(tmpdir(), 'idoc-compose-db-')); const pdfDir = join(dir, 'processed'), outDir = join(dir, 'out');
     mkdirSync(pdfDir);
-    await realPdf(pages, pdfDir, '20260101-120000_job-compose.pdf'); // the watcher puts a prefix on processed files
+    await realPdf(pages, pdfDir, '20260101120000_job-compose.pdf'); // the watcher puts a prefix on processed files
 
+    expect(await jobsToCompose(pool)).toContain(jobId); // Received, nothing made yet
     const [b] = await composeJob({ pool, jobId, pdfDir, outDir, grey: null });
+    expect(await jobsToCompose(pool)).not.toContain(jobId);
     expect(b!.skipped).toBeUndefined();
     const file = join(outDir, `${batchCode}_1.pdf`);
     expect(existsSync(file)).toBe(true);
@@ -67,6 +70,9 @@ describe.skipIf(!hasDb)('composeJob', { timeout: 120_000 }, () => {
     expect(await scalar(`SELECT COUNT(*) AS n FROM idoc.batch_file WHERE batch_id = ${batchId}`)).toBe(1);
     expect(await scalar(`SELECT COUNT(*) AS n FROM idoc.mailpiece WHERE batch_id = ${batchId} AND sequence_number IN (1, 2)`)).toBe(2);
 
+    // the automatic run leaves a batch that already has files alone
+    expect((await composeJob({ pool, jobId, pdfDir, outDir, grey: null, onlyNew: true }))[0]!.skipped).toBe('already composed');
+
     // once printed, the batch is left alone
     await pool.request().query(`UPDATE idoc.batch SET current_status = N'Printed' WHERE batch_id = ${batchId}`);
     const [again] = await composeJob({ pool, jobId, pdfDir, outDir, grey: null });
@@ -78,6 +84,7 @@ describe.skipIf(!hasDb)('composeJob', { timeout: 120_000 }, () => {
     const { xml } = buildXml([person('Cy', 'Dee', 2)]);
     await ingest(xml, 'job-compose-wait.xml', null, { ref, pdf: new FakePdf(0), repo }); // Awaiting PDF
     const jobId = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-compose-wait'`);
+    expect(await jobsToCompose(pool)).not.toContain(jobId); // not Received
     await expect(composeJob({ pool, jobId, pdfDir: tmpdir(), outDir: tmpdir(), grey: null })).rejects.toThrow(/Awaiting PDF/);
     const batchId = await scalar(`SELECT TOP 1 batch_id AS n FROM idoc.batch WHERE batch_code = (SELECT MIN(batch_code) FROM idoc.batch)`);
     await expect(pool.request().query(`UPDATE idoc.mailpiece SET sequence_number = 1 WHERE batch_id = ${batchId} AND sequence_number = 2`)).rejects.toThrow(/ux_mailpiece_sequence/);

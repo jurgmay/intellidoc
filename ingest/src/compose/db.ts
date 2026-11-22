@@ -4,15 +4,15 @@ import type { MarkSettings } from './marks.js';
 import type { BatchPlan, PlanMailpiece } from './plan.js';
 import type { ComposedFile } from './compose.js';
 
-export interface ComposeSettings { maxPagesPerPdf: number; marks: MarkSettings }
+export interface ComposeSettings { autoCompose: boolean; maxPagesPerPdf: number; marks: MarkSettings }
 
 export async function loadComposeSettings(pool: sql.ConnectionPool): Promise<ComposeSettings> {
-  const r = (await pool.request().query<Record<string, number>>(`SELECT max_pages_per_pdf, mark_seq_font_pt, mark_seq_left_mm, mark_seq_top_mm, mark_seq_width_mm, mark_seq_height_mm,
+  const r = (await pool.request().query<Record<string, number>>(`SELECT CAST(auto_compose AS INT) AS auto_compose, max_pages_per_pdf, mark_seq_font_pt, mark_seq_left_mm, mark_seq_top_mm, mark_seq_width_mm, mark_seq_height_mm,
       mark_dm_left_mm, mark_dm_top_mm, mark_dm_width_mm, mark_dm_height_mm, mark_dot_x_mm, mark_dot_y_mm, mark_dot_diameter_mm FROM idoc.settings WHERE settings_id = 1`)).recordset[0];
   if (!r) throw new Error('idoc.settings has no row');
   const n = (k: string): number => Number(r[k]);
   return {
-    maxPagesPerPdf: n('max_pages_per_pdf'),
+    autoCompose: n('auto_compose') === 1, maxPagesPerPdf: n('max_pages_per_pdf'),
     marks: {
       seq: { fontPt: n('mark_seq_font_pt'), leftMm: n('mark_seq_left_mm'), topMm: n('mark_seq_top_mm'), widthMm: n('mark_seq_width_mm'), heightMm: n('mark_seq_height_mm') },
       dm: { leftMm: n('mark_dm_left_mm'), topMm: n('mark_dm_top_mm'), widthMm: n('mark_dm_width_mm'), heightMm: n('mark_dm_height_mm') },
@@ -100,4 +100,14 @@ export async function saveComposition(pool: sql.ConnectionPool, batchId: number,
     try { await tx.rollback(); } catch { /* already rolled back */ }
     throw e;
   }
+}
+
+/** Received jobs with a batch that still has mail to print and no print file yet, oldest first. */
+export async function jobsToCompose(pool: sql.ConnectionPool): Promise<number[]> {
+  return (await pool.request().query<{ job_id: number }>(`
+    SELECT DISTINCT j.job_id FROM idoc.job AS j INNER JOIN idoc.batch AS b ON b.job_id = j.job_id
+    WHERE j.status = N'Received' AND b.current_status = N'Created'
+      AND NOT EXISTS (SELECT 1 FROM idoc.batch_file AS f WHERE f.batch_id = b.batch_id)
+      AND EXISTS (SELECT 1 FROM idoc.mailpiece AS m WHERE m.batch_id = b.batch_id AND m.is_cancelled = 0)
+    ORDER BY j.job_id`)).recordset.map((r) => Number(r.job_id));
 }
