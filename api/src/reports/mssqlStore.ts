@@ -1,5 +1,5 @@
 import sql from 'mssql';
-import type { InvoicingAccount, ReportStore, UsageLine, UsageQuery } from './types.js';
+import type { InvoicingAccount, MarginLine, ReportStore, UsageLine, UsageQuery } from './types.js';
 
 export class MssqlReportStore implements ReportStore {
   constructor(private readonly pool: sql.ConnectionPool) {}
@@ -11,15 +11,19 @@ export class MssqlReportStore implements ReportStore {
     return r.recordset as InvoicingAccount[];
   }
 
-  async usageLines(q: UsageQuery) {
+  private async lines<T>(q: UsageQuery, columns: string): Promise<{ account: InvoicingAccount; lines: T[] } | null> {
     const acct = (await this.pool.request().input('id', sql.Int, q.invoicingAccountId)
       .query(`SELECT account_id AS id, account_code AS code, name FROM idoc.account WHERE account_id = @id`)).recordset[0] as InvoicingAccount | undefined;
     if (!acct) return null;
     const r = await this.pool.request().input('id', sql.Int, q.invoicingAccountId).input('from', sql.Date, q.from).input('to', sql.Date, q.to).query(`
-      SELECT CONVERT(NVARCHAR(10), usage_day, 23) AS day, brand, postal_format AS format, postal_service AS service,
-             mailpieces, packs, sheets, priced, production_sell AS productionSell, postage_sell AS postageSell
+      SELECT CONVERT(NVARCHAR(10), usage_day, 23) AS day, brand, postal_format AS format, postal_service AS service, ${columns}
       FROM idoc.v_usage_daily WHERE invoicing_account_id = @id AND usage_day BETWEEN @from AND @to
       ORDER BY usage_day, brand, postal_format, postal_service`);
-    return { account: acct, lines: r.recordset as UsageLine[] };
+    return { account: acct, lines: r.recordset as T[] };
+  }
+
+  usageLines(q: UsageQuery) { return this.lines<UsageLine>(q, 'mailpieces, packs, sheets, priced, production_sell AS productionSell, postage_sell AS postageSell'); }
+  marginLines(q: UsageQuery) {
+    return this.lines<MarginLine>(q, 'mailpieces, priced, production_sell AS productionSell, postage_sell AS postageSell, production_cost AS productionCost, postage_cost AS postageCost');
   }
 }

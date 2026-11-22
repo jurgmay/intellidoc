@@ -76,6 +76,8 @@ reports.lines.set(106, usageDays.flatMap((day, i) => [
   { day, brand: 'Rendall & Rittner', format: 'Letter', service: '1st Class', mailpieces: 18 + ((i * 5) % 14), packs: 22 + i, sheets: 60 + i * 2, priced: 18 + ((i * 5) % 14), productionSell: (18 + ((i * 5) % 14)) * 0.28, postageSell: (18 + ((i * 5) % 14)) * 1.1 },
   { day, brand: 'Odevo', format: 'Large Letter', service: '2nd Class', mailpieces: 6 + (i % 5), packs: 6 + (i % 5), sheets: 30 + i, priced: 5 + (i % 5), productionSell: (5 + (i % 5)) * 0.4, postageSell: (5 + (i % 5)) * 1.6 },
 ]));
+reports.marginLines_.set(106, reports.lines.get(106)!.map((l) => ({ day: l.day, brand: l.brand, format: l.format, service: l.service, mailpieces: l.mailpieces, priced: l.priced,
+  productionSell: l.productionSell, postageSell: l.postageSell, productionCost: l.productionSell * 0.55, postageCost: l.postageSell * 0.92 })));
 const postal = new MemoryPostalStore();
 postal.today = () => '2026-11-21';
 const rm = await postal.createProvider('Royal Mail', 'system'); const dpd = await postal.createProvider('DPD', 'system');

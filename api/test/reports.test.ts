@@ -25,6 +25,9 @@ beforeEach(async () => {
     L('2026-11-02', 'Home', 'Letter', '2nd Class', 10, 12, 30), L('2026-11-02', 'Business', 'Letter', '1st Class', 4), L('2026-11-02', 'Home', 'Large Letter', '2nd Class', 1),
     L('2026-11-04', 'Home', 'Letter', '2nd Class', 7, 7, 14, 5), L('2026-11-30', 'Home', 'Letter', '2nd Class', 99), // outside the range asked for below
   ]);
+  // the same mail with what it cost: production at 60% of sell, postage at 90%
+  store.marginLines_.set(5, store.lines.get(5)!.map((l) => ({ day: l.day, brand: l.brand, format: l.format, service: l.service, mailpieces: l.mailpieces, priced: l.priced,
+    productionSell: l.productionSell, postageSell: l.postageSell, productionCost: l.productionSell * 0.6, postageCost: l.postageSell * 0.9 })));
   app = await buildApp({ settings: new MemorySettingsStore(), customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: new MemoryRecipientStore(), reports: store });
 });
 const get = (qs: string) => app.inject({ method: 'GET', url: `/api/reports/usage?${qs}` });
@@ -100,3 +103,24 @@ describe('usage PDF', () => {
     expect(chartBrands(buildUsageReport({ id: 1, code: 'X', name: 'X' }, '2026-11-01', '2026-11-01', names.slice(0, 7).map((b) => L('2026-11-01', b, 'Letter', '2nd Class', 1))))).toHaveLength(7);
   });
 });
+
+describe('margin report', () => {
+  const margin = (qs: string) => app.inject({ method: 'GET', url: `/api/reports/margin?${qs}` });
+  it('adds up sell, cost and margin, with the margin as a percentage of sell', async () => {
+    const r = (await margin('invoicingAccountId=5&from=2026-11-01&to=2026-11-05')).json();
+    // 20 priced mailpieces: sell 5 + 15 = 20; cost 5 x 0.6 + 15 x 0.9 = 16.5
+    expect(r.totals).toEqual({ mailpieces: 22, unpriced: 2, productionSell: 5, productionCost: 3, postageSell: 15, postageCost: 13.5, sell: 20, cost: 16.5, margin: 3.5, marginPct: 17.5 });
+    expect(r.days).toHaveLength(5);
+    expect(r.days[0]).toMatchObject({ sell: 0, cost: 0, margin: 0, marginPct: null });   // nothing sold, so no percentage
+    expect(r.brands[0]).toMatchObject({ brand: 'Home' });
+  });
+  it('keeps costs out of the usage report and its PDF route', async () => {
+    const usage = (await get('invoicingAccountId=5&from=2026-11-01&to=2026-11-05')).body;
+    expect(usage).not.toMatch(/cost|margin/i);
+  });
+  it('validates like the usage report, and 404s for an unknown account', async () => {
+    expect((await margin('invoicingAccountId=5&from=2026-11-05&to=2026-11-01')).statusCode).toBe(422);
+    expect((await margin('invoicingAccountId=99&from=2026-11-01&to=2026-11-05')).statusCode).toBe(404);
+  });
+});
+

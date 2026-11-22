@@ -869,7 +869,9 @@ SELECT m.invoicing_account_id,
        SUM(m.sheet_count)                                                              AS sheets,
        COUNT(m.priced_at)                                                              AS priced,            -- mailpieces that have a price
        COALESCE(SUM(m.production_sell), 0)                                             AS production_sell,   -- what would be invoiced (unpriced mail adds nothing)
-       COALESCE(SUM(m.postage_sell), 0)                                                AS postage_sell
+       COALESCE(SUM(m.postage_sell), 0)                                                AS postage_sell,
+       COALESCE(SUM(m.production_cost), 0)                                             AS production_cost,   -- internal: only the margin report reads the costs
+       COALESCE(SUM(m.postage_cost), 0)                                                AS postage_cost
 FROM idoc.mailpiece AS m
 LEFT JOIN idoc.batch          AS b  ON b.batch_id = m.batch_id
 LEFT JOIN idoc.postal_format  AS pf ON pf.postal_format_id = m.postal_format_id
