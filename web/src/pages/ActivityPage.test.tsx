@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { MemoryRouter } from 'react-router-dom';
@@ -85,6 +86,14 @@ describe('ActivityPage while loading', () => {
     fail = true; show();
     expect(await screen.findByText('Database down')).toBeInTheDocument();
     expect(screen.queryByText('Loading…')).toBeNull();
+  });
+});
+
+describe('ActivityPage first load', () => {
+  it('shows the first answer at once, not at the first refresh, even when React runs the effect twice (as it does in development)', async () => {
+    current = data({ inbox: [{ stem: 'a', xmlName: 'a.xml', xmlBytes: 1, pdfName: null, pdfBytes: null, modifiedAt: new Date().toISOString() }] });
+    render(<StrictMode><MantineProvider theme={theme}><MemoryRouter><ActivityPage refreshMs={60_000} /></MemoryRouter></MantineProvider></StrictMode>);
+    expect(await screen.findByText('a.xml', undefined, { timeout: 1500 })).toBeInTheDocument();
   });
 });
 
