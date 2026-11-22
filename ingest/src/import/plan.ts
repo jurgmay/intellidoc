@@ -20,6 +20,7 @@ export interface PlanAccount {
   isAddressMatching: boolean; isArchiveMailpieces: boolean; isCreateOutputFiles: boolean;
   isSso: boolean; isSameDayService: boolean; isUseMrdf: boolean; isTesting: boolean; isDeleted: boolean;
   misJobNumber: string | null; returnAddress: string | null;
+  archiveCustomerTag: string | null; archiveDirectoryTag: string | null; logo1: string | null; logo2: string | null;
   /** Mapped from the FileMaker colourMode (0/1/2/3). Written when the account is first created only. */
   colourMode: string;
   packSequenceKey: string | null; batchingKey: string | null;
@@ -114,6 +115,14 @@ export function buildPlan(x: Exports): Plan {
     const fmColour = num(r['colourMode']) ?? 0;
     const colourMode = FM_COLOUR_MODES[fmColour] ?? 'ORIGINAL';
     if (!(fmColour in FM_COLOUR_MODES)) warnings.push(`Account ${code}: FileMaker colour mode ${fmColour} is not understood; imported as ORIGINAL`);
+    const archiveProviderId = (r['id_archivingProvider'] ?? '').trim();
+    if (flag(r['isArchiveMailpieces']) && archiveProviderId)
+      warnings.push(`Account ${code}: archives mailpieces under provider ${archiveProviderId}; the provider tag is not in the export, so enter it on the customer page`);
+    const logo = (k: string): string | null => {
+      const v = (r[k] ?? '').trim();
+      if (v.length > 8) { warnings.push(`Account ${code}: ${k} "${v}" is longer than 8 characters; not imported`); return null; }
+      return v || null;
+    };
     accounts.push({
       legacyId, code, name: (r['accountName'] ?? '').trim() || code,
       parentLegacyId: parent && byId.has(parent) && parent !== legacyId ? parent : null, inheritsSettings: grouping !== null, invoicingLegacyId: invoicing,
@@ -122,6 +131,7 @@ export function buildPlan(x: Exports): Plan {
       isSso: flag(r['isSSO']), isSameDayService: flag(r['isSameDayService']), isUseMrdf: flag(r['isUseMRDF']),
       isTesting: flag(r['isTesting']), isDeleted: flag(r['isDeleted']),
       colourMode, misJobNumber: (r['misJobNumber'] ?? '').trim() || null, returnAddress: (r['returnAddress'] ?? '').trim() || null,
+      archiveCustomerTag: (r['customerMetadataTag'] ?? '').trim() || null, archiveDirectoryTag: (r['directoryMetadataTag'] ?? '').trim() || null, logo1: logo('logo1'), logo2: logo('logo2'),
       packSequenceKey: (r['packSequencePassthroughKey'] ?? '').trim() || ps?.passthroughKey || null, batchingKey,
       emails: [...new Set((r['notificationEmails'] ?? '').split(/[\s;,]+/).map((e) => e.trim().toLowerCase()).filter((e) => e.includes('@')))],
       matchRules, sequenceRules: (ps?.sequences ?? []).map((s) => ({ value: s.passthroughValue, sequence: s.sequenceNumber })),

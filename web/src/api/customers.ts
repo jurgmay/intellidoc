@@ -41,14 +41,14 @@ export const COLOUR_MODE_LABELS: Record<ColourMode, string> = {
   FIRST_MAILPIECE_PAGE: 'First page of each mailpiece in colour, the rest mono', ALL_MONO: 'All mono',
 };
 export interface CustomerDetail {
-  id: number; code: string; name: string; misJobNumber: string | null; pendingJobNumber: string | null; pendingFrom: string | null; jobNumberRolloverDay: number; returnAddress: string | null; colourMode: ColourMode;
+  id: number; code: string; name: string; misJobNumber: string | null; pendingJobNumber: string | null; pendingFrom: string | null; jobNumberRolloverDay: number; returnAddress: string | null; archiveCustomerTag: string | null; archiveProviderTag: string | null; archiveDirectoryTag: string | null; logo1: string | null; logo2: string | null; colourMode: ColourMode;
   flags: Record<FlagKey, boolean>; batchingKey: string | null; packSequenceKey: string | null;
   parent: ParentView | null; children: ChildView[];
   /** null = the customer itself. */
   invoicing: ParentView | null; invoicingOptions: ParentView[];
   accounts: AccountView[]; brands: BrandView[]; envelopes: EnvelopeView[]; modes: Modes; inheritedEnvelopes: InheritedEnvelopeView[]; matchRules: MatchRule[]; sequenceRules: SequenceRule[]; emails: string[]; inherited: InheritedSettings;
 }
-export type DetailsInput = Pick<CustomerDetail, 'code' | 'name' | 'misJobNumber' | 'pendingJobNumber' | 'jobNumberRolloverDay' | 'returnAddress' | 'colourMode' | 'flags' | 'batchingKey' | 'packSequenceKey'> & { parentId: number | null; invoicingAccountId: number | null };
+export type DetailsInput = Pick<CustomerDetail, 'code' | 'name' | 'misJobNumber' | 'pendingJobNumber' | 'jobNumberRolloverDay' | 'returnAddress' | 'archiveCustomerTag' | 'archiveProviderTag' | 'archiveDirectoryTag' | 'logo1' | 'logo2' | 'colourMode' | 'flags' | 'batchingKey' | 'packSequenceKey'> & { parentId: number | null; invoicingAccountId: number | null };
 export interface EnvelopeInput {
   brandId: number | null; deliveryBand: string; postalRateId: number; stockItemId: number; reference: string | null; externalName: string | null; isOversticker: boolean;
 }

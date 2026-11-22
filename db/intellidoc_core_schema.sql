@@ -229,6 +229,13 @@ CREATE TABLE idoc.account (
     -- Day of the month (1-28) on which a pending job number takes over. Most customers use 1; one invoices mid-month and uses 21.
     job_number_rollover_day    TINYINT            NOT NULL CONSTRAINT df_account_rollday DEFAULT (1),
     return_address             NVARCHAR(500)      NULL,
+    -- Written into the PDF keywords when is_archive_mailpieces is on: archiving_customer / archiving_provider / archiving_directory (the archive system's tags)
+    archive_customer_tag       NVARCHAR(100)      NULL,
+    archive_provider_tag       NVARCHAR(100)      NULL,
+    archive_directory_tag      NVARCHAR(100)      NULL,
+    -- The logo bitmaps the inserter prints, written into the MRDF (LogoBitmapSelect1/2, 8 characters)
+    logo1                      NVARCHAR(8)        NULL,
+    logo2                      NVARCHAR(8)        NULL,
     -- Passthrough keys that drive sequencing and batching (replace packSequenceJSON / batchingJSON)
     pack_sequence_key_id       INT                NULL CONSTRAINT fk_account_seqkey REFERENCES idoc.passthrough_key (passthrough_key_id),
     batching_key_id            INT                NULL CONSTRAINT fk_account_batchkey REFERENCES idoc.passthrough_key (passthrough_key_id),

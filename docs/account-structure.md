@@ -54,6 +54,7 @@ The user decides which envelopes an account may use (its effective list). The im
 - Packs from different sub-accounts are not merged into one envelope by default (the sub-account and the invoicing account are in the match key).  There is no opt-in to merge them; it was decided not to build one (section 3a).
 - The FileMaker import reads `id_invoicingAccount` (name assumed) and falls back, with a warning, when it is not an ancestor.
 - Editing the job number and return address of a sub-account that is itself an invoicing account is not on the screens yet.
+- The **archive tags and the logos** (Logo 1 / Logo 2) sit with the return address on the customer's Details tab and are read from the account that holds the settings, like the MRDF switch. They go into the PDF keywords and the MRDF (see pdf-composition.md).
 
 - Each account has an **invoicing account** link. It must be the account itself or one of its ancestors. Moving an account re-checks it.
 - Many accounts may share one invoicing account (B-hive's 150+ sub-accounts into one invoice). Odevo is never an invoicing account.

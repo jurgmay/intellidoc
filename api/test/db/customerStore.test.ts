@@ -38,12 +38,12 @@ describe.skipIf(!cs)('MssqlCustomerStore', { timeout: 120_000 }, () => {
 
   it('saves details, creates passthrough keys by name, and describes the changes', async () => {
     const id = await store.create({ code: 'DET', name: 'Details Co' }, 'tester');
-    await store.updateDetails(id, { code: 'DET', name: 'Details Co', misJobNumber: '777', pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, returnAddress: 'PO Box 1', colourMode: 'FIRST_PACK_PAGE' as const, batchingKey: 'Brand New Key', packSequenceKey: 'Department', parentId: null, flags: flags({ isAddressMatching: true, isSso: true }) }, 'tester');
+    await store.updateDetails(id, { code: 'DET', name: 'Details Co', misJobNumber: '777', pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, archiveCustomerTag: 'DETCO', archiveProviderTag: 'IRON', archiveDirectoryTag: 'det/dir', logo1: 'LOGO1', logo2: null, returnAddress: 'PO Box 1', colourMode: 'FIRST_PACK_PAGE' as const, batchingKey: 'Brand New Key', packSequenceKey: 'Department', parentId: null, flags: flags({ isAddressMatching: true, isSso: true }) }, 'tester');
     const d = await store.get(id);
-    expect(d).toMatchObject({ misJobNumber: '777', pendingJobNumber: null, jobNumberRolloverDay: 1, invoicing: null, returnAddress: 'PO Box 1', colourMode: 'FIRST_PACK_PAGE', batchingKey: 'Brand New Key', packSequenceKey: 'Department', flags: { isAddressMatching: true, isSso: true, isTesting: false } });
+    expect(d).toMatchObject({ misJobNumber: '777', pendingJobNumber: null, jobNumberRolloverDay: 1, invoicing: null, archiveCustomerTag: 'DETCO', archiveProviderTag: 'IRON', archiveDirectoryTag: 'det/dir', logo1: 'LOGO1', logo2: null, returnAddress: 'PO Box 1', colourMode: 'FIRST_PACK_PAGE', batchingKey: 'Brand New Key', packSequenceKey: 'Department', flags: { isAddressMatching: true, isSso: true, isTesting: false } });
     expect((await store.lookups()).passthroughKeys).toContain('Brand New Key');
     const lines = (await store.history(id, 20)).map((h) => h.summary);
-    expect(lines).toEqual(expect.arrayContaining(['Address matching: off → on', 'SSO: off → on', 'Job number: (none) → "777"']));
+    expect(lines).toEqual(expect.arrayContaining(['Address matching: off → on', 'SSO: off → on', 'Job number: (none) → "777"', 'Logo 1: (none) → "LOGO1"', 'Archive customer tag: (none) → "DETCO"']));
     await expect(store.get(999999)).rejects.toBeInstanceOf(NotFoundError);
   });
 
@@ -73,7 +73,7 @@ describe.skipIf(!cs)('MssqlCustomerStore', { timeout: 120_000 }, () => {
     const mid = await store.create({ code: 'INV-MID', name: 'Inv mid' }, 'tester');
     const other = await store.create({ code: 'INV-OTHER', name: 'Inv other' }, 'tester');
     const flags = (await store.get(mid)).flags;
-    const input = (parentId: number | null, invoicingAccountId: number | null) => ({ code: 'INV-MID', name: 'Inv mid', misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId, flags });
+    const input = (parentId: number | null, invoicingAccountId: number | null) => ({ code: 'INV-MID', name: 'Inv mid', misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId, archiveCustomerTag: null, archiveProviderTag: null, archiveDirectoryTag: null, logo1: null, logo2: null, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId, flags });
     expect((await store.get(mid)).invoicing).toBeNull();
     expect((await store.get(mid)).invoicingOptions.map((o) => o.code)).toEqual(['INV-MID']);
     await store.updateDetails(mid, input(top, top), 'tester');
@@ -99,11 +99,11 @@ describe.skipIf(!cs)('MssqlCustomerStore', { timeout: 120_000 }, () => {
     const kidSub = await store.addAccount(kid, { code: 'SA-KID-1', name: 'Kid account' }, 'tester');
     await store.addBrand(kid, 'Kid brand', 'tester');
     const flags = (await store.get(kid)).flags;
-    await store.updateDetails(kid, { code: 'SA-KID', name: 'Sub kid', misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId: top, flags }, 'tester');
+    await store.updateDetails(kid, { code: 'SA-KID', name: 'Sub kid', misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, archiveCustomerTag: null, archiveProviderTag: null, archiveDirectoryTag: null, logo1: null, logo2: null, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId: top, flags }, 'tester');
     const grand = await store.create({ code: 'SA-GRAND', name: 'Sub grand' }, 'tester');
-    await store.updateDetails(grand, { code: 'SA-GRAND', name: 'Sub grand', misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId: kid, flags }, 'tester');
+    await store.updateDetails(grand, { code: 'SA-GRAND', name: 'Sub grand', misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, archiveCustomerTag: null, archiveProviderTag: null, archiveDirectoryTag: null, logo1: null, logo2: null, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId: kid, flags }, 'tester');
     await expect(store.makeSubAccount(kid, 'tester')).rejects.toThrow(/1 customer is placed under this one \(Sub grand\)/); // a customer is placed under it
-    await store.updateDetails(grand, { code: 'SA-GRAND', name: 'Sub grand', misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId: null, flags }, 'tester');
+    await store.updateDetails(grand, { code: 'SA-GRAND', name: 'Sub grand', misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, archiveCustomerTag: null, archiveProviderTag: null, archiveDirectoryTag: null, logo1: null, logo2: null, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId: null, flags }, 'tester');
 
     await store.makeSubAccount(kid, 'tester');
     await expect(store.get(kid)).rejects.toBeInstanceOf(NotFoundError);                              // no longer a customer
@@ -168,7 +168,7 @@ describe.skipIf(!cs)('MssqlCustomerStore', { timeout: 120_000 }, () => {
     await store.addEnvelope(top, env({ reference: 'B' }), 'tester');
     await expect(store.setMode(kid, 'envelopes', 'INHERIT', 'tester')).rejects.toBeInstanceOf(ValidationError);
     const flags = (await store.get(kid)).flags;
-    const setParent = (p: number | null) => store.updateDetails(kid, { code: 'EI-KID', name: 'Env kid', misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId: p, flags }, 'tester');
+    const setParent = (p: number | null) => store.updateDetails(kid, { code: 'EI-KID', name: 'Env kid', misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, archiveCustomerTag: null, archiveProviderTag: null, archiveDirectoryTag: null, logo1: null, logo2: null, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId: p, flags }, 'tester');
     await setParent(top);
     await store.setMode(kid, 'envelopes', 'INHERIT', 'tester');
     let d = await store.get(kid);
@@ -196,7 +196,7 @@ describe.skipIf(!cs)('MssqlCustomerStore', { timeout: 120_000 }, () => {
     await store.setEmails(top, ['print@sg.example', 'ops@sg.example'], 'tester');
     const topFlags = (await store.get(top)).flags;
     const detailsOf = (id: number, code: string, name: string, parentId: number | null, over: Partial<{ batchingKey: string | null; packSequenceKey: string | null }> = {}, fl = (undefined as unknown as typeof topFlags)) =>
-      ({ code, name, misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId, flags: fl ?? topFlags, ...over });
+      ({ code, name, misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, archiveCustomerTag: null, archiveProviderTag: null, archiveDirectoryTag: null, logo1: null, logo2: null, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId, flags: fl ?? topFlags, ...over });
     await store.updateDetails(top, detailsOf(top, 'SG-TOP', 'Sg top', null, { batchingKey: 'Department', packSequenceKey: 'Doc Type' }, { ...topFlags, isAddressMatching: true }), 'tester');
     await expect(store.setMode(kid, 'brands', 'INHERIT', 'tester')).rejects.toBeInstanceOf(ValidationError); // no parent yet
     await store.updateDetails(kid, detailsOf(kid, 'SG-KID', 'Sg kid', top), 'tester');
@@ -251,7 +251,7 @@ describe.skipIf(!cs)('MssqlCustomerStore', { timeout: 120_000 }, () => {
     const parent = await store.create({ code: 'HPARENT', name: 'Hier Parent' }, 'tester');
     const child = await store.create({ code: 'HCHILD', name: 'Hier Child' }, 'tester');
     const grand = await store.create({ code: 'HGRAND', name: 'Hier Grandchild' }, 'tester');
-    const input = (code: string, name: string, parentId: number | null) => ({ code, name, misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId, flags: flags({ isAddressMatching: true }) });
+    const input = (code: string, name: string, parentId: number | null) => ({ code, name, misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, archiveCustomerTag: null, archiveProviderTag: null, archiveDirectoryTag: null, logo1: null, logo2: null, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId, flags: flags({ isAddressMatching: true }) });
     await store.updateDetails(child, input('HCHILD', 'Hier Child', parent), 'tester');
     await store.updateDetails(grand, input('HGRAND', 'Hier Grandchild', child), 'tester');
     expect((await store.get(child)).parent).toMatchObject({ id: parent, code: 'HPARENT' });
@@ -270,7 +270,7 @@ describe.skipIf(!cs)('MssqlCustomerStore', { timeout: 120_000 }, () => {
 
   it('pending job number: starts on the 1st of next month, moves on its date, and keeps its date when untouched', async () => {
     const id = await store.create({ code: 'PEND', name: 'Pending Co' }, 'tester');
-    const input = (pending: string | null) => ({ code: 'PEND', name: 'Pending Co', misJobNumber: '100', pendingJobNumber: pending, jobNumberRolloverDay: 1, invoicingAccountId: null, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId: null, flags: flags() });
+    const input = (pending: string | null) => ({ code: 'PEND', name: 'Pending Co', misJobNumber: '100', pendingJobNumber: pending, jobNumberRolloverDay: 1, invoicingAccountId: null, archiveCustomerTag: null, archiveProviderTag: null, archiveDirectoryTag: null, logo1: null, logo2: null, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId: null, flags: flags() });
     await store.updateDetails(id, input('101'), 'tester');
     const first = (await store.get(id)).pendingFrom!;
     expect(first).toMatch(/^\d{4}-\d{2}-01$/);
@@ -290,7 +290,7 @@ describe.skipIf(!cs)('MssqlCustomerStore', { timeout: 120_000 }, () => {
 
   it('rollover day: a pending number starts on the next occurrence of the day, and the day is limited to 1-28', async () => {
     const id = await store.create({ code: 'ROLL', name: 'Roll Co' }, 'tester');
-    const input = (day: number, pending: string | null) => ({ code: 'ROLL', name: 'Roll Co', misJobNumber: '100', pendingJobNumber: pending, jobNumberRolloverDay: day, invoicingAccountId: null, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId: null, flags: flags() });
+    const input = (day: number, pending: string | null) => ({ code: 'ROLL', name: 'Roll Co', misJobNumber: '100', pendingJobNumber: pending, jobNumberRolloverDay: day, invoicingAccountId: null, archiveCustomerTag: null, archiveProviderTag: null, archiveDirectoryTag: null, logo1: null, logo2: null, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId: null, flags: flags() });
     const todayLondon = (await pool.request().query(`SELECT CONVERT(CHAR(10), CAST(SYSDATETIMEOFFSET() AT TIME ZONE 'GMT Standard Time' AS DATE), 23) AS d`)).recordset[0].d as string;
     await store.updateDetails(id, input(21, '101'), 'tester');
     const d21 = (await store.get(id)).pendingFrom!;
@@ -310,7 +310,7 @@ describe.skipIf(!cs)('MssqlCustomerStore', { timeout: 120_000 }, () => {
   it('a failed change leaves no half-written history', async () => {
     const id = await store.create({ code: 'ATOM', name: 'Atomic' }, 'tester');
     const before = (await store.history(id, 50)).length;
-    await expect(store.updateDetails(id, { code: 'FEXCO_CUSTOMER', name: 'Atomic', misJobNumber: '1', pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId: null, flags: flags() }, 'tester')).rejects.toBeInstanceOf(ConflictError);
+    await expect(store.updateDetails(id, { code: 'FEXCO_CUSTOMER', name: 'Atomic', misJobNumber: '1', pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, archiveCustomerTag: null, archiveProviderTag: null, archiveDirectoryTag: null, logo1: null, logo2: null, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId: null, flags: flags() }, 'tester')).rejects.toBeInstanceOf(ConflictError);
     expect((await store.history(id, 50)).length).toBe(before);
     expect((await store.get(id)).misJobNumber).toBeNull();
   });

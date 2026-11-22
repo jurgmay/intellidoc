@@ -76,3 +76,18 @@ describe('colour mode in the import', () => {
     expect(p.warnings.filter((w) => /colour mode/.test(w))).toEqual(['Account T: FileMaker colour mode 9 is not understood; imported as ORIGINAL']);
   });
 });
+
+describe('archive tags and logos in the import', () => {
+  it('imports the customer and directory tags and logos; the provider tag is not in the export', () => {
+    const p = buildPlan({ customers: [cust({ id: P, accountCode: 'P', accountName: 'P', id_groupingAccount: P, isArchiveMailpieces: '1', id_archivingProvider: 'prov-1',
+      customerMetadataTag: ' ACME ', directoryMetadataTag: 'acme/dir', logo1: 'LOGO1', logo2: '' })], brands: [], stock: [], envelopes: [] });
+    const a = p.accounts[0]!;
+    expect([a.archiveCustomerTag, a.archiveDirectoryTag, a.logo1, a.logo2]).toEqual(['ACME', 'acme/dir', 'LOGO1', null]);
+    expect(p.warnings.some((w) => /Account P: archives mailpieces under provider prov-1/.test(w))).toBe(true);
+  });
+  it('does not import a logo that is too long for the MRDF', () => {
+    const p = buildPlan({ customers: [cust({ id: P, accountCode: 'P', accountName: 'P', id_groupingAccount: P, logo1: 'TOOLONGNAME' })], brands: [], stock: [], envelopes: [] });
+    expect(p.accounts[0]!.logo1).toBeNull();
+    expect(p.warnings.some((w) => /logo1 "TOOLONGNAME" is longer than 8/.test(w))).toBe(true);
+  });
+});

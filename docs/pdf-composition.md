@@ -64,8 +64,19 @@ The Settings page has two groups, **Print file marks** and **MRDF page codes**. 
 ## Not built, and differences from FileMaker
 
 * **MRDF**: reading what the inserter sends back (FileMaker's output, select and lock folders and the `MRDF_OutputRecords` / `MRDF_SelectRecords` tables) is not built. Only the files the inserter is given are (see MRDF below).
-* Archive keywords (`moduleArchive`) are not written; `forceA4PageSize` is not implemented.
+* `forceA4PageSize` is not implemented on purpose: FileMaker's script has the code commented out, so it never ran.
+* Archived batches: FileMaker skipped the archive keywords for a batch already archived (`isArchived`). There is no archiving process here yet, so every batch is treated as not archived.
+* The archive provider's tag is typed on the customer page. FileMaker kept it in an ArchivingProviders table that is not in the exports, so the import leaves it blank and warns for each archiving customer.
 * FileMaker forced mono for modes 2 and 3 as well as mode 1 (`forceMono = colourMode > 0 …`), which looks like a mistake; here the four modes mean what the customer was told.
 * Pricing follows the composer on a pack's own Mono option (all of its pages are billed as mono). One approximation remains: for "first page of each mailpiece", pricing takes the first pack in document-sequence order, the composer in envelope order, so they differ only when those orders differ and only one of the two packs has colour pages.
 * FileMaker recounted the composed pages and priced then; here pricing happens when the job is Received, from the colour mode (`composedPages`).
 * The Ghostscript conversion is tested only with a stand-in converter (it was not installable where this was built); try one real mono batch first.
+
+## Keywords and logos
+
+The PDF keywords are one comma-separated string (no spaces), built by `compose/keywords.ts`:
+
+* A customer with "Archive mailpieces" on gets `archiving_customer:<tag>,archiving_provider:<tag>,archiving_directory:<tag>` (only the tags that are set). The tags are on the customer page and belong to the account that holds the settings, as the MRDF switch does.
+* Edge-to-edge paper adds `imposition:SRA4`. FileMaker overwrote the archive keywords with this one; both are written here.
+
+The customer's Logo 1 and Logo 2 (up to 8 characters, imported from `logo1` / `logo2`) fill `LogoBitmapSelect1` / `LogoBitmapSelect2` in the MRDF.

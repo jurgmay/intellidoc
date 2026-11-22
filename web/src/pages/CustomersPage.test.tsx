@@ -115,6 +115,15 @@ describe('Job numbers', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(calls.find((c) => c.method === 'PUT')?.body).toMatchObject({ colourMode: 'ALL_MONO' }));
   });
+  it('saves the archive tags and logos, sending null for a cleared one', async () => {
+    wrap('/customers/7');
+    await userEvent.type(await screen.findByLabelText('Archive customer tag'), 'ACME');
+    await userEvent.type(screen.getByLabelText('Archive provider tag'), 'IRON');
+    await userEvent.type(screen.getByLabelText('Archive directory tag'), 'acme/dir');
+    await userEvent.type(screen.getByLabelText('Logo 1'), 'LOGO1');
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.find((c) => c.method === 'PUT')?.body).toMatchObject({ archiveCustomerTag: 'ACME', archiveProviderTag: 'IRON', archiveDirectoryTag: 'acme/dir', logo1: 'LOGO1', logo2: null }));
+  });
   it('uses the rollover day in the note and saves a changed day', async () => {
     wrap('/customers/7');
     const day = await screen.findByLabelText('Job number rollover day');

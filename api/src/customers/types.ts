@@ -41,7 +41,12 @@ export interface InheritedSettings {
 export const FLAGS = ['isAddressMatching', 'isArchiveMailpieces', 'isCreateOutputFiles', 'isSso', 'isSameDayService', 'isUseMrdf', 'isTesting', 'isDeleted'] as const;
 export type FlagKey = (typeof FLAGS)[number];
 
-export interface CustomerDetail {
+/** Archive tags (written into the PDF keywords) and the inserter logo bitmaps (written into the MRDF). Held by the account that holds the settings. */
+export interface ProductionFields {
+  archiveCustomerTag: string | null; archiveProviderTag: string | null; archiveDirectoryTag: string | null; logo1: string | null; logo2: string | null;
+}
+
+export interface CustomerDetail extends ProductionFields {
   id: number; code: string; name: string; misJobNumber: string | null; returnAddress: string | null; colourMode: ColourMode;
   /** The next job number, and the date (1st of a month, London) on which it replaces the job number. */
   pendingJobNumber: string | null; pendingFrom: string | null;
@@ -64,7 +69,7 @@ export interface CustomerDetail {
 }
 
 /** What can be edited on the customer record itself. */
-export interface CustomerDetailsInput {
+export interface CustomerDetailsInput extends ProductionFields {
   code: string; name: string; misJobNumber: string | null; pendingJobNumber: string | null; jobNumberRolloverDay: number; returnAddress: string | null; colourMode: ColourMode;
   flags: Record<FlagKey, boolean>; batchingKey: string | null; packSequenceKey: string | null;
   /** null = top of its hierarchy. Must be another customer, and never itself or one of its own descendants. */
