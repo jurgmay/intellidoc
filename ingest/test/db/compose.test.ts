@@ -71,7 +71,7 @@ describe.skipIf(!hasDb)('composeJob', { timeout: 120_000 }, () => {
     const ref = await loadReferenceData(pool);
     const { xml, pages } = buildXml([person('Ann', 'Lee', 3), person('Ann', 'Lee', 2), person('Bob', 'Lee', 1)]);
     await ingest(xml, 'job-compose.xml', 'job-compose.pdf', { ref, pdf: new FakePdf(pages), repo });
-    const jobId = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-compose'`);
+    const jobId = Number(await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-compose'`)); // BIGINT comes back as text
     const batchId = await scalar(`SELECT TOP 1 batch_id AS n FROM idoc.batch WHERE job_id = ${jobId}`);
     const batchCode = await scalar(`SELECT batch_code AS n FROM idoc.batch WHERE batch_id = ${batchId}`);
     const dir = mkdtempSync(join(tmpdir(), 'idoc-compose-db-')); const pdfDir = join(dir, 'processed'), outDir = join(dir, 'out');
@@ -115,7 +115,7 @@ describe.skipIf(!hasDb)('composeJob', { timeout: 120_000 }, () => {
     const ref = await loadReferenceData(pool);
     const { xml } = buildXml([person('Cy', 'Dee', 2)]);
     await ingest(xml, 'job-compose-wait.xml', null, { ref, pdf: new FakePdf(0), repo }); // Awaiting PDF
-    const jobId = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-compose-wait'`);
+    const jobId = Number(await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-compose-wait'`));
     expect(await jobsToCompose(pool)).not.toContain(jobId); // not Received
     await expect(composeJob({ pool, jobId, pdfDir: tmpdir(), outDir: tmpdir(), grey: null })).rejects.toThrow(/Awaiting PDF/);
     const batchId = await scalar(`SELECT TOP 1 batch_id AS n FROM idoc.batch WHERE batch_code = (SELECT MIN(batch_code) FROM idoc.batch)`);

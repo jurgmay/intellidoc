@@ -320,7 +320,7 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     expect((await repo.listOverdue(-1, 30)).find((j) => j.jobId === jobId)).toMatchObject({ baseName: 'job-nopdf', packCount: 2 });
     await repo.markAlerted(jobId);
     expect((await repo.listOverdue(-1, 30)).some((j) => j.jobId === jobId)).toBe(false); // reminded too recently (-1 = ignore timestamp rounding)
-    expect((await repo.listOverdue(-1, 0)).some((j) => j.jobId === jobId)).toBe(true);
+    expect((await repo.listOverdue(-1, -1)).some((j) => j.jobId === jobId)).toBe(true); // -1: the stored alert time is rounded to the second, which can be just ahead of now
     const found = await repo.findAwaitingPdf('JOB-NOPDF');
     expect(found).toMatchObject({ jobId, alertCount: 1 });
     expect(found!.packs).toHaveLength(2);
