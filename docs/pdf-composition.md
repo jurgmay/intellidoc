@@ -43,6 +43,6 @@ The Settings page has a group **Print file marks** (box positions, font size, do
 * **MRDF** (Bluecrest MRDF codes on every odd page and the MRDF input/header files) is not built.
 * Archive keywords (`moduleArchive`) are not written; `forceA4PageSize` is not implemented.
 * FileMaker forced mono for modes 2 and 3 as well as mode 1 (`forceMono = colourMode > 0 …`), which looks like a mistake; here the four modes mean what the customer was told.
-* Pricing still uses the colour mode but not a pack's own Mono option; the composed pages and the billed pages can differ for such a pack.
+* Pricing follows the composer on a pack's own Mono option (all of its pages are billed as mono). One approximation remains: for "first page of each mailpiece", pricing takes the first pack in document-sequence order, the composer in envelope order, so they differ only when those orders differ and only one of the two packs has colour pages.
 * FileMaker recounted the composed pages and priced then; here pricing happens when the job is Received, from the colour mode (`composedPages`).
 * The Ghostscript conversion is tested only with a stand-in converter (it was not installable where this was built); try one real mono batch first.
