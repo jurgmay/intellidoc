@@ -86,6 +86,12 @@ export const SETTINGS: SettingDef[] = [
     appliesTo: 'The watcher re-reads this every minute; no restart needed.',
   },
   {
+    key: 'autoCompose', column: 'auto_compose', group: 'Print file marks', label: 'Make print files automatically', type: 'boolean',
+    description: 'When on, the folder watcher makes the print PDFs of a job as soon as it is Received, and again for any job it could not do. When off, print files are made only by running the compose command. Off until the marks below have been checked on a printed proof.',
+    usedBy: 'Folder watcher: after each job is Received. It also needs the COMPOSE_OUT_DIR folder in the watcher .env file; without it nothing is made, whatever this says.',
+    appliesTo: 'The watcher re-reads this every minute; no restart needed. Print files already made are not changed.',
+  },
+  {
     key: 'maxPagesPerPdf', column: 'max_pages_per_pdf', group: 'Print file marks', label: 'Most pages in one print file', type: 'integer', unit: 'pages', min: 2, max: 1000000,
     description: 'A batch is printed from one PDF. When a file passes this many pages it is closed after the mailpiece that took it over, and the batch continues in a new file, so a file can run over by up to one mailpiece. The run sheet and blank padding pages count.',
     usedBy: 'Print file composition: where a batch is split into files.',

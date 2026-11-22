@@ -85,6 +85,7 @@ Switching "Import an XML without waiting for its PDF" off in Settings restores t
 | `CHECK_POSTCODES` | `1` warns when a pack's postcode is not on its first PDF page (needs qpdf + pdftotext) |
 | `LOG_FILE` | also append the log to this file |
 | `XML_FIRST` / `PDF_WAIT_MINUTES` / `PDF_REMINDER_MINUTES` / `ALERT_TO` | only a fallback now: these are set on the web app's **Settings** screen (stored in `idoc.settings`) and re-read every minute. The `.env` values are used only until the first successful read |
+| `COMPOSE_OUT_DIR` / `GS_PATH` | optional. The folder print PDFs are written to when "Make print files automatically" is on in Settings (see `docs/pdf-composition.md`), and the Ghostscript executable if it is not `gs` (`gswin64c` on Windows). Without `COMPOSE_OUT_DIR` the watcher never makes print files |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | mail server (port 587 + `SMTP_SECURE=0` = STARTTLS; 465 + `1` = TLS). `SMTP_FROM` defaults to `SMTP_USER` |
 
 Flags: `--dry-run` (read and validate against the database, save nothing, leave files in the inbox) and

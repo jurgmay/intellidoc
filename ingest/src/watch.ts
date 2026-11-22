@@ -6,6 +6,8 @@ import { FolderWatcher } from './watcher/folderWatcher.js';
 import { loadConfig, ConfigError } from './watcher/config.js';
 import { makeProcessor, makeAttachProcessor } from './watcher/processor.js';
 import { PdfWatchdog } from './watcher/pdfWatchdog.js';
+import { AutoComposer } from './compose/auto.js';
+import { GhostscriptGrey } from './compose/grey.js';
 import { loadAlertSettings, type AlertSettings } from './mssql/alertSettings.js';
 import { LogMailer, SmtpMailer, type Mailer } from './mail.js';
 import { MssqlRepository } from './mssql/repository.js';
@@ -72,11 +74,16 @@ for (const s of ['SIGINT', 'SIGTERM'] as const) process.on(s, () => { log('info'
 await watcher.init();
 if (!cfg.dryRun && !cfg.once) {
   const dog = new PdfWatchdog(real, mailer, { get waitMinutes() { return live.pdfWaitMinutes; }, get reminderMinutes() { return live.pdfReminderMinutes; }, get to() { return live.alertTo; }, inbox: cfg.dirs.inbox }, log);
+  const composer = cfg.composeOutDir
+    ? new AutoComposer({ pool, pdfDir: cfg.dirs.processed, outDir: cfg.composeOutDir, grey: new GhostscriptGrey(), log, notify: (subject, text) => mailer.send(live.alertTo, subject, text) })
+    : null;
+  if (composer) log('info', `Print files go to ${cfg.composeOutDir} when "Make print files automatically" is on in Settings`);
+  else log('info', 'COMPOSE_OUT_DIR is not set: print files are not made by the watcher');
   const rollJobNumbers = (): void => {
     applyDuePendingJobNumbers(pool).then((n) => { if (n > 0) log('info', `${n} pending job number${n === 1 ? '' : 's'} took effect`); })
       .catch((e) => log('error', `Pending job numbers: ${(e as Error).message}`));
   };
-  const tick = (): void => { rollJobNumbers(); refreshSettings().then(() => (live.xmlFirst ? dog.check() : 0)).catch((e) => log('error', `PDF check failed: ${(e as Error).message}`)); };
+  const tick = (): void => { rollJobNumbers(); void composer?.run(); refreshSettings().then(() => (live.xmlFirst ? dog.check() : 0)).catch((e) => log('error', `PDF check failed: ${(e as Error).message}`)); };
   const timer = setInterval(tick, 60_000);
   abortSignalCleanup(timer);
   tick();

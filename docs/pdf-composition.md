@@ -10,7 +10,14 @@ npm run compose -- <jobId> <outDir> [pdfDir] [logo.png]      (compose:env reads 
 
 `pdfDir` defaults to `$WATCH_DIR/processed` (the watcher keeps a prefix on the name, so the PDF is found by the end of its name). The job must be **Received**. Every batch of the job that is still **Created** is composed; others are reported as skipped. It is safe to repeat: it keeps the sequence numbers, replaces its own files and records, and deletes files of earlier runs that it no longer makes. Ghostscript is needed only when a colour page has to be printed mono (`GS_PATH` names the executable if it is not `gs`, `gswin64c` on Windows).
 
-It is **not** run automatically yet when a job becomes Received.
+## Automatic (the watcher)
+
+The folder watcher can make the print files itself. Once a minute it looks for Received jobs with a batch that has mail to print and no print file yet, and composes them (`src/compose/auto.ts`). It does this only when **both** are true:
+
+* **Make print files automatically** is on in Settings (Print file marks). It is **off** by default: switch it on once the marks have been checked on a printed proof. It is re-read every minute, no restart.
+* `COMPOSE_OUT_DIR` is set in the watcher's `.env` (the folder the PDFs are written to). `GS_PATH` names Ghostscript if it is not on the PATH.
+
+It reads the customer's PDF from the watcher's `processed` folder, so a job is composed a minute or so after it is Received, never while the PDF is still in the inbox. A batch that already has print files is left alone, and so is a batch that is no longer Created. A job that fails (PDF not found, Ghostscript missing, ...) is tried again after 1, 2, 5, 10 and then every 30 minutes, an e-mail goes to the alert recipients once after the third failure in a row, and it is never given up on. The compose command still works at any time and composes the batches again.
 
 ## What it does
 
