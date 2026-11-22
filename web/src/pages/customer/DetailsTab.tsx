@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Alert, Button, List, Modal, NumberInput, Select, Group, Paper, SimpleGrid, Stack, Switch, Text, Textarea, TextInput, Title } from '@mantine/core';
-import { FLAGS, makeSubAccount, type CustomerDetail, type FlagKey } from '../../api/customers';
+import { COLOUR_MODE_LABELS, FLAGS, makeSubAccount, type ColourMode, type CustomerDetail, type FlagKey } from '../../api/customers';
 import { orNull, run, type TabProps } from './shared';
 
 /** Flags the importer does not read yet. They were brought over from FileMaker and can be kept up to date here. */
@@ -30,6 +30,7 @@ export function lostSettings(d: CustomerDetail): string[] {
   if (d.sequenceRules.length > 0 || d.packSequenceKey) out.push('its pack sequence rules');
   if (d.emails.length > 0) out.push(`${plural(d.emails.length, 'notification e-mail address', 'notification e-mail addresses')}`);
   if (d.returnAddress) out.push('its return address');
+  if (d.colourMode !== 'ORIGINAL') out.push('its colour mode');
   if (d.misJobNumber && d.invoicing === null) out.push(`its job number (${d.misJobNumber}), because its mail is then invoiced under ${d.parent?.name ?? 'the parent'}`);
   return out;
 }
@@ -45,6 +46,7 @@ export function DetailsTab({ detail, lookups, patchDetails }: TabProps) {
   const [pending, setPending] = useState(detail.pendingJobNumber ?? '');
   const [rollDay, setRollDay] = useState<number>(detail.jobNumberRolloverDay);
   const [ret, setRet] = useState(detail.returnAddress ?? '');
+  const [colourMode, setColourMode] = useState<ColourMode>(detail.colourMode);
   const [flags, setFlags] = useState(detail.flags);
   const [parentId, setParentId] = useState<string | null>(detail.parent ? String(detail.parent.id) : null);
   const [invoicingId, setInvoicingId] = useState<string>(detail.invoicing ? String(detail.invoicing.id) : '');
@@ -52,11 +54,11 @@ export function DetailsTab({ detail, lookups, patchDetails }: TabProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
 
-  const dirty = code !== detail.code || name !== detail.name || mis !== (detail.misJobNumber ?? '') || pending !== (detail.pendingJobNumber ?? '') || rollDay !== detail.jobNumberRolloverDay || invoicingId !== (detail.invoicing ? String(detail.invoicing.id) : '') || ret !== (detail.returnAddress ?? '') || FLAGS.some((f) => flags[f] !== detail.flags[f]) || parentId !== (detail.parent ? String(detail.parent.id) : null);
+  const dirty = code !== detail.code || name !== detail.name || mis !== (detail.misJobNumber ?? '') || pending !== (detail.pendingJobNumber ?? '') || rollDay !== detail.jobNumberRolloverDay || invoicingId !== (detail.invoicing ? String(detail.invoicing.id) : '') || ret !== (detail.returnAddress ?? '') || colourMode !== detail.colourMode || FLAGS.some((f) => flags[f] !== detail.flags[f]) || parentId !== (detail.parent ? String(detail.parent.id) : null);
 
   const save = async () => {
     setSaving(true);
-    try { await patchDetails({ code: code.trim(), name: name.trim(), misJobNumber: orNull(mis), pendingJobNumber: orNull(pending), jobNumberRolloverDay: rollDay, invoicingAccountId: invoicingId === '' || parentChanged ? null : Number(invoicingId), returnAddress: orNull(ret), flags, parentId: parentId === null ? null : Number(parentId) }); setErrors({}); }
+    try { await patchDetails({ code: code.trim(), name: name.trim(), misJobNumber: orNull(mis), pendingJobNumber: orNull(pending), jobNumberRolloverDay: rollDay, invoicingAccountId: invoicingId === '' || parentChanged ? null : Number(invoicingId), returnAddress: orNull(ret), colourMode, flags, parentId: parentId === null ? null : Number(parentId) }); setErrors({}); }
     catch (e) { setErrors((e as { fieldErrors?: Record<string, string> }).fieldErrors ?? {}); }
     finally { setSaving(false); }
   };
@@ -88,6 +90,9 @@ export function DetailsTab({ detail, lookups, patchDetails }: TabProps) {
             description={parentChanged ? 'Save the new parent first, then choose the invoicing account.' : 'The account that is invoiced for this customer\'s mail. Its job number is printed on the run sheet, and its mail is never batched with another invoicing account\'s.'}
             data={detail.invoicingOptions.map((o, i) => ({ value: i === 0 ? '' : String(o.id), label: i === 0 ? `${o.name} (this customer)` : `${o.name} (${o.code})` }))} value={invoicingId} onChange={(v) => setInvoicingId(v ?? '')} error={errors['invoicingAccountId']} />
           <Textarea label="Return address" autosize minRows={3} value={ret} onChange={(e) => setRet(e.currentTarget.value)} error={errors['returnAddress']} />
+          <Select label="Colour mode" allowDeselect={false}
+            description="How the PDF is printed when it is composed. Pricing bills the pages as composed: a first-page mode bills one colour page per pack (or per mailpiece), the rest mono. Blank pages stay blank. A sub-account uses its parent's."
+            data={(Object.keys(COLOUR_MODE_LABELS) as ColourMode[]).map((v) => ({ value: v, label: COLOUR_MODE_LABELS[v] }))} value={colourMode} onChange={(v) => setColourMode((v ?? 'ORIGINAL') as ColourMode)} error={errors['colourMode']} />
         </SimpleGrid>
       </Paper>
       {detail.parent && (
@@ -111,7 +116,6 @@ export function DetailsTab({ detail, lookups, patchDetails }: TabProps) {
             <Switch key={f} label={lookups.flagLabels[f]} checked={flags[f]} onChange={(e) => setFlags({ ...flags, [f]: e.currentTarget.checked })} />
           ))}
         </SimpleGrid>
-        {detail.colourMode !== null && <Text size="sm" c="dimmed" mt="md">Colour mode (from FileMaker, not editable yet): {detail.colourMode}</Text>}
       </Paper>
       <Paper withBorder p="lg">
         <Title order={4} mb={4} c="brand.6">Deleting a customer</Title>

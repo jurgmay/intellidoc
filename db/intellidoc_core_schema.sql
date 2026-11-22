@@ -188,7 +188,8 @@ CREATE TABLE idoc.account (
     is_use_mrdf                BIT                NOT NULL CONSTRAINT df_account_mrdf DEFAULT (0),
     is_testing                 BIT                NOT NULL CONSTRAINT df_account_testing DEFAULT (0),
     is_deleted                 BIT                NOT NULL CONSTRAINT df_account_deleted DEFAULT (0),
-    colour_mode                TINYINT            NULL,
+    -- How the PDF is composed for print (see ingest/src/costing/colour.ts); pricing bills the composed pages. Held by accounts that hold their own settings.
+    colour_mode                NVARCHAR(25)       NOT NULL CONSTRAINT df_account_colour DEFAULT (N'ORIGINAL'),
     mis_job_number             NVARCHAR(50)       NULL,
     -- The next job number, set in advance. On pending_job_number_from (the 1st of a month) it replaces mis_job_number and is cleared.
     pending_mis_job_number     NVARCHAR(50)       NULL,
@@ -202,6 +203,7 @@ CREATE TABLE idoc.account (
     created_at                 DATETIME2(0)       NOT NULL CONSTRAINT df_account_created DEFAULT (SYSUTCDATETIME()),
     legacy_id                  UNIQUEIDENTIFIER   NULL,   -- FileMaker Customers.id (reference import only)
     CONSTRAINT uq_account_code UNIQUE (account_code),
+    CONSTRAINT ck_account_colour CHECK (colour_mode IN (N'ORIGINAL', N'FIRST_PACK_PAGE', N'FIRST_MAILPIECE_PAGE', N'ALL_MONO')),
     CONSTRAINT ck_account_inherits CHECK (inherits_settings = 0 OR parent_account_id IS NOT NULL),
     CONSTRAINT ck_account_envmode CHECK (envelopes_mode IN (N'OWN', N'INHERIT', N'EXTEND') AND (envelopes_mode = N'OWN' OR parent_account_id IS NOT NULL)),
     CONSTRAINT ck_account_modes CHECK (brands_mode IN (N'OWN', N'INHERIT', N'EXTEND') AND matching_mode IN (N'OWN', N'INHERIT', N'EXTEND') AND sequence_mode IN (N'OWN', N'INHERIT', N'EXTEND') AND emails_mode IN (N'OWN', N'INHERIT', N'EXTEND')

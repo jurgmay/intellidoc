@@ -1,6 +1,6 @@
 import { ValidationError } from '../errors.js';
 import { parseEmails } from '../settings/catalogue.js';
-import { INHERIT_MODES, SETTINGS, type InheritMode, type SettingKey, FLAGS, type CustomerDetailsInput, type EnvelopeInput, type FlagKey, type MatchRule, type SequenceRule } from './types.js';
+import { COLOUR_MODES, INHERIT_MODES, SETTINGS, type InheritMode, type SettingKey, FLAGS, type ColourMode, type CustomerDetailsInput, type EnvelopeInput, type FlagKey, type MatchRule, type SequenceRule } from './types.js';
 
 const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 type Body = Record<string, unknown> | null | undefined;
@@ -48,6 +48,8 @@ export function parseDetails(body: Body): CustomerDetailsInput {
   if (typeof day !== 'number' || !Number.isInteger(day) || day < 1 || day > 28) errs['jobNumberRolloverDay'] = 'The rollover day must be a whole number from 1 to 28';
   const pendingJobNumber = text(errs, body, 'pendingJobNumber', 'Pending job number', 50, false);
   const returnAddress = text(errs, body, 'returnAddress', 'Return address', 500, false);
+  const cm = body?.['colourMode'];
+  if (!COLOUR_MODES.includes(cm as ColourMode)) errs['colourMode'] = 'Choose how the colour is printed';
   const batchingKey = text(errs, body, 'batchingKey', 'Batching key', 100, false);
   const packSequenceKey = text(errs, body, 'packSequenceKey', 'Pack sequence key', 100, false);
   const pid = body?.['parentId'];
@@ -65,7 +67,7 @@ export function parseDetails(body: Body): CustomerDetailsInput {
     flags[f] = flagsRaw[f] === true;
   }
   done(errs);
-  return { code: code!, name: name!, misJobNumber, pendingJobNumber, jobNumberRolloverDay: day as number, returnAddress, flags, batchingKey, packSequenceKey, parentId, invoicingAccountId };
+  return { code: code!, name: name!, misJobNumber, pendingJobNumber, jobNumberRolloverDay: day as number, returnAddress, colourMode: cm as ColourMode, flags, batchingKey, packSequenceKey, parentId, invoicingAccountId };
 }
 
 export function parseBrandName(body: Body): string {

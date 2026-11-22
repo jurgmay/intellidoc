@@ -34,15 +34,21 @@ export interface InheritedSettings {
   /** Set when the pack sequence group is taken from the parent. */
   sequence: { key: string | null; from: ParentView } | null;
 }
+/** How the PDF is composed for print; pricing bills the composed pages. */
+export type ColourMode = 'ORIGINAL' | 'FIRST_PACK_PAGE' | 'FIRST_MAILPIECE_PAGE' | 'ALL_MONO';
+export const COLOUR_MODE_LABELS: Record<ColourMode, string> = {
+  ORIGINAL: 'No change (print as in the PDF)', FIRST_PACK_PAGE: 'First page of each pack in colour, the rest mono',
+  FIRST_MAILPIECE_PAGE: 'First page of each mailpiece in colour, the rest mono', ALL_MONO: 'All mono',
+};
 export interface CustomerDetail {
-  id: number; code: string; name: string; misJobNumber: string | null; pendingJobNumber: string | null; pendingFrom: string | null; jobNumberRolloverDay: number; returnAddress: string | null; colourMode: number | null;
+  id: number; code: string; name: string; misJobNumber: string | null; pendingJobNumber: string | null; pendingFrom: string | null; jobNumberRolloverDay: number; returnAddress: string | null; colourMode: ColourMode;
   flags: Record<FlagKey, boolean>; batchingKey: string | null; packSequenceKey: string | null;
   parent: ParentView | null; children: ChildView[];
   /** null = the customer itself. */
   invoicing: ParentView | null; invoicingOptions: ParentView[];
   accounts: AccountView[]; brands: BrandView[]; envelopes: EnvelopeView[]; modes: Modes; inheritedEnvelopes: InheritedEnvelopeView[]; matchRules: MatchRule[]; sequenceRules: SequenceRule[]; emails: string[]; inherited: InheritedSettings;
 }
-export type DetailsInput = Pick<CustomerDetail, 'code' | 'name' | 'misJobNumber' | 'pendingJobNumber' | 'jobNumberRolloverDay' | 'returnAddress' | 'flags' | 'batchingKey' | 'packSequenceKey'> & { parentId: number | null; invoicingAccountId: number | null };
+export type DetailsInput = Pick<CustomerDetail, 'code' | 'name' | 'misJobNumber' | 'pendingJobNumber' | 'jobNumberRolloverDay' | 'returnAddress' | 'colourMode' | 'flags' | 'batchingKey' | 'packSequenceKey'> & { parentId: number | null; invoicingAccountId: number | null };
 export interface EnvelopeInput {
   brandId: number | null; deliveryBand: string; postalRateId: number; stockItemId: number; reference: string | null; externalName: string | null; isOversticker: boolean;
 }

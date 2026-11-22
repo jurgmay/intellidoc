@@ -1,3 +1,6 @@
+/** How the PDF is composed for print; pricing bills the composed pages. */
+export const COLOUR_MODES = ['ORIGINAL', 'FIRST_PACK_PAGE', 'FIRST_MAILPIECE_PAGE', 'ALL_MONO'] as const;
+export type ColourMode = (typeof COLOUR_MODES)[number];
 export interface CustomerRow {
   id: number; code: string; name: string; misJobNumber: string | null; pendingJobNumber: string | null;
   isAddressMatching: boolean; isTesting: boolean; isDeleted: boolean;
@@ -39,7 +42,7 @@ export const FLAGS = ['isAddressMatching', 'isArchiveMailpieces', 'isCreateOutpu
 export type FlagKey = (typeof FLAGS)[number];
 
 export interface CustomerDetail {
-  id: number; code: string; name: string; misJobNumber: string | null; returnAddress: string | null; colourMode: number | null;
+  id: number; code: string; name: string; misJobNumber: string | null; returnAddress: string | null; colourMode: ColourMode;
   /** The next job number, and the date (1st of a month, London) on which it replaces the job number. */
   pendingJobNumber: string | null; pendingFrom: string | null;
   /** Day of the month (1-28) on which a pending job number takes over. */
@@ -62,7 +65,7 @@ export interface CustomerDetail {
 
 /** What can be edited on the customer record itself. */
 export interface CustomerDetailsInput {
-  code: string; name: string; misJobNumber: string | null; pendingJobNumber: string | null; jobNumberRolloverDay: number; returnAddress: string | null;
+  code: string; name: string; misJobNumber: string | null; pendingJobNumber: string | null; jobNumberRolloverDay: number; returnAddress: string | null; colourMode: ColourMode;
   flags: Record<FlagKey, boolean>; batchingKey: string | null; packSequenceKey: string | null;
   /** null = top of its hierarchy. Must be another customer, and never itself or one of its own descendants. */
   parentId: number | null;

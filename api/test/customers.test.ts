@@ -14,7 +14,7 @@ let app: FastifyInstance;
 let store: MemoryCustomerStore;
 let acme: number;
 const flags = (over: Record<string, boolean> = {}) => ({ ...Object.fromEntries(FLAGS.map((f) => [f, false])), ...over });
-const details = (over: Record<string, unknown> = {}) => ({ code: 'ACME', name: 'Acme Ltd', misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, returnAddress: null, batchingKey: null, packSequenceKey: null, parentId: null, flags: flags(), ...over });
+const details = (over: Record<string, unknown> = {}) => ({ code: 'ACME', name: 'Acme Ltd', misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, returnAddress: null, colourMode: 'ORIGINAL', batchingKey: null, packSequenceKey: null, parentId: null, flags: flags(), ...over });
 const env = (over: Record<string, unknown> = {}) => ({ brandId: null, deliveryBand: '2nd Class', postalRateId: 1, stockItemId: 10, reference: null, externalName: null, isOversticker: false, ...over });
 
 beforeEach(async () => {
@@ -56,6 +56,16 @@ describe('create and edit details', () => {
     const r = await call('PUT', `/api/customers/${acme}`, details({ misJobNumber: '555', returnAddress: 'PO Box 1', batchingKey: 'Department', flags: flags({ isAddressMatching: true }) }));
     expect(r.statusCode).toBe(200);
     expect(r.json()).toMatchObject({ misJobNumber: '555', batchingKey: 'Department', flags: { isAddressMatching: true } });
+  });
+  it('saves the colour mode, refuses an unknown one, and writes it to the history', async () => {
+    const bad = await call('PUT', `/api/customers/${acme}`, details({ colourMode: 'RAINBOW' }));
+    expect(bad.statusCode).toBe(422);
+    expect(bad.json().errors.colourMode).toBeDefined();
+    const r = await call('PUT', `/api/customers/${acme}`, details({ colourMode: 'ALL_MONO' }));
+    expect(r.statusCode).toBe(200);
+    expect(r.json()).toMatchObject({ colourMode: 'ALL_MONO' });
+    const rows = (await call('GET', `/api/customers/${acme}/history`)).json().rows as { summary: string }[];
+    expect(rows.map((x) => x.summary)).toEqual(['Colour mode: No change (as in the PDF) → All mono']);
   });
   it('rejects a missing flag and over-long text', async () => {
     const r = await call('PUT', `/api/customers/${acme}`, details({ name: 'x'.repeat(201), flags: {} }));

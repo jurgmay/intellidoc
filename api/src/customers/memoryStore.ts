@@ -60,7 +60,7 @@ export class MemoryCustomerStore implements CustomerStore {
     return id;
   }
   private put(id: number, c: { code: string; name: string } & Partial<Cust>): void {
-    this.customers.set(id, { id, parentId: null, modes: noModes(), invoicingAccountId: null, misJobNumber: null, pendingJobNumber: null, pendingFrom: null, jobNumberRolloverDay: 1, returnAddress: null, colourMode: null, flags: noFlags(), batchingKey: null, packSequenceKey: null, matchRules: [], sequenceRules: [], emails: [], ...c });
+    this.customers.set(id, { id, parentId: null, modes: noModes(), invoicingAccountId: null, misJobNumber: null, pendingJobNumber: null, pendingFrom: null, jobNumberRolloverDay: 1, returnAddress: null, colourMode: 'ORIGINAL', flags: noFlags(), batchingKey: null, packSequenceKey: null, matchRules: [], sequenceRules: [], emails: [], ...c });
   }
 
   private cust(id: number): Cust { const c = this.customers.get(id); if (!c) throw new NotFoundError('Customer not found'); return c; }
