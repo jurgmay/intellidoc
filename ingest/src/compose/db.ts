@@ -102,16 +102,23 @@ export async function saveComposition(pool: sql.ConnectionPool, batchId: number,
     await q(`UPDATE p SET batch_file_id = NULL, output_start_page = NULL, output_end_page = NULL FROM idoc.pack AS p
              INNER JOIN idoc.mailpiece AS m ON m.mailpiece_id = p.mailpiece_id WHERE m.batch_id = @b`, [['b', sql.BigInt, batchId]]);
     await q('DELETE FROM idoc.batch_file WHERE batch_id = @b', [['b', sql.BigInt, batchId]]);
-    for (const [mailpieceId, seq] of plan.newSequences) await q('UPDATE idoc.mailpiece SET sequence_number = @s WHERE mailpiece_id = @m AND sequence_number IS NULL',
-      [['s', sql.Int, seq], ['m', sql.BigInt, mailpieceId]]);
+    // Set-based, so the transaction (and the locks it holds on the pack and mailpiece rows) lasts seconds, not minutes: one statement per
+    // thousands of rows instead of one round trip per pack. A long transaction blocks the Jobs screen's queries until they time out.
+    if (plan.newSequences.size) await q(`UPDATE m SET sequence_number = j.s FROM idoc.mailpiece AS m
+        INNER JOIN OPENJSON(@seq) WITH (m BIGINT '$.m', s INT '$.s') AS j ON j.m = m.mailpiece_id WHERE m.sequence_number IS NULL`,
+      [['seq', sql.NVarChar(sql.MAX), JSON.stringify([...plan.newSequences].map(([m, s]) => ({ m, s })))]]);
+    const packs: { p: number; g: number; s: number; e: number }[] = [];
     for (const seg of plan.segments) {
       const f = files.find((x) => x.segmentNumber === seg.segmentNumber)!;
-      const id = (await q(`INSERT INTO idoc.batch_file (batch_id, segment_number, file_name, mailpiece_count, page_count, first_sequence, last_sequence)
-        OUTPUT INSERTED.batch_file_id AS id VALUES (@b, @n, @f, @mc, @pc, @fs, @ls)`, [['b', sql.BigInt, batchId], ['n', sql.Int, f.segmentNumber], ['f', sql.NVarChar(260), f.fileName],
-        ['mc', sql.Int, f.mailpieceCount], ['pc', sql.Int, f.pageCount], ['fs', sql.Int, f.firstSequence], ['ls', sql.Int, f.lastSequence]])).recordset[0].id as number;
-      for (const p of seg.packs) await q('UPDATE idoc.pack SET batch_file_id = @f, output_start_page = @s, output_end_page = @e WHERE pack_id = @p',
-        [['f', sql.BigInt, id], ['s', sql.Int, p.outputStart], ['e', sql.Int, p.outputEnd], ['p', sql.BigInt, p.packId]]);
+      await q(`INSERT INTO idoc.batch_file (batch_id, segment_number, file_name, mailpiece_count, page_count, first_sequence, last_sequence)
+        VALUES (@b, @n, @f, @mc, @pc, @fs, @ls)`, [['b', sql.BigInt, batchId], ['n', sql.Int, f.segmentNumber], ['f', sql.NVarChar(260), f.fileName],
+        ['mc', sql.Int, f.mailpieceCount], ['pc', sql.Int, f.pageCount], ['fs', sql.Int, f.firstSequence], ['ls', sql.Int, f.lastSequence]]);
+      for (const p of seg.packs) packs.push({ p: p.packId, g: seg.segmentNumber, s: p.outputStart, e: p.outputEnd });
     }
+    if (packs.length) await q(`UPDATE p SET batch_file_id = f.batch_file_id, output_start_page = j.s, output_end_page = j.e FROM idoc.pack AS p
+        INNER JOIN OPENJSON(@packs) WITH (p BIGINT '$.p', g INT '$.g', s INT '$.s', e INT '$.e') AS j ON j.p = p.pack_id
+        INNER JOIN idoc.batch_file AS f ON f.batch_id = @b AND f.segment_number = j.g`,
+      [['packs', sql.NVarChar(sql.MAX), JSON.stringify(packs)], ['b', sql.BigInt, batchId]]);
     await tx.commit();
   } catch (e) {
     try { await tx.rollback(); } catch { /* already rolled back */ }
