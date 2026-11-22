@@ -14,6 +14,8 @@ export interface Config {
   logFile?: string;
   /** Where print PDFs are written. Unset: the watcher never makes them (the compose command still can). */
   composeOutDir?: string;
+  /** Where MRDF files (<batchCode>.txt) go for customers that use MRDF: the inserter's input folder. Unset: no MRDF file is written. */
+  mrdfOutDir?: string;
   /** Import an XML on its own when its PDF has not arrived (default). XML_FIRST=0 restores waiting for the pair. */
   xmlFirst: boolean;
   pdfWaitMinutes: number;
@@ -24,7 +26,7 @@ export interface Config {
 
 export class ConfigError extends Error {}
 
-/** Environment: INTELLIDOC_DB, WATCH_DIR, POLL_SECONDS(5), STABLE_SECONDS(10), RETRY_SECONDS(60), XML_FIRST(1), PDF_WAIT_MINUTES(30), PDF_REMINDER_MINUTES(=wait), ALERT_TO (comma separated), SMTP_HOST, SMTP_PORT(587), SMTP_SECURE(0), SMTP_USER, SMTP_PASS, SMTP_FROM, COMPOSE_OUT_DIR, GS_PATH, PDF_ENGINE(auto|qpdf|pdflib), CHECK_POSTCODES(0|1), LOG_FILE. Flags: --dry-run, --once. */
+/** Environment: INTELLIDOC_DB, WATCH_DIR, POLL_SECONDS(5), STABLE_SECONDS(10), RETRY_SECONDS(60), XML_FIRST(1), PDF_WAIT_MINUTES(30), PDF_REMINDER_MINUTES(=wait), ALERT_TO (comma separated), SMTP_HOST, SMTP_PORT(587), SMTP_SECURE(0), SMTP_USER, SMTP_PASS, SMTP_FROM, COMPOSE_OUT_DIR, MRDF_OUT_DIR, GS_PATH, PDF_ENGINE(auto|qpdf|pdflib), CHECK_POSTCODES(0|1), LOG_FILE. Flags: --dry-run, --once. */
 export function loadConfig(env: NodeJS.ProcessEnv, argv: string[]): Config {
   const need = (k: string): string => { const v = env[k]; if (!v) throw new ConfigError(`Missing setting ${k}`); return v; };
   const num = (k: string, def: number): number => {
@@ -42,6 +44,7 @@ export function loadConfig(env: NodeJS.ProcessEnv, argv: string[]): Config {
     pdfEngine: engine as Config['pdfEngine'], checkPostcodes: env['CHECK_POSTCODES'] === '1', dryRun, once: argv.includes('--once'),
     logFile: env['LOG_FILE'] || undefined,
     composeOutDir: env['COMPOSE_OUT_DIR'] ? resolve(env['COMPOSE_OUT_DIR']) : undefined,
+    mrdfOutDir: env['MRDF_OUT_DIR'] ? resolve(env['MRDF_OUT_DIR']) : undefined,
     xmlFirst: env['XML_FIRST'] !== '0',
     pdfWaitMinutes: num('PDF_WAIT_MINUTES', 30),
     pdfReminderMinutes: num('PDF_REMINDER_MINUTES', num('PDF_WAIT_MINUTES', 30)),

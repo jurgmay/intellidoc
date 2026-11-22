@@ -53,7 +53,19 @@ CREATE TABLE idoc.settings (
     mark_dot_x_mm                       DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_dot_x DEFAULT (205.5),     -- the pack start dot (centre); FileMaker's fixed position
     mark_dot_y_mm                       DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_dot_y DEFAULT (269),
     mark_dot_diameter_mm                DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_dot_d DEFAULT (2),
+    -- MRDF page codes (customers that use MRDF): on the front of every sheet, in the same units. Placeholders until set from a printed proof.
+    mrdf_dm_left_mm                     DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_mrdf_dm_left DEFAULT (10),
+    mrdf_dm_top_mm                      DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_mrdf_dm_top DEFAULT (10),
+    mrdf_dm_width_mm                    DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_mrdf_dm_width DEFAULT (8),
+    mrdf_dm_height_mm                   DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_mrdf_dm_height DEFAULT (8),
+    mrdf_ocr_font_pt                    DECIMAL(6, 3) NOT NULL CONSTRAINT df_settings_mrdf_ocr_font DEFAULT (8.2),
+    mrdf_ocr_left_mm                    DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_mrdf_ocr_left DEFAULT (20),
+    mrdf_ocr_top_mm                     DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_mrdf_ocr_top DEFAULT (10),
+    mrdf_ocr_width_mm                   DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_mrdf_ocr_width DEFAULT (30),
+    mrdf_ocr_height_mm                  DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_mrdf_ocr_height DEFAULT (4),
     CONSTRAINT ck_settings_single_row CHECK (settings_id = 1),
+    CONSTRAINT ck_settings_mrdf CHECK (mrdf_dm_width_mm > 0 AND mrdf_dm_height_mm > 0 AND mrdf_ocr_font_pt > 0 AND mrdf_ocr_width_mm > 0 AND mrdf_ocr_height_mm > 0
+        AND mrdf_dm_left_mm >= 0 AND mrdf_dm_top_mm >= 0 AND mrdf_ocr_left_mm >= 0 AND mrdf_ocr_top_mm >= 0),
     CONSTRAINT ck_settings_marks CHECK (max_pages_per_pdf >= 2 AND mark_seq_font_pt > 0 AND mark_seq_width_mm > 0 AND mark_seq_height_mm > 0
         AND mark_dm_width_mm > 0 AND mark_dm_height_mm > 0 AND mark_dot_diameter_mm > 0
         AND mark_seq_left_mm >= 0 AND mark_seq_top_mm >= 0 AND mark_dm_left_mm >= 0 AND mark_dm_top_mm >= 0 AND mark_dot_x_mm >= 0 AND mark_dot_y_mm >= 0),

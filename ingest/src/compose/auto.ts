@@ -8,6 +8,8 @@ export interface AutoComposerOptions {
   /** Where the watcher keeps PDFs it has processed. */
   pdfDir: string;
   outDir: string;
+  /** Where MRDF files go (the inserter's input folder). */
+  mrdfDir?: string;
   grey: GreyConverter | null;
   log: (level: 'info' | 'warn' | 'error', msg: string) => void;
   /** Told once when a job has failed several times in a row. */
@@ -43,7 +45,7 @@ export class AutoComposer {
         const f = this.failures.get(jobId);
         if (f && this.now() < f.retryAt) continue;
         try {
-          const batches = await (this.o.compose ?? ((id) => composeJob({ pool: this.o.pool, jobId: id, pdfDir: this.o.pdfDir, outDir: this.o.outDir, grey: this.o.grey, onlyNew: true })))(jobId);
+          const batches = await (this.o.compose ?? ((id) => composeJob({ pool: this.o.pool, jobId: id, pdfDir: this.o.pdfDir, outDir: this.o.outDir, mrdfDir: this.o.mrdfDir, grey: this.o.grey, onlyNew: true })))(jobId);
           const made = batches.filter((b) => b.files.length > 0);
           this.o.log('info', `Job ${jobId}: print files made for ${made.length} batch${made.length === 1 ? '' : 'es'} (${made.flatMap((b) => b.files).length} files)`);
           this.failures.delete(jobId);

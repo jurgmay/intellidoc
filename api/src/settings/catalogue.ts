@@ -22,7 +22,7 @@ export interface SettingDef {
   appliesTo: string;
 }
 
-export const GROUPS = ['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print file marks'] as const;
+export const GROUPS = ['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print file marks', 'MRDF page codes'] as const;
 
 export const SETTINGS: SettingDef[] = [
   {
@@ -167,6 +167,60 @@ export const SETTINGS: SettingDef[] = [
     key: 'markDotDiameterMm', column: 'mark_dot_diameter_mm', group: 'Print file marks', label: 'Pack start dot: diameter', type: 'number', unit: 'mm', min: 0.1, max: 50, step: 0.1,
     description: 'Diameter of the dot. It is red, or black when the page is printed mono.',
     usedBy: 'Print file composition: the dot printed on the first page of each mailpiece that marks where a pack starts.',
+    appliesTo: 'Next print file composed. Files already made are not changed.',
+  },
+  {
+    key: 'mrdfDmLeftMm', column: 'mrdf_dm_left_mm', group: 'MRDF page codes', label: 'Data Matrix: left', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
+    description: 'Left edge of the MRDF Data Matrix. Measured from the top left of the trim box.',
+    usedBy: 'Print file composition: the MRDF codes printed on the front of every sheet for customers that use MRDF, read by the Bluecrest inserter.',
+    appliesTo: 'Next print file composed. Files already made are not changed.',
+  },
+  {
+    key: 'mrdfDmTopMm', column: 'mrdf_dm_top_mm', group: 'MRDF page codes', label: 'Data Matrix: top', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
+    description: 'Top edge of the MRDF Data Matrix. Measured from the top left of the trim box.',
+    usedBy: 'Print file composition: the MRDF codes printed on the front of every sheet for customers that use MRDF, read by the Bluecrest inserter.',
+    appliesTo: 'Next print file composed. Files already made are not changed.',
+  },
+  {
+    key: 'mrdfDmWidthMm', column: 'mrdf_dm_width_mm', group: 'MRDF page codes', label: 'Data Matrix: box width', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
+    description: 'Width of the box the MRDF Data Matrix is fitted in (the code is square, so the smaller of width and height is used).',
+    usedBy: 'Print file composition: the MRDF codes printed on the front of every sheet for customers that use MRDF, read by the Bluecrest inserter.',
+    appliesTo: 'Next print file composed. Files already made are not changed.',
+  },
+  {
+    key: 'mrdfDmHeightMm', column: 'mrdf_dm_height_mm', group: 'MRDF page codes', label: 'Data Matrix: box height', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
+    description: 'Height of the box the MRDF Data Matrix is fitted in.',
+    usedBy: 'Print file composition: the MRDF codes printed on the front of every sheet for customers that use MRDF, read by the Bluecrest inserter.',
+    appliesTo: 'Next print file composed. Files already made are not changed.',
+  },
+  {
+    key: 'mrdfOcrFontPt', column: 'mrdf_ocr_font_pt', group: 'MRDF page codes', label: 'OCR code: font size', type: 'number', unit: 'pt', min: 1, max: 72, step: 0.1,
+    description: 'Size of the MRDF OCR code text (OCR-B), e.g. 01020001234. FileMaker used 8.2.',
+    usedBy: 'Print file composition: the MRDF codes printed on the front of every sheet for customers that use MRDF, read by the Bluecrest inserter.',
+    appliesTo: 'Next print file composed. Files already made are not changed.',
+  },
+  {
+    key: 'mrdfOcrLeftMm', column: 'mrdf_ocr_left_mm', group: 'MRDF page codes', label: 'OCR code: left', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
+    description: 'Left edge of the box the OCR code is centred in. Measured from the top left of the trim box.',
+    usedBy: 'Print file composition: the MRDF codes printed on the front of every sheet for customers that use MRDF, read by the Bluecrest inserter.',
+    appliesTo: 'Next print file composed. Files already made are not changed.',
+  },
+  {
+    key: 'mrdfOcrTopMm', column: 'mrdf_ocr_top_mm', group: 'MRDF page codes', label: 'OCR code: top', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
+    description: 'Top edge of the box the OCR code is centred in.',
+    usedBy: 'Print file composition: the MRDF codes printed on the front of every sheet for customers that use MRDF, read by the Bluecrest inserter.',
+    appliesTo: 'Next print file composed. Files already made are not changed.',
+  },
+  {
+    key: 'mrdfOcrWidthMm', column: 'mrdf_ocr_width_mm', group: 'MRDF page codes', label: 'OCR code: box width', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
+    description: 'Width of the box the OCR code is centred in.',
+    usedBy: 'Print file composition: the MRDF codes printed on the front of every sheet for customers that use MRDF, read by the Bluecrest inserter.',
+    appliesTo: 'Next print file composed. Files already made are not changed.',
+  },
+  {
+    key: 'mrdfOcrHeightMm', column: 'mrdf_ocr_height_mm', group: 'MRDF page codes', label: 'OCR code: box height', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
+    description: 'Height of the box the OCR code is centred in.',
+    usedBy: 'Print file composition: the MRDF codes printed on the front of every sheet for customers that use MRDF, read by the Bluecrest inserter.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
 ];

@@ -1,4 +1,4 @@
-import { mkdir, readdir, rm, stat, writeFile, readFile } from 'node:fs/promises';
+import { mkdir, readdir, rename, rm, stat, writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import sql from 'mssql';
 import { PDFDocument } from 'pdf-lib';
@@ -7,7 +7,10 @@ import { buildRunSheet, paperFacts } from '../runsheet/data.js';
 import { renderRunSheet } from '../runsheet/pdf.js';
 import { loadRunSheetInputs } from '../runsheet/query.js';
 import { composeBatch } from './compose.js';
-import { loadComposeSettings, loadJobToCompose, recordedFiles, saveComposition } from './db.js';
+import type { BatchToCompose } from './db.js';
+import type { BatchPlan } from './plan.js';
+import { loadComposeSettings, loadJobToCompose, loadMrdfRecipients, recordedFiles, saveComposition } from './db.js';
+import { buildMrdf, encodeAnsi, mailpiecePages } from './mrdf.js';
 import type { GreyConverter } from './grey.js';
 import { planBatch } from './plan.js';
 
@@ -16,12 +19,14 @@ export interface ComposeJobOptions {
   /** Where the customer's PDF is: the watcher's processed folder (it puts a prefix on the name, so the file is found by the end of its name). */
   pdfDir: string;
   outDir: string;
+  /** Where the MRDF files (<batchCode>.txt) go: the inserter's input folder. Without it no MRDF file is made, but the page codes are still printed. */
+  mrdfDir?: string;
   logo?: Uint8Array;
   grey: GreyConverter | null;
   /** Leave alone a batch that already has print files (the automatic run); the default composes again. */
   onlyNew?: boolean;
 }
-export interface ComposedBatch { batchCode: number; files: string[]; skipped?: string }
+export interface ComposedBatch { batchCode: number; files: string[]; mrdfFile?: string; skipped?: string }
 
 /** The newest file in `dir` named `name`, or `name` with the watcher's clash prefix (yyyymmddhhmmss, optionally -n, then an underscore). */
 export async function findSourcePdf(dir: string, name: string): Promise<string> {
@@ -57,13 +62,32 @@ export async function composeJob(o: ComposeJobOptions): Promise<ComposedBatch[]>
 
     const files = await composeBatch({
       batchCode: b.batchCode, source, runSheet, plan, marks: settings.marks, grey: o.grey, fileName: (n) => printFileName(b.batchCode, n),
-      keywords: b.paperName && paperFacts(b.paperName).edgeToEdge ? ['imposition:SRA4'] : undefined,
+      keywords: b.paperName && paperFacts(b.paperName).edgeToEdge ? ['imposition:SRA4'] : undefined, mrdf: b.mrdf !== null,
     });
     const old = await recordedFiles(o.pool, b.batchId);
     for (const f of files) await writeFile(join(o.outDir, f.fileName), f.bytes);
     await saveComposition(o.pool, b.batchId, plan, files);
     for (const name of old) if (!files.some((f) => f.fileName === name)) await rm(join(o.outDir, name), { force: true });
-    result.push({ batchCode: b.batchCode, files: files.map((f) => join(o.outDir, f.fileName)) });
+    let mrdfFile: string | undefined;
+    if (b.mrdf && o.mrdfDir) mrdfFile = await writeMrdfFile(o.pool, o.mrdfDir, b, plan);
+    result.push({ batchCode: b.batchCode, files: files.map((f) => join(o.outDir, f.fileName)), ...(mrdfFile ? { mrdfFile } : {}) });
   }
   return result;
+}
+
+/** Writes <batchCode>.txt for the batch (ANSI, CRLF), through a temporary name so the inserter never picks up half a file. */
+async function writeMrdfFile(pool: sql.ConnectionPool, dir: string, b: BatchToCompose, plan: BatchPlan, now: Date = new Date()): Promise<string> {
+  const recipients = await loadMrdfRecipients(pool, b.batchId);
+  const pages = mailpiecePages(plan);
+  const pieces = plan.segments.flatMap((s) => s.mailpieces).map((m) => {
+    const r = recipients.get(m.mailpieceId);
+    if (!r) throw new Error(`Mailpiece ${m.mailpieceId} has no address for the MRDF file`);
+    return { sequenceNumber: m.sequenceNumber, pages: pages.get(m.sequenceNumber) ?? 0, addressLines: r.addressLines, postcode: r.postcode };
+  });
+  const text = buildMrdf({ batchCode: b.batchCode, accountCode: b.mrdf!.accountCode, returnAddress: b.mrdf!.returnAddress, pieces, now });
+  await mkdir(dir, { recursive: true });
+  const target = join(dir, `${b.batchCode}.txt`), tmp = `${target}.tmp`;
+  await writeFile(tmp, encodeAnsi(text));
+  await rename(tmp, target);
+  return target;
 }

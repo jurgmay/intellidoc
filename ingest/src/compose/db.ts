@@ -8,7 +8,8 @@ export interface ComposeSettings { autoCompose: boolean; maxPagesPerPdf: number;
 
 export async function loadComposeSettings(pool: sql.ConnectionPool): Promise<ComposeSettings> {
   const r = (await pool.request().query<Record<string, number>>(`SELECT CAST(auto_compose AS INT) AS auto_compose, max_pages_per_pdf, mark_seq_font_pt, mark_seq_left_mm, mark_seq_top_mm, mark_seq_width_mm, mark_seq_height_mm,
-      mark_dm_left_mm, mark_dm_top_mm, mark_dm_width_mm, mark_dm_height_mm, mark_dot_x_mm, mark_dot_y_mm, mark_dot_diameter_mm FROM idoc.settings WHERE settings_id = 1`)).recordset[0];
+      mark_dm_left_mm, mark_dm_top_mm, mark_dm_width_mm, mark_dm_height_mm, mark_dot_x_mm, mark_dot_y_mm, mark_dot_diameter_mm,
+      mrdf_dm_left_mm, mrdf_dm_top_mm, mrdf_dm_width_mm, mrdf_dm_height_mm, mrdf_ocr_font_pt, mrdf_ocr_left_mm, mrdf_ocr_top_mm, mrdf_ocr_width_mm, mrdf_ocr_height_mm FROM idoc.settings WHERE settings_id = 1`)).recordset[0];
   if (!r) throw new Error('idoc.settings has no row');
   const n = (k: string): number => Number(r[k]);
   return {
@@ -17,19 +18,30 @@ export async function loadComposeSettings(pool: sql.ConnectionPool): Promise<Com
       seq: { fontPt: n('mark_seq_font_pt'), leftMm: n('mark_seq_left_mm'), topMm: n('mark_seq_top_mm'), widthMm: n('mark_seq_width_mm'), heightMm: n('mark_seq_height_mm') },
       dm: { leftMm: n('mark_dm_left_mm'), topMm: n('mark_dm_top_mm'), widthMm: n('mark_dm_width_mm'), heightMm: n('mark_dm_height_mm') },
       dot: { xMm: n('mark_dot_x_mm'), yMm: n('mark_dot_y_mm'), diameterMm: n('mark_dot_diameter_mm') },
+      mrdf: {
+        dm: { leftMm: n('mrdf_dm_left_mm'), topMm: n('mrdf_dm_top_mm'), widthMm: n('mrdf_dm_width_mm'), heightMm: n('mrdf_dm_height_mm') },
+        ocr: { fontPt: n('mrdf_ocr_font_pt'), leftMm: n('mrdf_ocr_left_mm'), topMm: n('mrdf_ocr_top_mm'), widthMm: n('mrdf_ocr_width_mm'), heightMm: n('mrdf_ocr_height_mm') },
+      },
     },
   };
 }
 
 export interface JobToCompose { jobId: number; status: string; pdfFileName: string; batches: BatchToCompose[] }
-export interface BatchToCompose { batchId: number; batchCode: number; status: string; paperName: string | null; mailpieces: PlanMailpiece[] }
+export interface BatchToCompose {
+  batchId: number; batchCode: number; status: string; paperName: string | null; mailpieces: PlanMailpiece[];
+  /** The customer's MRDF details; null when the customer does not use MRDF. */
+  mrdf: { accountCode: string; returnAddress: string[] } | null;
+}
 
 /** Reads the job, its batches and, for each, the mailpieces and packs the planner needs. Read-only. */
 export async function loadJobToCompose(pool: sql.ConnectionPool, jobId: number): Promise<JobToCompose> {
   const job = (await pool.request().input('j', sql.BigInt, jobId).query<{ status: string; pdf_file_name: string }>('SELECT status, pdf_file_name FROM idoc.job WHERE job_id = @j')).recordset[0];
   if (!job) throw new Error(`Job ${jobId} does not exist`);
-  const batches = (await pool.request().input('j', sql.BigInt, jobId).query<{ batch_id: number; batch_code: number; current_status: string; paper_name: string | null }>(
-    `SELECT b.batch_id, b.batch_code, b.current_status, pa.name AS paper_name FROM idoc.batch AS b INNER JOIN idoc.paper AS pa ON pa.paper_id = b.paper_id
+  // The customer (the owner of the account tree the batch belongs to) holds the MRDF switch, account code and return address
+  const batches = (await pool.request().input('j', sql.BigInt, jobId).query<{ batch_id: number; batch_code: number; current_status: string; paper_name: string | null; use_mrdf: boolean; account_code: string; return_address: string | null }>(
+    `SELECT b.batch_id, b.batch_code, b.current_status, pa.name AS paper_name, o.is_use_mrdf AS use_mrdf, o.account_code, o.return_address
+     FROM idoc.batch AS b INNER JOIN idoc.paper AS pa ON pa.paper_id = b.paper_id
+     INNER JOIN idoc.v_account_owner AS v ON v.account_id = b.account_id INNER JOIN idoc.account AS o ON o.account_id = v.owner_account_id
      WHERE b.job_id = @j ORDER BY b.batch_code`)).recordset;
 
   const rows = (await pool.request().input('j', sql.BigInt, jobId).query<{
@@ -62,7 +74,8 @@ export async function loadJobToCompose(pool: sql.ConnectionPool, jobId: number):
   }
   return {
     jobId, status: job.status, pdfFileName: job.pdf_file_name,
-    batches: batches.map((b) => ({ batchId: Number(b.batch_id), batchCode: Number(b.batch_code), status: b.current_status, paperName: b.paper_name, mailpieces: [...(byBatch.get(b.batch_id)?.values() ?? [])] })),
+    batches: batches.map((b) => ({ batchId: Number(b.batch_id), batchCode: Number(b.batch_code), status: b.current_status, paperName: b.paper_name, mailpieces: [...(byBatch.get(b.batch_id)?.values() ?? [])],
+      mrdf: b.use_mrdf ? { accountCode: b.account_code, returnAddress: (b.return_address ?? '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean) } : null })),
   };
 }
 
@@ -110,4 +123,20 @@ export async function jobsToCompose(pool: sql.ConnectionPool): Promise<number[]>
       AND NOT EXISTS (SELECT 1 FROM idoc.batch_file AS f WHERE f.batch_id = b.batch_id)
       AND EXISTS (SELECT 1 FROM idoc.mailpiece AS m WHERE m.batch_id = b.batch_id AND m.is_cancelled = 0)
     ORDER BY j.job_id`)).recordset.map((r) => Number(r.job_id));
+}
+
+/** The recipients of a batch's mailpieces, by mailpiece id, for the MRDF file: addressee and address lines, and the postcode. */
+export async function loadMrdfRecipients(pool: sql.ConnectionPool, batchId: number): Promise<Map<number, { addressLines: string[]; postcode: string }>> {
+  const rows = (await pool.request().input('b', sql.BigInt, batchId).query<{ mailpiece_id: number; postcode: string; line_no: number | null; text: string | null }>(
+    `SELECT m.mailpiece_id, a.postcode, l.line_no, l.text FROM idoc.mailpiece AS m INNER JOIN idoc.address AS a ON a.address_id = m.address_id
+     LEFT JOIN idoc.address_line AS l ON l.address_id = a.address_id
+     WHERE m.batch_id = @b AND m.is_cancelled = 0 ORDER BY m.mailpiece_id, l.line_no`)).recordset;
+  const out = new Map<number, { addressLines: string[]; postcode: string }>();
+  for (const r of rows) {
+    const id = Number(r.mailpiece_id);
+    const e = out.get(id) ?? { addressLines: [], postcode: r.postcode };
+    if (r.text !== null) e.addressLines.push(r.text);
+    out.set(id, e);
+  }
+  return out;
 }

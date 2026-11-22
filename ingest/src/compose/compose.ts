@@ -2,7 +2,8 @@ import { PDFDocument, PDFName, PDFString, type PDFPage } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { analysePageInk } from '../pdfInk.js';
 import { pagesToGrey, type BatchPlan, type PlannedSegment } from './plan.js';
-import { addBookmarks, addMarksLayer, dataMatrixText, drawMarks, loadOcrbFont, sequenceText, type MarkSettings } from './marks.js';
+import { addBookmarks, addMarksLayer, dataMatrixText, drawMarks, drawMrdfMarks, loadOcrbFont, sequenceText, type MarkSettings } from './marks.js';
+import { mailpiecePages, mrdfPageCodes } from './mrdf.js';
 import type { GreyConverter } from './grey.js';
 
 export interface ComposeInput {
@@ -18,6 +19,8 @@ export interface ComposeInput {
   fileName: (segmentNumber: number) => string;
   /** PDF keywords, e.g. imposition:SRA4. */
   keywords?: string[];
+  /** The customer uses MRDF: every sheet front also carries the MRDF Data Matrix and OCR code (needs marks.mrdf). */
+  mrdf?: boolean;
 }
 
 export interface ComposedFile {
@@ -104,6 +107,20 @@ async function composeSegment(input: ComposeInput, seg: PlannedSegment,
     bookmarks.push({ title: matrix.slice(0, 11), pageIndex: i });
   });
   addBookmarks(out, bookmarks);
+
+  // MRDF codes on the front of every sheet. Packs are padded to whole sheets, so a mailpiece starts on a front and its odd pages are all source pages.
+  if (input.mrdf) {
+    if (!input.marks.mrdf) throw new Error('MRDF is on but the MRDF mark positions are not set');
+    const pages = mailpiecePages(input.plan);
+    let seq = 0, first = 0;
+    seg.pages.forEach((p, i) => {
+      if (p.mailpieceStart) { seq = p.mailpieceStart.sequenceNumber; first = i; }
+      if (p.kind !== 'source' || seq === 0) return;
+      const inPiece = i - first + 1;
+      if (inPiece % 2 === 0) return;
+      drawMrdfMarks(placed[i]!, ocg, ocrb, input.marks.mrdf!, mrdfPageCodes(input.batchCode, seq, inPiece, pages.get(seq)!), ctx.src.getPage(p.sourcePage! - 1).getTrimBox());
+    });
+  }
 
   // Metadata: PDF/X-4, not trapped, title = file name
   out.setTitle(fileName); out.setProducer('IntelliDoc'); out.setCreator('IntelliDoc');
