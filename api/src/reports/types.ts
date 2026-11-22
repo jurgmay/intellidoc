@@ -4,11 +4,28 @@ export interface UsageLine { day: string; brand: string; format: string; service
 export interface InvoicingAccount { id: number; code: string; name: string }
 export interface UsageQuery { invoicingAccountId: number; from: string; to: string }
 
+/** One line of the margin view: the usage line with what it cost as well as what it would be invoiced at. Internal only. */
+export interface MarginLine { day: string; brand: string; format: string; service: string; mailpieces: number; priced: number; productionSell: number; postageSell: number; productionCost: number; postageCost: number }
+/** Pounds. `margin` is sell minus cost and `marginPct` is margin as a percentage of sell (null when nothing is sold). Unpriced mailpieces add nothing. */
+export interface MarginCounts {
+  mailpieces: number; unpriced: number; productionSell: number; productionCost: number; postageSell: number; postageCost: number;
+  sell: number; cost: number; margin: number; marginPct: number | null;
+}
+export interface MarginReport {
+  account: InvoicingAccount; from: string; to: string;
+  days: ({ day: string } & MarginCounts)[];
+  brands: ({ brand: string } & MarginCounts)[];
+  postage: ({ format: string; service: string } & MarginCounts)[];
+  totals: MarginCounts;
+}
+
 export interface ReportStore {
   /** The invoicing accounts that have produced anything (a report is always for one of them). */
   invoicingAccounts(): Promise<InvoicingAccount[]>;
   /** The raw usage lines for one invoicing account between two days, both included. Null if the account does not exist. */
   usageLines(q: UsageQuery): Promise<{ account: InvoicingAccount; lines: UsageLine[] } | null>;
+  /** The same lines with the costs, for the internal margin report. Null if the account does not exist. */
+  marginLines(q: UsageQuery): Promise<{ account: InvoicingAccount; lines: MarginLine[] } | null>;
 }
 
 /** Sell values are in pounds. `unpriced` mailpieces add nothing to them. */

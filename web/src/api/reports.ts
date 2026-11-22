@@ -16,3 +16,17 @@ const qs = (q: UsageQuery): string => new URLSearchParams({ invoicingAccountId: 
 export const listInvoicingAccounts = (): Promise<{ rows: InvoicingAccount[] }> => api('/api/reports/invoicing-accounts');
 export const getUsage = (q: UsageQuery): Promise<UsageReport> => api(`/api/reports/usage?${qs(q)}`);
 export const usagePdfUrl = (q: UsageQuery): string => `/api/reports/usage.pdf?${qs(q)}`;
+
+/** Pounds. `margin` is sell minus cost; `marginPct` is margin as a percentage of sell (null when nothing is sold). Unpriced mail adds nothing. */
+export interface MarginCounts {
+  mailpieces: number; unpriced: number; productionSell: number; productionCost: number; postageSell: number; postageCost: number;
+  sell: number; cost: number; margin: number; marginPct: number | null;
+}
+export interface MarginReport {
+  account: InvoicingAccount; from: string; to: string;
+  days: ({ day: string } & MarginCounts)[];
+  brands: ({ brand: string } & MarginCounts)[];
+  postage: ({ format: string; service: string } & MarginCounts)[];
+  totals: MarginCounts;
+}
+export const getMargin = (q: UsageQuery): Promise<MarginReport> => api(`/api/reports/margin?${qs(q)}`);

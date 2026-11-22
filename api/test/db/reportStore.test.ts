@@ -6,7 +6,7 @@ import { ingest } from '../../../ingest/src/ingest.js';
 import { loadReferenceData } from '../../../ingest/src/mssql/reference.js';
 import { MssqlRepository } from '../../../ingest/src/mssql/repository.js';
 import { buildXml, FakePdf, type PackSpec } from '../../../ingest/test/helpers.js';
-import { buildUsageReport } from '../../src/reports/aggregate.js';
+import { buildMarginReport, buildUsageReport } from '../../src/reports/aggregate.js';
 import { MssqlReportStore } from '../../src/reports/mssqlStore.js';
 
 /** Runs against the scratch database named in INTELLIDOC_TEST_DB. It DROPS and recreates the idoc schema. */
@@ -58,6 +58,16 @@ describe.skipIf(!cs)('MssqlReportStore', { timeout: 120_000 }, () => {
     expect(t.productionSell).toBeCloseTo((all - 1) * 0.5, 4);
     expect(t.postageSell).toBeCloseTo((all - 1) * 1.25, 4);
     expect(t.totalSell).toBeCloseTo((all - 1) * 1.75, 4);
+  });
+
+  it('adds up the costs and the margin for the margin report', async () => {
+    await pool.request().query(`UPDATE idoc.mailpiece SET production_cost = 0.2, postage_cost = 1.0 WHERE priced_at IS NOT NULL`);
+    const f = (await store.marginLines({ invoicingAccountId: invoicing, from: today, to: today }))!;
+    const m = buildMarginReport(f.account, today, today, f.lines).totals;
+    const priced = await scalar(`SELECT COUNT(priced_at) AS n FROM idoc.mailpiece`);
+    expect(m.productionCost).toBeCloseTo(priced * 0.2, 4);
+    expect(m.postageCost).toBeCloseTo(priced * 1.0, 4);
+    expect(m.margin).toBeCloseTo(priced * (1.75 - 1.2), 4);
   });
 
   it('leaves out cancelled mailpieces and cancelled batches, and keeps the brand name as at production', async () => {
