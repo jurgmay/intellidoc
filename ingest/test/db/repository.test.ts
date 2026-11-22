@@ -367,6 +367,18 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     // running it again does not double the lines
     await priceJob(pool, jobA);
     expect(Number((await mps(jobA))[0]!.mono_qty)).toBe(2);
+    // colour mode: pricing bills the pages as composed (held by the account that owns the settings)
+    const setMode = (mode: string) => pool.request().query(`UPDATE a SET colour_mode = N'${mode}' FROM idoc.account a WHERE a.account_id IN
+      (SELECT o.owner_account_id FROM idoc.v_account_owner o JOIN idoc.mailpiece m ON m.submitting_account_id = o.account_id WHERE m.job_id = ${jobA})`);
+    await setMode('ALL_MONO');          // pack 2 becomes two mono pages: 0.20 + 2 x 0.05
+    await priceJob(pool, jobA);
+    expect(Number((await mps(jobA))[1]!.production_sell)).toBeCloseTo(0.3, 4);
+    await setMode('FIRST_PACK_PAGE');   // pack 1: first page colour, then mono: 0.20 + 0.12 + 0.05
+    await priceJob(pool, jobA);
+    expect(Number((await mps(jobA))[0]!.production_sell)).toBeCloseTo(0.37, 4);
+    await setMode('ORIGINAL');
+    await priceJob(pool, jobA);
+    expect(Number((await mps(jobA))[0]!.production_sell)).toBeCloseTo(0.3, 4);
 
     // XML first: nothing is priced until the PDF arrives
     const b = buildXml([person('Rae', 'Price')]);

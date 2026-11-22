@@ -2,10 +2,11 @@ import sql from 'mssql';
 import { findCostingModel } from './costing.js';
 import { priceMailpiece } from '../costing/calculate.js';
 import type { CostingModel } from '../costing/types.js';
+import { composedPages, type ColourMode } from '../costing/colour.js';
 
 interface Row {
   mailpiece_id: number; account_id: number; usage_day: string; is_cancelled: boolean;
-  pack_count: number; unknown_packs: number; colour: number; mono: number; blank: number; inserts: number;
+  pack_count: number; unknown_packs: number; packs_json: string | null; colour_mode: ColourMode; inserts: number;
   department: string; batch_mailpieces: number; format_name: string | null; outer_stock_item_id: number;
   is_oversticker: boolean; is_address_matching: boolean;
   rate_id: number | null; rate_cost: number | null; rate_sell: number | null;
@@ -48,7 +49,8 @@ export async function priceMailpieces(pool: sql.ConnectionPool, filter: PriceFil
   const rows = (await req.query<Row>(`${tree}
     SELECT m.mailpiece_id, m.account_id, m.is_cancelled, m.pack_count,
            CONVERT(CHAR(10), CAST(m.created_at AT TIME ZONE N'UTC' AT TIME ZONE N'GMT Standard Time' AS DATE), 23) AS usage_day,
-           pk.unknown_packs, pk.colour, pk.mono, pk.blank,
+           pk.unknown_packs, pk.packs_json,
+           COALESCE((SELECT a.colour_mode FROM idoc.v_account_owner AS o INNER JOIN idoc.account AS a ON a.account_id = o.owner_account_id WHERE o.account_id = m.submitting_account_id), N'ORIGINAL') AS colour_mode,
            COALESCE((SELECT SUM(i.quantity) FROM idoc.v_mailpiece_insert AS i WHERE i.mailpiece_id = m.mailpiece_id), 0) AS inserts,
            b.fulfilment_department AS department, b.mailpiece_count AS batch_mailpieces, b.outer_stock_item_id,
            f.name AS format_name,
@@ -60,7 +62,8 @@ export async function priceMailpieces(pool: sql.ConnectionPool, filter: PriceFil
     FROM idoc.mailpiece AS m
     INNER JOIN idoc.batch AS b ON b.batch_id = m.batch_id
     CROSS APPLY (SELECT SUM(CASE WHEN p.colour_pages IS NULL OR p.mono_pages IS NULL OR p.blank_pages IS NULL THEN 1 ELSE 0 END) AS unknown_packs,
-                        SUM(COALESCE(p.colour_pages, 0)) AS colour, SUM(COALESCE(p.mono_pages, 0)) AS mono, SUM(COALESCE(p.blank_pages, 0)) AS blank
+                        (SELECT COALESCE(x.colour_pages, 0) AS colour, COALESCE(x.mono_pages, 0) AS mono, COALESCE(x.blank_pages, 0) AS blank FROM idoc.pack AS x
+                         WHERE x.mailpiece_id = m.mailpiece_id ORDER BY x.document_sequence, x.pack_id FOR JSON PATH) AS packs_json
                  FROM idoc.pack AS p WHERE p.mailpiece_id = m.mailpiece_id) AS pk
     LEFT JOIN idoc.postal_format AS f ON f.postal_format_id = m.postal_format_id
     LEFT JOIN idoc.account_envelope AS ae ON ae.account_envelope_id = m.account_envelope_id
@@ -79,8 +82,9 @@ export async function priceMailpieces(pool: sql.ConnectionPool, filter: PriceFil
       const model = models.get(key);
       if (!model) { result.noModel++; continue; }
       if (dryRun) { result.priced++; continue; }
+      const pages = composedPages(m.colour_mode, m.packs_json ? JSON.parse(m.packs_json) : []);   // what is printed, not what arrived
       const price = priceMailpiece(model, {
-        packs: m.pack_count, colourPages: m.colour, monoPages: m.mono, blankPages: m.blank, inserts: m.inserts,
+        packs: m.pack_count, colourPages: pages.colour, monoPages: pages.mono, blankPages: pages.blank, inserts: m.inserts,
         enclosing: m.department === 'Machine enclosing' ? 'Machine' : 'Hand', // Reception work is done by hand
         isOversticker: !!m.is_oversticker, batchMailpieces: m.batch_mailpieces, postalFormat: m.format_name ?? '',
         isAddressMatching: !!m.is_address_matching, envelopeStockItemId: m.outer_stock_item_id,

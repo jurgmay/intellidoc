@@ -10,7 +10,7 @@ import { CustomersPage } from './CustomersPage';
 
 const flags = { isAddressMatching: true, isArchiveMailpieces: false, isCreateOutputFiles: false, isSso: false, isSameDayService: false, isUseMrdf: false, isTesting: false, isDeleted: false };
 const detail = () => ({
-  id: 7, code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', pendingJobNumber: '24601', pendingFrom: '2026-12-01', jobNumberRolloverDay: 1, modes: { envelopes: 'OWN', brands: 'OWN', matching: 'OWN', sequence: 'OWN', emails: 'OWN' }, inheritedEnvelopes: [], inherited: { brands: [], matchRules: [], sequenceRules: [], emails: [], matching: null, sequence: null }, invoicing: null, invoicingOptions: [{ id: 7, code: 'ACME', name: 'Acme Energy Ltd' }], returnAddress: 'PO Box 1', colourMode: null, flags, batchingKey: 'Department', packSequenceKey: null,
+  id: 7, code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', pendingJobNumber: '24601', pendingFrom: '2026-12-01', jobNumberRolloverDay: 1, modes: { envelopes: 'OWN', brands: 'OWN', matching: 'OWN', sequence: 'OWN', emails: 'OWN' }, inheritedEnvelopes: [], inherited: { brands: [], matchRules: [], sequenceRules: [], emails: [], matching: null, sequence: null }, invoicing: null, invoicingOptions: [{ id: 7, code: 'ACME', name: 'Acme Energy Ltd' }], returnAddress: 'PO Box 1', colourMode: 'ORIGINAL', flags, batchingKey: 'Department', packSequenceKey: null,
   parent: null, children: [{ id: 9, code: 'ACME-HL', name: 'Highline Solicitors', isDeleted: false }],
   accounts: [{ id: 8, code: 'ACME-SC', name: 'Acme Scotland', isDeleted: false }],
   brands: [{ id: 21, name: 'Home', usage: 1 }, { id: 22, name: 'Business', usage: 0 }],
@@ -105,6 +105,15 @@ describe('Job numbers', () => {
     expect(screen.getByText(/Becomes the job number on the 1st of the month/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(calls.find((c) => c.method === 'PUT')?.body).toMatchObject({ misJobNumber: '24518', pendingJobNumber: '24777' }));
+  });
+  it('shows the colour mode and saves a changed one', async () => {
+    wrap('/customers/7');
+    const combo = await screen.findByRole('combobox', { name: 'Colour mode' });
+    expect(combo).toHaveValue('No change (print as in the PDF)');
+    await userEvent.click(combo);
+    await userEvent.click(within(document.getElementById(combo.getAttribute('aria-controls')!)!).getByRole('option', { name: 'All mono', hidden: true }));
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.find((c) => c.method === 'PUT')?.body).toMatchObject({ colourMode: 'ALL_MONO' }));
   });
   it('uses the rollover day in the note and saves a changed day', async () => {
     wrap('/customers/7');

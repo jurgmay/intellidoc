@@ -33,7 +33,7 @@ export function CustomerPage() {
 
   const patchDetails = async (patch: Partial<DetailsInput>): Promise<void> => {
     const body: DetailsInput = {
-      code: detail.code, name: detail.name, misJobNumber: detail.misJobNumber, pendingJobNumber: detail.pendingJobNumber, jobNumberRolloverDay: detail.jobNumberRolloverDay, returnAddress: detail.returnAddress,
+      code: detail.code, name: detail.name, misJobNumber: detail.misJobNumber, pendingJobNumber: detail.pendingJobNumber, jobNumberRolloverDay: detail.jobNumberRolloverDay, returnAddress: detail.returnAddress, colourMode: detail.colourMode,
       flags: detail.flags, batchingKey: detail.batchingKey, packSequenceKey: detail.packSequenceKey, parentId: detail.parent?.id ?? null, invoicingAccountId: detail.invoicing?.id ?? null, ...patch,
     };
     const res = await run(() => saveDetails(id, body), 'Customer saved');

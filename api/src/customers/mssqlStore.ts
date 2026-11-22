@@ -2,7 +2,7 @@ import sql from 'mssql';
 import { ConflictError, NotFoundError, ValidationError } from '../errors.js';
 import { describeBecameCustomer, describeBecameSubAccount, describeDetailsChange, describeEnvelope, describeMode, describeLeftAsCustomer, describeMatchRules, describeSequenceRules, describeSubAccountOf, noChildCustomers } from './describe.js';
 import {
-  FLAGS, SETTINGS, type AuditEntry, type CustomerDetail, type CustomerDetailsInput, type CustomerRow, type CustomerStore, type EnvelopeInput, type InheritMode, type FlagKey, type InheritedEnvelopeView, type InheritedSettings, type Lookups, type MatchRule, type ParentView, type SequenceRule, type SettingKey, type Modes,
+  FLAGS, SETTINGS, type AuditEntry, type ColourMode, type CustomerDetail, type CustomerDetailsInput, type CustomerRow, type CustomerStore, type EnvelopeInput, type InheritMode, type FlagKey, type InheritedEnvelopeView, type InheritedSettings, type Lookups, type MatchRule, type ParentView, type SequenceRule, type SettingKey, type Modes,
 } from './types.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -148,7 +148,7 @@ export class MssqlCustomerStore implements CustomerStore {
     return {
       id: a.account_id, code: a.account_code, name: a.name, misJobNumber: a.mis_job_number, pendingJobNumber: a.pending_mis_job_number ?? null,
       jobNumberRolloverDay: a.job_number_rollover_day,
-      pendingFrom: a.pending_job_number_from ? (a.pending_job_number_from as Date).toISOString().slice(0, 10) : null, returnAddress: a.return_address, colourMode: a.colour_mode ?? null, flags,
+      pendingFrom: a.pending_job_number_from ? (a.pending_job_number_from as Date).toISOString().slice(0, 10) : null, returnAddress: a.return_address, colourMode: a.colour_mode as ColourMode, flags,
       batchingKey: a.batching_key, packSequenceKey: a.pack_sequence_key,
       parent: a.p_id ? { id: a.p_id, code: a.p_code, name: a.p_name } : null,
       invoicing: a.i_id ? { id: a.i_id, code: a.i_code, name: a.i_name } : null,
@@ -290,10 +290,10 @@ export class MssqlCustomerStore implements CustomerStore {
     const lines = describeDetailsChange(old, input, parentCode, pendingFrom, invoicingCode);
     await this.tx(async (t) => {
       const req = this.req(t).input('id', sql.Int, id).input('par', sql.Int, input.parentId).input('inv', sql.Int, input.invoicingAccountId).input('code', sql.NVarChar(100), input.code).input('name', sql.NVarChar(200), input.name)
-        .input('mis', sql.NVarChar(50), input.misJobNumber).input('pmis', sql.NVarChar(50), input.pendingJobNumber).input('rday', sql.TinyInt, input.jobNumberRolloverDay).input('pfrom', sql.NVarChar(10), pendingFrom).input('ret', sql.NVarChar(500), input.returnAddress)
+        .input('mis', sql.NVarChar(50), input.misJobNumber).input('pmis', sql.NVarChar(50), input.pendingJobNumber).input('rday', sql.TinyInt, input.jobNumberRolloverDay).input('pfrom', sql.NVarChar(10), pendingFrom).input('ret', sql.NVarChar(500), input.returnAddress).input('cmode', sql.NVarChar(25), input.colourMode)
         .input('bk', sql.Int, await this.keyId(t, input.batchingKey)).input('sk', sql.Int, await this.keyId(t, input.packSequenceKey));
       const sets = FLAGS.map((f) => { req.input(f, sql.Bit, input.flags[f]); return `${FLAG_COLUMNS[f]} = @${f}`; });
-      await req.query(`UPDATE idoc.account SET ${SETTINGS.map((k) => `${MODE_COLUMNS[k]} = CASE WHEN @par IS NULL THEN N'OWN' ELSE ${MODE_COLUMNS[k]} END`).join(', ')}, parent_account_id = @par, invoicing_account_id = @inv, account_code = @code, name = @name, mis_job_number = @mis, pending_mis_job_number = @pmis, pending_job_number_from = CAST(@pfrom AS DATE), job_number_rollover_day = @rday, return_address = @ret, batching_key_id = @bk, pack_sequence_key_id = @sk, ${sets.join(', ')} WHERE account_id = @id`);
+      await req.query(`UPDATE idoc.account SET ${SETTINGS.map((k) => `${MODE_COLUMNS[k]} = CASE WHEN @par IS NULL THEN N'OWN' ELSE ${MODE_COLUMNS[k]} END`).join(', ')}, parent_account_id = @par, invoicing_account_id = @inv, account_code = @code, name = @name, mis_job_number = @mis, pending_mis_job_number = @pmis, pending_job_number_from = CAST(@pfrom AS DATE), job_number_rollover_day = @rday, return_address = @ret, colour_mode = @cmode, batching_key_id = @bk, pack_sequence_key_id = @sk, ${sets.join(', ')} WHERE account_id = @id`);
       for (const l of lines) await this.audit(t, id, by, l);
       if (input.parentId === null) for (const k of SETTINGS) if (old.modes[k] !== 'OWN') await this.audit(t, id, by, describeMode(k, old.modes[k], 'OWN'));
     }, `Account code "${input.code}" is already in use`);

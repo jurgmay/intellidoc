@@ -66,3 +66,11 @@ describe('costing import plan', () => {
   });
   it('chargesFrom copes with an empty model', () => { expect(chargesFrom({})).toEqual([]); });
 });
+
+describe('colour mode in the import', () => {
+  it('imports nothing for 0 and warns about any other FileMaker value', () => {
+    const p = buildPlan({ customers: [cust({ id: P, accountCode: 'P', accountName: 'P', id_groupingAccount: P, colourMode: '0' }), cust({ id: Q, accountCode: 'Q', accountName: 'Q', id_groupingAccount: Q, colourMode: '2' })], brands: [], stock: [], envelopes: [] });
+    expect(p.warnings.filter((w) => /colour mode/.test(w))).toEqual(['Account Q: FileMaker colour mode 2 is not imported (only 0 is understood); set it on the Details tab']);
+  });
+});
+

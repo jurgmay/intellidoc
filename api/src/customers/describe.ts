@@ -1,10 +1,15 @@
-import { FLAGS, type InheritMode, type SettingKey, type CustomerDetail, type CustomerDetailsInput, type EnvelopeInput, type FlagKey, type MatchRule, type SequenceRule } from './types.js';
+import { FLAGS, type ColourMode, type InheritMode, type SettingKey, type CustomerDetail, type CustomerDetailsInput, type EnvelopeInput, type FlagKey, type MatchRule, type SequenceRule } from './types.js';
 
 /** Plain-English names for the account flags, shared by the audit log and (via the API) the screen. */
 export const FLAG_LABELS: Record<FlagKey, string> = {
   isAddressMatching: 'Address matching', isArchiveMailpieces: 'Archive mailpieces', isCreateOutputFiles: 'Create output files',
   isSso: 'SSO', isSameDayService: 'Same-day service',
   isUseMrdf: 'Use MRDF', isTesting: 'Testing', isDeleted: 'Deleted',
+};
+
+export const COLOUR_MODE_LABELS: Record<ColourMode, string> = {
+  ORIGINAL: 'No change (as in the PDF)', FIRST_PACK_PAGE: 'First page of each pack in colour, the rest mono',
+  FIRST_MAILPIECE_PAGE: 'First page of each mailpiece in colour, the rest mono', ALL_MONO: 'All mono',
 };
 
 const show = (v: string | null): string => (v === null || v === '' ? '(none)' : `"${v}"`);
@@ -21,6 +26,7 @@ export function describeDetailsChange(old: CustomerDetail, next: CustomerDetails
     out.push(`Pending job number: ${show(old.pendingJobNumber)} → ${show(next.pendingJobNumber)}${next.pendingJobNumber && newPendingFrom ? ` (takes effect ${newPendingFrom})` : ''}`);
   }
   text('Return address', old.returnAddress, next.returnAddress);
+  if (old.colourMode !== next.colourMode) out.push(`Colour mode: ${COLOUR_MODE_LABELS[old.colourMode]} → ${COLOUR_MODE_LABELS[next.colourMode]}`);
   text('Parent', old.parent?.code ?? null, newParentCode);
   text('Invoicing account', old.invoicing?.code ?? null, newInvoicingCode);
   text('Batching key', old.batchingKey, next.batchingKey);
