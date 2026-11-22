@@ -12,6 +12,8 @@ npm run compose -- <jobId> <outDir> [pdfDir] [logo.png]      (compose:env reads 
 
 ## Automatic (the watcher)
 
+**Order of work.** The watcher handles one XML+PDF pair at a time and always takes the pair with the **smallest XML file** first (ties by name). A small XML usually means a small PDF, so the quickest jobs reach production first and one huge PDF does not hold the rest up. A lone PDF (attaching to a job already imported) is handled after the XML files. A file that arrives while a big one is being processed waits for it to finish; nothing is interrupted.
+
 The folder watcher can make the print files itself. Once a minute it looks for Received jobs with a batch that has mail to print and no print file yet, and composes them (`src/compose/auto.ts`). It does this only when **both** are true:
 
 * **Make print files automatically** is on in Settings (Print file marks). It is **off** by default: switch it on once the marks have been checked on a printed proof. It is re-read every minute, no restart.

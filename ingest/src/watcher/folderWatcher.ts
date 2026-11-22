@@ -58,7 +58,7 @@ export class FolderWatcher {
     }
   }
 
-  /** One pass over the inbox. Returns the number of pairs handled. Files are handled strictly one pair at a time. */
+  /** One pass over the inbox. Returns the number of pairs handled. Files are handled strictly one pair at a time, smallest XML first. */
   async scanOnce(): Promise<number> {
     const now = this.deps.now();
     const entries = await readdir(this.dirs.inbox, { withFileTypes: true });
@@ -77,7 +77,15 @@ export class FolderWatcher {
 
     let handled = 0;
     for (const k of [...this.orphanSince.keys()]) { const f = stems.get(k); if (!f || (f.xml && f.pdf)) this.orphanSince.delete(k); }
-    for (const [stem, f] of [...stems].sort((a, b) => a[0].localeCompare(b[0]))) {
+    // Smallest XML first: a small XML usually means a small PDF, so the quickest jobs reach production first and one huge PDF does not hold
+    // the rest up. Ties go by name. A lone PDF (waiting for its XML, or attaching to a job already imported) goes after the XML files.
+    const size = new Map<string, number>();
+    for (const [stem, f] of stems) {
+      let n = Number.POSITIVE_INFINITY;
+      if (f.xml) { try { n = (await stat(join(this.dirs.inbox, f.xml))).size; } catch { /* vanished: it sorts last and is skipped below */ } }
+      size.set(stem, n);
+    }
+    for (const [stem, f] of [...stems].sort((a, b) => (size.get(a[0])! === size.get(b[0])! ? a[0].localeCompare(b[0]) : size.get(a[0])! < size.get(b[0])! ? -1 : 1))) {
       if (!f.xml || !f.pdf) {
         const lone = f.xml ?? f.pdf!;
         const on = this.deps.xmlFirstEnabled ? this.deps.xmlFirstEnabled() : true;

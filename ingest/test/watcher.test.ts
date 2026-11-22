@@ -39,6 +39,21 @@ describe('FolderWatcher', () => {
     expect(JSON.parse(await readFile(join(dirs.processed, 'a.result.json'), 'utf8'))).toEqual({ ok: 1 });
     expect(await ls(dirs.processing)).toEqual([]);
   });
+  it('handles the smallest XML first, whatever the names, and a lone PDF after the XML files', async () => {
+    const w = mk(); await w.init();
+    await put('a-big.xml', 'x'.repeat(500)); await put('a-big.pdf');
+    await put('z-small.xml', 'x'.repeat(5)); await put('z-small.pdf');
+    await put('m-mid.xml', 'x'.repeat(50)); await put('m-mid.pdf');
+    await w.scanOnce(); t += 11_000;
+    expect(await w.scanOnce()).toBe(3);
+    expect(calls.map((c) => c.split(/[\\/]/).pop())).toEqual(['z-small.xml', 'm-mid.xml', 'a-big.xml']);
+  });
+  it('breaks a tie in XML size by name', async () => {
+    const w = mk(); await w.init();
+    await put('b.xml', 'xx'); await put('b.pdf'); await put('a.xml', 'xx'); await put('a.pdf');
+    await w.scanOnce(); t += 11_000; await w.scanOnce();
+    expect(calls.map((c) => c.split(/[\\/]/).pop())).toEqual(['a.xml', 'b.xml']);
+  });
   it('a file that is still growing resets the clock', async () => {
     const w = mk(); await w.init();
     await put('a.xml'); await put('a.pdf');
