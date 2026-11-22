@@ -7,7 +7,7 @@ const label = (code: string): string => CHARGES.find((c) => c.code === code)?.la
 export function describeModelChange(name: string, before: ModelInput, after: ModelInput, envName: (stockItemId: number) => string, rateName: (id: number) => string): string | null {
   const parts: string[] = [];
   if (before.name !== after.name) parts.push(`name "${before.name}" → "${after.name}"`);
-  if (before.validFrom !== after.validFrom) parts.push(`first day ${before.validFrom} → ${after.validFrom}`);
+  if ((before.validFrom ?? '') !== (after.validFrom ?? '')) parts.push(`first day ${before.validFrom ?? 'none'} → ${after.validFrom ?? 'none'}`);
   if ((before.validTo ?? '') !== (after.validTo ?? '')) parts.push(`last day ${before.validTo ?? 'open'} → ${after.validTo ?? 'open'}`);
   if (before.isActive !== after.isActive) parts.push(after.isActive ? 'switched on' : 'switched off');
   if ((before.comments ?? '') !== (after.comments ?? '')) parts.push('comments changed');

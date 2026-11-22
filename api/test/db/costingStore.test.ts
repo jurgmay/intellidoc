@@ -106,7 +106,7 @@ describe.skipIf(!cs)('MssqlCostingStore', { timeout: 120_000 }, () => {
   it('says which model prices today', async () => {
     const o = await store.overview(parent);
     const today = new Date().toISOString().slice(0, 10);
-    const expected = o.models.filter((m) => m.isActive && m.validFrom <= today && (m.validTo === null || m.validTo >= today)).sort((a, b) => b.validFrom.localeCompare(a.validFrom))[0];
+    const expected = o.models.filter((m) => m.isActive && m.validFrom !== null && m.validFrom <= today && (m.validTo === null || m.validTo >= today)).sort((a, b) => (b.validFrom ?? "").localeCompare(a.validFrom ?? ""))[0];
     expect(o.inForceId).toBe(expected?.id ?? null);
   });
 

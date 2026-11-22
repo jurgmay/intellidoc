@@ -16,7 +16,7 @@ class Db {
   async exec(text: string, inputs: Input[] = []): Promise<void> { await this.rows(text, inputs); }
 }
 
-export interface ApplyCounts { accounts: number; brands: number; stock: number; rates: number; envelopes: number }
+export interface ApplyCounts { accounts: number; brands: number; stock: number; rates: number; envelopes: number; costingModels: number; costingInherit: number }
 
 /** Writes the plan in ONE transaction. Re-runnable: rows are matched on the FileMaker id (legacy_id), then updated. */
 export async function applyPlan(pool: sql.ConnectionPool, plan: Plan): Promise<ApplyCounts> {
@@ -143,5 +143,28 @@ async function run(db: Db, plan: Plan): Promise<ApplyCounts> {
     else await db.exec(`INSERT INTO idoc.account_envelope (legacy_id, account_id, brand_id, delivery_band, postal_rate_id, outer_stock_item_id, external_name, reference, is_oversticker)
       VALUES (@l, @a, @b, @d, @r, @s, @n, @f, @o)`, i);
   }
-  return { accounts: plan.accounts.length, brands: plan.brands.length, stock: plan.stock.length, rates: plan.rates.length, envelopes: plan.envelopes.length };
+
+  // ---- price lists: added as switched-off drafts with no dates; an account that already has any price list is left alone -----------
+  let costingModels = 0; let costingInherit = 0;
+  for (const m of plan.costing) {
+    const host = acc.get(m.hostLegacyId); if (!host) continue;
+    if (await db.id('SELECT TOP 1 costing_model_id AS id FROM idoc.costing_model WHERE account_id = @a', [['a', sql.Int, host]])) continue;
+    const mid = (await db.id(`INSERT INTO idoc.costing_model (account_id, name, valid_from, valid_to, is_active, comments) OUTPUT INSERTED.costing_model_id AS id
+      VALUES (@a, @n, NULL, NULL, 0, @c)`, [['a', sql.Int, host], ['n', T(200), m.name], ['c', T(1000), m.comments]]))!;
+    costingModels++;
+    for (const c of m.charges) await db.exec('INSERT INTO idoc.costing_model_rate (costing_model_id, charge_code, cost, sell_price, adjustment) VALUES (@m, @k, @c, @s, @j)',
+      [['m', sql.Int, mid], ['k', T(50), c.code], ['c', sql.Decimal(18, 4), c.cost], ['s', sql.Decimal(18, 4), c.sellPrice], ['j', sql.Decimal(18, 4), c.adjustment]]);
+    for (const e of m.envelopes) {
+      const sid = stock.get(e.stockLegacyId); if (!sid) continue;
+      await db.exec('INSERT INTO idoc.costing_model_envelope (costing_model_id, stock_item_id, cost, sell_price, adjustment) VALUES (@m, @t, @c, @s, @j)',
+        [['m', sql.Int, mid], ['t', sql.Int, sid], ['c', sql.Decimal(18, 4), e.cost], ['s', sql.Decimal(18, 4), e.sellPrice], ['j', sql.Decimal(18, 4), e.adjustment]]);
+    }
+  }
+  for (const legacy of plan.costingInherit) {
+    const id = acc.get(legacy); if (!id) continue;
+    if (await db.id('SELECT TOP 1 costing_model_id AS id FROM idoc.costing_model WHERE account_id = @a', [['a', sql.Int, id]])) continue;
+    await db.exec(`UPDATE idoc.account SET costing_mode = N'INHERIT' WHERE account_id = @a AND parent_account_id IS NOT NULL`, [['a', sql.Int, id]]);
+    costingInherit++;
+  }
+  return { accounts: plan.accounts.length, brands: plan.brands.length, stock: plan.stock.length, rates: plan.rates.length, envelopes: plan.envelopes.length, costingModels, costingInherit };
 }

@@ -32,7 +32,7 @@ export class MssqlCostingStore implements CostingStore {
       SELECT m.costing_model_id AS id, m.name, m.valid_from, m.valid_to, m.is_active,
              (SELECT COUNT(*) FROM idoc.mailpiece AS p WHERE p.costing_model_id = m.costing_model_id) AS used
       FROM idoc.costing_model AS m WHERE m.account_id = @a ORDER BY m.valid_from DESC`)).recordset as R[];
-    return rows.map((r) => ({ id: r.id, name: r.name, validFrom: day(r.valid_from)!, validTo: day(r.valid_to), isActive: !!r.is_active, mailpieceCount: r.used }));
+    return rows.map((r) => ({ id: r.id, name: r.name, validFrom: day(r.valid_from), validTo: day(r.valid_to), isActive: !!r.is_active, mailpieceCount: r.used }));
   }
 
   async overview(customerId: number): Promise<CostingOverview> {
@@ -74,7 +74,7 @@ export class MssqlCostingStore implements CostingStore {
     return {
       customerId: h.account_id,
       detail: {
-        name: h.name, validFrom: day(h.valid_from)!, validTo: day(h.valid_to), isActive: !!h.is_active, comments: h.comments,
+        name: h.name, validFrom: day(h.valid_from), validTo: day(h.valid_to), isActive: !!h.is_active, comments: h.comments,
         charges: rates.map((r) => ({ code: r.charge_code as ChargeCode, cost: num(r.cost), sellPrice: num(r.sell_price), adjustment: num(r.adjustment) })),
         envelopes: envs.map((r) => ({ stockItemId: r.stock_item_id, cost: num(r.cost), sellPrice: num(r.sell_price), adjustment: num(r.adjustment) })),
         postage: post.map((r) => ({ postalRateId: r.postal_rate_id, adjustment: num(r.adjustment) })),

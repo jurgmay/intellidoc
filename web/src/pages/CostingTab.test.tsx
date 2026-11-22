@@ -60,6 +60,14 @@ describe('Costing tab', () => {
     expect(await screen.findByText(/no model prices today/i)).toBeInTheDocument();
   });
 
+  it('shows a model with no dates as a draft', async () => {
+    respond = ((prev) => (url, m, b) => (url === '/api/customers/7/costing' ? { status: 200, json: overview({ models: [{ ...summary, id: 8, name: 'Imported prices', validFrom: null, isActive: false }], inForceId: null }) } : prev(url, m, b)))(respond);
+    wrap(props(true));
+    expect(await screen.findByText('Imported prices')).toBeInTheDocument();
+    expect(screen.getByText('Draft: no dates yet')).toBeInTheDocument();
+    expect(screen.getByText('Not set')).toBeInTheDocument();
+  });
+
   it('shows the parent’s models, read only, when the prices are inherited', async () => {
     respond = ((prev) => (url, m, b) => (url === '/api/customers/7/costing' ? { status: 200, json: overview({ mode: 'INHERIT', models: [], source: { id: 3, code: 'ODEVO', name: 'Odevo' }, sourceModels: [{ ...summary, id: 9, name: 'Odevo prices' }], inForceId: 9 }) } : prev(url, m, b)))(respond);
     wrap(props(true));

@@ -32,7 +32,7 @@ export function CostingModelEditor({ id, onBack }: Props) {
 
   const apply = (d: ModelDetail) => {
     setM(d); setCharges(d.charges); setEnvelopes(d.envelopes); setPostage(d.postage); setDirty(false);
-    setForm({ name: d.name, validFrom: d.validFrom, validTo: d.validTo ?? '', isActive: d.isActive, comments: d.comments ?? '' });
+    setForm({ name: d.name, validFrom: d.validFrom ?? '', validTo: d.validTo ?? '', isActive: d.isActive, comments: d.comments ?? '' });
   };
   useEffect(() => { Promise.all([getModel(id), getCostingLookups()]).then(([d, l]) => { apply(d); setLookups(l); }).catch((e: Error) => setLoadError(e.message)); }, [id]);
 
@@ -48,7 +48,7 @@ export function CostingModelEditor({ id, onBack }: Props) {
 
   const save = async () => {
     const body: ModelInput = {
-      name: form.name, validFrom: form.validFrom, validTo: orNull(form.validTo), isActive: form.isActive, comments: orNull(form.comments),
+      name: form.name, validFrom: orNull(form.validFrom), validTo: orNull(form.validTo), isActive: form.isActive, comments: orNull(form.comments),
       charges: charges.map((c) => ({ code: c.code, cost: c.cost, sellPrice: c.sellPrice, adjustment: c.adjustment })),
       envelopes: envelopes.map((e) => ({ stockItemId: e.stockItemId, cost: e.cost, sellPrice: e.sellPrice, adjustment: e.adjustment })),
       postage: postage.map((p) => ({ postalRateId: p.postalRateId, adjustment: p.adjustment })),
@@ -75,7 +75,7 @@ export function CostingModelEditor({ id, onBack }: Props) {
     <Stack>
       <div>
         <Anchor component="button" type="button" size="sm" onClick={() => { if (!dirty || window.confirm('Leave without saving your changes?')) onBack(); }}><Group gap={4}><IconArrowLeft size={14} />All price lists</Group></Anchor>
-        <Group mt="xs" gap="sm"><Title order={3}>{m.name}</Title>{!m.isActive && <Badge color="gray">Switched off</Badge>}{dirty && <Badge color="orange" variant="light">Unsaved changes</Badge>}</Group>
+        <Group mt="xs" gap="sm"><Title order={3}>{m.name}</Title>{m.validFrom === null ? <Badge color="orange">Draft: no dates yet</Badge> : !m.isActive && <Badge color="gray">Switched off</Badge>}{dirty && <Badge color="orange" variant="light">Unsaved changes</Badge>}</Group>
         {m.copiedFrom && <Text size="sm" c="dimmed">Started as a copy of {m.copiedFrom.name}.</Text>}
       </div>
       {m.mailpieceCount > 0 && (
@@ -91,7 +91,7 @@ export function CostingModelEditor({ id, onBack }: Props) {
             <TextInput label="First day" type="date" value={form.validFrom} onChange={(e) => setF('validFrom', e.currentTarget.value)} error={errors['validFrom']} />
             <TextInput label="Last day" type="date" description="Empty = until replaced" value={form.validTo} onChange={(e) => setF('validTo', e.currentTarget.value)} error={errors['validTo']} />
           </Group>
-          <Switch label="Switched on" description="A model that is switched off never prices any mail." checked={form.isActive} onChange={(e) => setF('isActive', e.currentTarget.checked)} />
+           <Switch label="Switched on" description={form.validFrom === '' ? 'Give it a first day before switching it on. A model with no dates never prices any mail.' : 'A model that is switched off never prices any mail.'} checked={form.isActive} onChange={(e) => setF('isActive', e.currentTarget.checked)} error={errors['isActive']} />
           <Textarea label="Comments" autosize minRows={2} value={form.comments} onChange={(e) => setF('comments', e.currentTarget.value)} error={errors['comments']} />
         </Stack>
       </Paper>
