@@ -37,7 +37,25 @@ CREATE TABLE idoc.settings (
     pdf_wait_minutes                    INT           NOT NULL CONSTRAINT df_settings_pdf_wait DEFAULT (30),   -- first "PDF missing" alert after this long
     pdf_reminder_minutes                INT           NOT NULL CONSTRAINT df_settings_pdf_remind DEFAULT (30), -- then a reminder this often
     alert_recipients                    NVARCHAR(1000) NOT NULL CONSTRAINT df_settings_alert_to DEFAULT (N''), -- e-mail addresses, comma or semicolon separated
+    -- PDF composition (the print files). The marks are measured in millimetres from the top left of the trim box, the way FileMaker did it.
+    -- The first-time values are placeholders: set them to the press / enclosing machine's real positions on the Settings page.
+    max_pages_per_pdf                   INT           NOT NULL CONSTRAINT df_settings_max_pages DEFAULT (10000), -- a print file is closed after the mailpiece that takes it past this
+    mark_seq_font_pt                    DECIMAL(6, 3) NOT NULL CONSTRAINT df_settings_seq_font DEFAULT (8),      -- the window sequence number, e.g. 1042/000123 (OCR-B)
+    mark_seq_left_mm                    DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_seq_left DEFAULT (20),
+    mark_seq_top_mm                     DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_seq_top DEFAULT (40),
+    mark_seq_width_mm                   DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_seq_width DEFAULT (45),
+    mark_seq_height_mm                  DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_seq_height DEFAULT (4),
+    mark_dm_left_mm                     DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_dm_left DEFAULT (20),      -- the window Data Matrix
+    mark_dm_top_mm                      DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_dm_top DEFAULT (30),
+    mark_dm_width_mm                    DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_dm_width DEFAULT (8),
+    mark_dm_height_mm                   DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_dm_height DEFAULT (8),
+    mark_dot_x_mm                       DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_dot_x DEFAULT (205.5),     -- the pack start dot (centre); FileMaker's fixed position
+    mark_dot_y_mm                       DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_dot_y DEFAULT (269),
+    mark_dot_diameter_mm                DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_dot_d DEFAULT (2),
     CONSTRAINT ck_settings_single_row CHECK (settings_id = 1),
+    CONSTRAINT ck_settings_marks CHECK (max_pages_per_pdf >= 2 AND mark_seq_font_pt > 0 AND mark_seq_width_mm > 0 AND mark_seq_height_mm > 0
+        AND mark_dm_width_mm > 0 AND mark_dm_height_mm > 0 AND mark_dot_diameter_mm > 0
+        AND mark_seq_left_mm >= 0 AND mark_seq_top_mm >= 0 AND mark_dm_left_mm >= 0 AND mark_dm_top_mm >= 0 AND mark_dot_x_mm >= 0 AND mark_dot_y_mm >= 0),
     CONSTRAINT ck_settings_positive CHECK (a4_sheet_weight_g > 0 AND a4_sheet_thickness_mm > 0 AND machine_enclosing_min_mailpieces >= 0
         AND machine_enclosing_max_sheets > 0 AND hand_enclosing_max_sheets > 0 AND pdf_wait_minutes >= 1 AND pdf_reminder_minutes >= 1)
 );
@@ -503,6 +521,23 @@ CREATE TABLE idoc.batch_insert (
 );
 GO
 
+-- The print files made from a batch (PDF composition). A batch is one file unless it passes max_pages_per_pdf, then it is split into segments.
+-- Composing again replaces the rows (and the files) while the batch is still Created.
+CREATE TABLE idoc.batch_file (
+    batch_file_id    BIGINT IDENTITY(1, 1) NOT NULL CONSTRAINT pk_batch_file PRIMARY KEY,
+    batch_id         BIGINT        NOT NULL CONSTRAINT fk_batch_file_batch REFERENCES idoc.batch (batch_id),
+    segment_number   INT           NOT NULL,
+    file_name        NVARCHAR(260) NOT NULL,
+    mailpiece_count  INT           NOT NULL,
+    page_count       INT           NOT NULL,   -- every page of the file: run sheet (segment 1), blank padding pages and all
+    first_sequence   INT           NULL,       -- sequence numbers of the first and last mailpiece in the file
+    last_sequence    INT           NULL,
+    created_at       DATETIME2(0)  NOT NULL CONSTRAINT df_batch_file_created DEFAULT (SYSUTCDATETIME()),
+    CONSTRAINT uq_batch_file_segment UNIQUE (batch_id, segment_number),
+    CONSTRAINT ck_batch_file_segment CHECK (segment_number >= 1)
+);
+GO
+
 CREATE TABLE idoc.mailpiece (
     mailpiece_id         BIGINT IDENTITY(1, 1) NOT NULL CONSTRAINT pk_mailpiece PRIMARY KEY,
     job_id               BIGINT                NOT NULL CONSTRAINT fk_mp_job REFERENCES idoc.job (job_id),
@@ -528,6 +563,7 @@ CREATE TABLE idoc.mailpiece (
     pack_count           INT                   NOT NULL,
     page_count           INT                   NOT NULL,
     sheet_count          INT                   NOT NULL,
+    sequence_number      INT                   NULL,   -- 1..n within the batch, in the order the mailpieces are printed; set when the batch is composed, then kept
     -- Physical derivation (see design notes): sheets x a4_sheet_weight_g + inserts + outer envelope
     weight_g             INT                   NULL,
     thickness_mm         DECIMAL(6, 2)         NULL,
@@ -538,8 +574,11 @@ CREATE TABLE idoc.mailpiece (
     created_at           DATETIME2(0)          NOT NULL CONSTRAINT df_mp_created DEFAULT (SYSUTCDATETIME()),
     -- Target of the pack foreign key that makes a cross-recipient merge impossible
     CONSTRAINT uq_mailpiece_recipient UNIQUE (mailpiece_id, job_id, account_id, address_id),
-    CONSTRAINT ck_mp_route CHECK (enclosing_route IS NULL OR enclosing_route IN (N'RECEPTION', N'MACHINE_CANDIDATE', N'HAND'))
+    CONSTRAINT ck_mp_route CHECK (enclosing_route IS NULL OR enclosing_route IN (N'RECEPTION', N'MACHINE_CANDIDATE', N'HAND')),
+    CONSTRAINT ck_mp_sequence CHECK (sequence_number IS NULL OR sequence_number >= 1)
 );
+GO
+CREATE UNIQUE INDEX ux_mailpiece_sequence ON idoc.mailpiece (batch_id, sequence_number) WHERE sequence_number IS NOT NULL;
 GO
 
 /* ===========================================================================
@@ -566,6 +605,10 @@ CREATE TABLE idoc.pack (
     colour_pages          INT                   NULL,       -- from PDF analysis
     mono_pages            INT                   NULL,
     blank_pages           INT                   NULL,
+    -- Where the pack sits in the print file (PDF composition): its pages, including the blank page that makes it an even number of pages
+    batch_file_id         BIGINT                NULL CONSTRAINT fk_pack_batch_file REFERENCES idoc.batch_file (batch_file_id),
+    output_start_page     INT                   NULL,
+    output_end_page       INT                   NULL,
     status                NVARCHAR(30)          NOT NULL,
     delivery_point_suffix NVARCHAR(10)          NULL,
     attachment_count      INT                   NOT NULL CONSTRAINT df_pack_attach DEFAULT (0),
