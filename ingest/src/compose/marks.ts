@@ -2,8 +2,11 @@
 import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
 import { join, sep } from 'node:path';
-import { PDFDict, PDFDocument, PDFName, PDFNumber, PDFRef, PDFString, PDFHexString, PDFOperator, PDFOperatorNames, rgb, pushGraphicsState, popGraphicsState, type PDFFont, type PDFPage } from 'pdf-lib';
+import { PDFDict, PDFDocument, PDFName, PDFNumber, PDFRef, PDFString, PDFHexString, PDFOperator, PDFOperatorNames, grayscale, rgb, pushGraphicsState, popGraphicsState, type PDFFont, type PDFPage } from 'pdf-lib';
 import bwipjs from 'bwip-js';
+
+/** Black for every mark: DeviceGray 0, so it is black toner only whatever the RIP does with RGB. */
+const BLACK = grayscale(0);
 
 export const MM = 72 / 25.4;
 
@@ -73,7 +76,7 @@ function drawMatrix(page: PDFPage, text: string, box: { leftMm: number; topMm: n
   const { size, rects } = dataMatrixRects(text);
   const side = Math.min(box.widthMm, box.heightMm) * MM, mod = side / size;
   const ox = trim.x + box.leftMm * MM, oy = trim.y + trim.height - box.topMm * MM;
-  for (const [x, y, w, h] of rects) page.drawRectangle({ x: ox + x * mod, y: oy - (y + h) * mod, width: w * mod, height: h * mod, color: rgb(0, 0, 0) });
+  for (const [x, y, w, h] of rects) page.drawRectangle({ x: ox + x * mod, y: oy - (y + h) * mod, width: w * mod, height: h * mod, color: BLACK });
 }
 
 /** The MRDF codes of one sheet front: a Data Matrix and the same sheet in OCR-B, both black. */
@@ -82,7 +85,7 @@ export function drawMrdfMarks(page: PDFPage, ocg: PDFRef, font: PDFFont, m: NonN
   beginLayer(page, ocg);
   drawMatrix(page, text.matrix, m.dm, trim);
   const o = m.ocr, tw = font.widthOfTextAtSize(text.ocr, o.fontPt), capH = font.heightAtSize(o.fontPt, { descender: false });
-  page.drawText(text.ocr, { font, size: o.fontPt, color: rgb(0, 0, 0), x: trim.x + o.leftMm * MM + (o.widthMm * MM - tw) / 2, y: trim.y + trim.height - o.topMm * MM - (o.heightMm * MM + capH) / 2 });
+  page.drawText(text.ocr, { font, size: o.fontPt, color: BLACK, x: trim.x + o.leftMm * MM + (o.widthMm * MM - tw) / 2, y: trim.y + trim.height - o.topMm * MM - (o.heightMm * MM + capH) / 2 });
   endLayer(page);
 }
 
@@ -98,7 +101,7 @@ export function drawMarks(page: PDFPage, ocg: PDFRef, font: PDFFont, m: MarkSett
   const tw = font.widthOfTextAtSize(text.sequence, s.fontPt);
   const capH = font.heightAtSize(s.fontPt, { descender: false });
   page.drawText(text.sequence, {
-    font, size: s.fontPt, color: rgb(0, 0, 0),
+    font, size: s.fontPt, color: BLACK,
     x: left(s.leftMm) + (s.widthMm * MM - tw) / 2,
     y: topY(s.topMm) - (s.heightMm * MM + capH) / 2,
   });
@@ -107,7 +110,7 @@ export function drawMarks(page: PDFPage, ocg: PDFRef, font: PDFFont, m: MarkSett
   drawMatrix(page, text.matrix, m.dm, trim);
 
   // Pack start dot (red; black when the page is printed mono)
-  page.drawCircle({ x: left(m.dot.xMm), y: topY(m.dot.yMm), size: (m.dot.diameterMm * MM) / 2, color: dotColour === 'red' ? rgb(1, 0, 0) : rgb(0, 0, 0) });
+  page.drawCircle({ x: left(m.dot.xMm), y: topY(m.dot.yMm), size: (m.dot.diameterMm * MM) / 2, color: dotColour === 'red' ? rgb(1, 0, 0) : BLACK });
 
   endLayer(page);
 }
