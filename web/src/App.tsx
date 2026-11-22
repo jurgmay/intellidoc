@@ -1,14 +1,15 @@
 import { AppShell, Group, Image, NavLink, Text } from '@mantine/core';
-import { IconChartBar, IconReportMoney, IconSearch, IconSettings, IconUsers } from '@tabler/icons-react';
+import { IconChartBar, IconFiles, IconReportMoney, IconSearch, IconSettings, IconUsers } from '@tabler/icons-react';
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { CustomerPage } from './pages/CustomerPage';
 import { CustomersPage } from './pages/CustomersPage';
+import { JobsPage } from './pages/JobsPage';
 import { MarginPage } from './pages/MarginPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { RecipientSearchPage } from './pages/RecipientSearchPage';
 import { SettingsPage } from './pages/SettingsPage';
 
-const NAV = [{ to: '/customers', label: 'Customers', icon: IconUsers }, { to: '/search', label: 'Recipient search', icon: IconSearch }, { to: '/reports', label: 'Usage report', icon: IconChartBar }, { to: '/margin', label: 'Margin report', icon: IconReportMoney }, { to: '/settings', label: 'Settings', icon: IconSettings }];
+const NAV = [{ to: '/customers', label: 'Customers', icon: IconUsers }, { to: '/jobs', label: 'Jobs', icon: IconFiles }, { to: '/search', label: 'Recipient search', icon: IconSearch }, { to: '/reports', label: 'Usage report', icon: IconChartBar }, { to: '/margin', label: 'Margin report', icon: IconReportMoney }, { to: '/settings', label: 'Settings', icon: IconSettings }];
 
 export function App() {
   const { pathname } = useLocation();
@@ -30,6 +31,7 @@ export function App() {
           <Route path="/" element={<Navigate to="/customers" replace />} />
           <Route path="/customers" element={<CustomersPage />} />
           <Route path="/customers/:id" element={<CustomerPage />} />
+          <Route path="/jobs" element={<JobsPage />} />
           <Route path="/search" element={<RecipientSearchPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/margin" element={<MarginPage />} />

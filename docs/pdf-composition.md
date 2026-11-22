@@ -19,6 +19,15 @@ The folder watcher can make the print files itself. Once a minute it looks for R
 
 It reads the customer's PDF from the watcher's `processed` folder, so a job is composed a minute or so after it is Received, never while the PDF is still in the inbox. A batch that already has print files is left alone, and so is a batch that is no longer Created. A job that fails (PDF not found, Ghostscript missing, ...) is tried again after 1, 2, 5, 10 and then every 30 minutes, an e-mail goes to the alert recipients once after the third failure in a row, and it is never given up on. The compose command still works at any time and composes the batches again.
 
+## From the Jobs screen
+
+**Jobs** in the web app lists the newest jobs (search by customer or file name, filter by status) with how many of their batches have print files. A Received job has **Make print files**; once files exist the button reads **Make again** and asks first, with the choice to leave the batches that already have files (`onlyNew`). **Details** shows each batch and its files. The API does the same work as the command line and the watcher (`POST /api/jobs/:id/compose`, `src/jobs/ingestComposer.ts`), so the results are identical.
+
+* The API server needs `WATCH_DIR` (its `processed` folder holds the PDFs) and `COMPOSE_OUT_DIR` in its `.env`, and optionally `MRDF_OUT_DIR` and `GS_PATH`; see `api/.env.example`. Without them the screen says so and the buttons are disabled.
+* One job is composed by one request at a time; a second request for it is refused until the first finishes. The request waits for the files to be made, so a very large job can take a while.
+* It works whether or not "Make print files automatically" is on. Only Received jobs can be composed. A job still waiting for its PDF, or whose PDF was rejected, shows why in its status.
+* Nothing is written to the change log; the print files and their records are the evidence.
+
 ## What it does
 
 * One PDF per batch, named `<batchCode>_<segment>.pdf`. A file is closed after the mailpiece that takes it past **Most pages in one print file** (Settings, default 10 000; the run sheet and padding count), so a file can run over by one mailpiece. The rest of the batch continues in the next file.

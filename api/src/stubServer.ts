@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { buildApp } from './app.js';
+import { MemoryJobComposer, MemoryJobStore } from './jobs/memoryStore.js';
 import { MemoryReportStore } from './reports/memoryStore.js';
 import { MemoryRecipientStore } from './recipients/memoryStore.js';
 import { MemoryCostingStore } from './costing/memoryStore.js';
@@ -92,6 +93,15 @@ for (const [svc, bands, cost, sell] of [[second, [[0, 100], [101, 250]], 0.61, 0
 const reprice = new MemoryRepriceStore();
 for (const id of [acme, odevo, highline]) reprice.customers.add(id);
 reprice.counts = { inScope: 412, alreadyPriced: 380, wouldPrice: 31, noModel: 1, unknownColours: 0 };
-const app = await buildApp({ settings: store, customers, costing, postal, reference: new MemoryReferenceStore(), reprice, recipients, reports, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
+const jobs = new MemoryJobStore();
+const job = (id: number, status: 'Received' | 'Awaiting PDF' | 'PDF Rejected', composed: number, over: object = {}) => ({
+  id, customerCode: 'ACME', customerName: 'Acme Energy Ltd', baseName: `ACME_statements_${id}`, pdfFileName: `ACME_statements_${id}.pdf`, receivedAt: `2026-11-2${id % 3}T09:30:00.000Z`,
+  status, packCount: 400, pageCount: 1200, pdfError: null, batchCount: 2, composedBatchCount: composed,
+  batches: [1, 2].map((n) => ({ id: id * 10 + n, batchCode: 7000 + id * 10 + n, status: 'Created', mailpieceCount: 200,
+    files: n <= composed ? [{ fileName: `${7000 + id * 10 + n}_1.pdf`, segment: 1, mailpieces: 200, pages: 602 }] : [] })), ...over });
+jobs.jobs.push(job(3, 'Received', 0), job(2, 'Received', 2), job(1, 'PDF Rejected', 0, { pdfError: 'Pack 12 ends on page 900 but the PDF has 880 pages' }));
+const composer = new MemoryJobComposer();
+composer.result = [{ batchCode: 7031, files: ['7031_1.pdf'], mrdfFile: null, skipped: null }, { batchCode: 7032, files: ['7032_1.pdf'], mrdfFile: null, skipped: null }];
+const app = await buildApp({ settings: store, customers, costing, postal, reference: new MemoryReferenceStore(), reprice, recipients, reports, jobs: { store: jobs, composer }, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
 await app.listen({ port: Number(process.env['API_PORT'] ?? 3001), host: '127.0.0.1' });
 console.log('Stub API (no database) on http://127.0.0.1:3001');
