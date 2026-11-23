@@ -108,11 +108,11 @@ function FormatDialog({ f, onClose, onDone }: { f: PostalFormat; onClose: () => 
   return (
     <Modal opened onClose={onClose} title={`Edit ${f.name}`}>
       <Stack>{msg && <Alert color="red">{msg}</Alert>}
-        <TextInput label="Most weight (g)" inputMode="numeric" value={w} onChange={(e) => setW(e.currentTarget.value)} error={err['maxWeightG']} data-autofocus />
-        <TextInput label="Most thickness (mm)" inputMode="decimal" placeholder="no limit" value={t} onChange={(e) => setT(e.currentTarget.value)} error={err['maxThicknessMm']} />
-        <TextInput label="Most sheets" inputMode="numeric" placeholder="no limit" value={n} onChange={(e) => setN(e.currentTarget.value)} error={err['maxSheets']} />
-        <TextInput label="Most length (mm)" description="The longer side." inputMode="decimal" value={ml} onChange={(e) => setMl(e.currentTarget.value)} error={err['maxLengthMm']} />
-        <TextInput label="Most width (mm)" description="The shorter side." inputMode="decimal" value={mw} onChange={(e) => setMw(e.currentTarget.value)} error={err['maxWidthMm']} />
+        <TextInput label="Maximum weight (g)" inputMode="numeric" value={w} onChange={(e) => setW(e.currentTarget.value)} error={err['maxWeightG']} data-autofocus />
+        <TextInput label="Maximum thickness (mm)" inputMode="decimal" placeholder="no limit" value={t} onChange={(e) => setT(e.currentTarget.value)} error={err['maxThicknessMm']} />
+        <TextInput label="Maximum sheets" inputMode="numeric" placeholder="no limit" value={n} onChange={(e) => setN(e.currentTarget.value)} error={err['maxSheets']} />
+        <TextInput label="Maximum length (mm)" description="The longer side." inputMode="decimal" value={ml} onChange={(e) => setMl(e.currentTarget.value)} error={err['maxLengthMm']} />
+        <TextInput label="Maximum width (mm)" description="The shorter side." inputMode="decimal" value={mw} onChange={(e) => setMw(e.currentTarget.value)} error={err['maxWidthMm']} />
         <Group justify="flex-end"><Button variant="default" onClick={onClose}>Cancel</Button><Button onClick={save}>Save</Button></Group></Stack>
     </Modal>
   );

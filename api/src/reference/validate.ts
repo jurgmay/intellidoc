@@ -38,19 +38,19 @@ export function parsePaper(body: Body): PaperInput {
 
 export function parseFormat(body: Body): FormatInput {
   const errs: Record<string, string> = {};
-  const maxWeightG = whole(errs, body?.['maxWeightG'], 'maxWeightG', 'Most weight', 1_000_000, true);
+  const maxWeightG = whole(errs, body?.['maxWeightG'], 'maxWeightG', 'Maximum weight', 1_000_000, true);
   const t = body?.['maxThicknessMm'];
   let maxThicknessMm: number | null = null;
   if (t !== undefined && t !== null) {
-    if (typeof t !== 'number' || !Number.isFinite(t) || t <= 0) errs['maxThicknessMm'] = 'Most thickness must be a number above 0';
-    else if (t >= 10000) errs['maxThicknessMm'] = 'Most thickness is too large';
-    else if (Math.abs(Math.round(t * 100) / 100 - t) > 1e-9) errs['maxThicknessMm'] = 'Most thickness can have at most 2 decimal places';
+    if (typeof t !== 'number' || !Number.isFinite(t) || t <= 0) errs['maxThicknessMm'] = 'Maximum thickness must be a number above 0';
+    else if (t >= 10000) errs['maxThicknessMm'] = 'Maximum thickness is too large';
+    else if (Math.abs(Math.round(t * 100) / 100 - t) > 1e-9) errs['maxThicknessMm'] = 'Maximum thickness can have at most 2 decimal places';
     else maxThicknessMm = Math.round(t * 100) / 100;
   }
-  const maxSheets = whole(errs, body?.['maxSheets'], 'maxSheets', 'Most sheets', 1_000_000, false);
-  const maxLengthMm = size(errs, body?.['maxLengthMm'], 'maxLengthMm', 'Most length');
-  const maxWidthMm = size(errs, body?.['maxWidthMm'], 'maxWidthMm', 'Most width');
-  if (maxLengthMm !== null && maxWidthMm !== null && maxWidthMm > maxLengthMm) errs['maxWidthMm'] = 'Most width cannot be more than most length (length is the longer side)';
+  const maxSheets = whole(errs, body?.['maxSheets'], 'maxSheets', 'Maximum sheets', 1_000_000, false);
+  const maxLengthMm = size(errs, body?.['maxLengthMm'], 'maxLengthMm', 'Maximum length');
+  const maxWidthMm = size(errs, body?.['maxWidthMm'], 'maxWidthMm', 'Maximum width');
+  if (maxLengthMm !== null && maxWidthMm !== null && maxWidthMm > maxLengthMm) errs['maxWidthMm'] = 'Maximum width cannot be more than maximum length (length is the longer side)';
   done(errs);
   return { maxWeightG: maxWeightG!, maxThicknessMm, maxSheets, maxLengthMm: maxLengthMm!, maxWidthMm: maxWidthMm! };
 }

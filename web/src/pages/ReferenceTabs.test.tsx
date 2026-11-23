@@ -83,9 +83,9 @@ describe('PostalFormatsTab', () => {
   it('saves changed limits, and an emptied one becomes null', async () => {
     wrap(<PostalFormatsTab />);
     await userEvent.click(within((await screen.findByText('Letter')).closest('tr')!).getByRole('button', { name: 'Edit' }));
-    const w = screen.getByLabelText('Most weight (g)'); await userEvent.clear(w); await userEvent.type(w, '120');
-    await userEvent.clear(screen.getByLabelText('Most sheets'));
-    const mw = screen.getByLabelText('Most length (mm)'); await userEvent.clear(mw); await userEvent.type(mw, '245.5');
+    const w = screen.getByLabelText('Maximum weight (g)'); await userEvent.clear(w); await userEvent.type(w, '120');
+    await userEvent.clear(screen.getByLabelText('Maximum sheets'));
+    const mw = screen.getByLabelText('Maximum length (mm)'); await userEvent.clear(mw); await userEvent.type(mw, '245.5');
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(sent('PUT')).toHaveLength(1));
     expect(sent('PUT')[0]).toMatchObject({ url: '/api/reference/postal-formats/1', body: { maxWeightG: 120, maxThicknessMm: 5, maxSheets: null, maxLengthMm: 245.5, maxWidthMm: 165 } });
@@ -93,16 +93,16 @@ describe('PostalFormatsTab', () => {
   it('will not save a format with no length', async () => {
     wrap(<PostalFormatsTab />);
     await userEvent.click(within((await screen.findByText('Letter')).closest('tr')!).getByRole('button', { name: 'Edit' }));
-    await userEvent.clear(screen.getByLabelText('Most length (mm)'));
-    failNext = new Response(JSON.stringify({ errors: { maxLengthMm: 'Most length must be a number above 0' } }), { status: 422 });
+    await userEvent.clear(screen.getByLabelText('Maximum length (mm)'));
+    failNext = new Response(JSON.stringify({ errors: { maxLengthMm: 'Maximum length must be a number above 0' } }), { status: 422 });
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-    expect((await screen.findAllByText('Most length must be a number above 0')).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Maximum length must be a number above 0')).length).toBeGreaterThan(0);
     expect(sent('PUT')[0]!.body.maxLengthMm).toBeNull(); // an empty box is sent as null (NaN in JSON), for the server to refuse
   });
   it('shows the ordering error from the server', async () => {
     wrap(<PostalFormatsTab />);
     await userEvent.click(within((await screen.findByText('Letter')).closest('tr')!).getByRole('button', { name: 'Edit' }));
-    failNext = new Response(JSON.stringify({ errors: { maxWeightG: 'Most weight cannot be more than Large Letter (750)' } }), { status: 422 });
+    failNext = new Response(JSON.stringify({ errors: { maxWeightG: 'Maximum weight cannot be more than Large Letter (750)' } }), { status: 422 });
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect((await screen.findAllByText(/cannot be more than Large Letter/)).length).toBeGreaterThan(0);
   });
