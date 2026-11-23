@@ -5,7 +5,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActivityData } from '../api/activity';
 import { theme } from '../theme';
-import { ActivityPage, buildLines, duration, durationText, elapsed, size } from './ActivityPage';
+import { buildLines, duration, durationText, elapsed, size } from './activityLines';
+import { ActivityPage } from './ActivityPage';
 
 const job = (id: number, over: object = {}) => ({ id, customerCode: 'ACME', customerName: 'Acme', baseName: `j${id}`, pdfFileName: `j${id}.pdf`, receivedAt: `2026-11-22T10:0${id}:00.000Z`, status: 'Received',
   packCount: 1, pageCount: 2, pdfError: null, batchCount: 2, composedBatchCount: 2, runSheetsEmailedAt: null, ...over });
