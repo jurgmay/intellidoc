@@ -16,7 +16,7 @@ npm run compose -- <jobId> <outDir> [pdfDir] [logo.png]      (compose:env reads 
 
 The folder watcher can make the print files itself. Once a minute it looks for Received jobs with a batch that has mail to print and no print file yet, and composes them (`src/compose/auto.ts`). It does this only when **both** are true:
 
-* **Make print files automatically** is on in Settings (Print file marks). It is **off** by default: switch it on once the marks have been checked on a printed proof. It is re-read every minute, no restart.
+* **Make print files automatically** is on in Settings (Print production settings). It is **off** by default: switch it on once the marks have been checked on a printed proof. It is re-read every minute, no restart.
 * `COMPOSE_OUT_DIR` is set in the watcher's `.env` (the folder the PDFs are written to). `GS_PATH` names Ghostscript if it is not on the PATH. `MRDF_OUT_DIR` is the inserter's input folder for MRDF files.
 
 It reads the customer's PDF from the watcher's `processed` folder, so a job is composed a minute or so after it is Received, never while the PDF is still in the inbox. A batch that already has print files is left alone, and so is a batch that is no longer Created. A job that fails (PDF not found, Ghostscript missing, ...) is tried again after 1, 2, 5, 10 and then every 30 minutes, an e-mail goes to the alert recipients once after the third failure in a row, and it is never given up on. The compose command still works at any time and composes the batches again.
@@ -37,7 +37,7 @@ It reads the customer's PDF from the watcher's `processed` folder, so a job is c
 
 **Making print files, step by step.** Within a batch the bar moves as the PDF's colour is checked (first 20%), colour pages are converted to grey (to 30%, one step that cannot show progress), and the files are built (in proportion to each file's mailpieces, adding the marks about every 200 ms); the batch's last 10% is writing the files, saving to the database and writing the MRDF file, each shown in the text. When every batch is made and "E-mail run sheets" is on, the job shows **E-mailing the run sheets** (checking the settings, loading, each run sheet, joining, sending) with the bar full, before it is marked Done. This was the pause after the last batch: the run sheets were drawn a second time for the e-mail. They are now reused from the ones drawn for the batches.
 
-**Warning.** If "Make print files automatically" (Settings, Print file marks) is off, a yellow warning at the top says jobs wait for **Make print files** on the Jobs screen, with a link to Settings.
+**Warning.** If "Make print files automatically" (Settings, Print production settings) is off, a yellow warning at the top says jobs wait for **Make print files** on the Jobs screen, with a link to Settings.
 
 **PDF check progress.** An import that reads a PDF, and a PDF check, show a bar of pages checked and what they are on ("Checking the colour of page 1,200 of 54,000"): reading the PDF, then counting its pages, then looking at the colour of each page, which is where a big PDF spends its time. The colour check now hands control back about every 200 ms, so the watcher's timers and database updates keep running while a very large PDF is being read (before, they waited until it finished). Opening a very large PDF is still one step that cannot show progress.
 
@@ -105,7 +105,7 @@ Things to know:
 
 ## Settings
 
-The mark positions are on the **Control marks** tab of the Settings page (from *Sequence number: font size* to *OCR code: box height*), in two groups, **Print file marks** and **MRDF page codes**; it shares the Save changes bar with the General tab. **Print file marks** (box positions, font size, dot, maximum pages per file). FileMaker kept these in its Settings table, which was not in the DDR, so **the starting values are placeholders** (except the dot, which FileMaker fixed in the script). Check them against a printed proof and correct them there.
+The mark positions are on the **Control marks** tab of the Settings page (from *Sequence number: font size* to *OCR code: box height*), in two groups, **Print production settings** and **MRDF page codes**; it shares the Save changes bar with the General tab. **Print production settings** (box positions, font size, dot, maximum pages per file). FileMaker kept these in its Settings table, which was not in the DDR, so **the starting values are placeholders** (except the dot, which FileMaker fixed in the script). Check them against a printed proof and correct them there.
 
 ## Not built, and differences from FileMaker
 

@@ -7,14 +7,14 @@ import { theme } from '../theme';
 import { SettingsPage } from './SettingsPage';
 
 const payload = {
-  groups: ['Enclosing', 'PDF and alerts', 'Print file marks', 'MRDF page codes'],
+  groups: ['Enclosing', 'PDF and alerts', 'Print production settings', 'MRDF page codes'],
   settings: [
     { key: 'machineEnclosingMaxSheets', group: 'Enclosing', label: 'Machine enclosing: maximum sheets per letter', type: 'integer', unit: 'sheets', min: 1, max: 500,
       description: 'The machine can enclose letters of up to this many sheets.', usedBy: 'Import: routes mailpieces.', appliesTo: 'Next file imported.', value: 12 },
     { key: 'xmlFirstEnabled', group: 'PDF and alerts', label: 'Import an XML without waiting for its PDF', type: 'boolean',
       description: 'When on, an XML is imported as soon as it arrives.', usedBy: 'Folder watcher.', appliesTo: 'No restart needed.', value: true },
-    { key: 'autoCompose', group: 'Print file marks', label: 'Make print files automatically', type: 'boolean', description: 'Make the print files as soon as a job is ready.', usedBy: 'Folder watcher.', appliesTo: 'No restart needed.', value: false },
-    { key: 'markSeqFontPt', group: 'Print file marks', label: 'Sequence number: font size', type: 'number', unit: 'pt', min: 1, max: 72, description: 'Size of the sequence number.', usedBy: 'Print files.', appliesTo: 'Next print files.', value: 8 },
+    { key: 'autoCompose', group: 'Print production settings', label: 'Make print files automatically', type: 'boolean', description: 'Make the print files as soon as a job is ready.', usedBy: 'Folder watcher.', appliesTo: 'No restart needed.', value: false },
+    { key: 'markSeqFontPt', group: 'Print production settings', label: 'Sequence number: font size', type: 'number', unit: 'pt', min: 1, max: 72, description: 'Size of the sequence number.', usedBy: 'Print files.', appliesTo: 'Next print files.', value: 8 },
     { key: 'mrdfOcrHeightMm', group: 'MRDF page codes', label: 'OCR code: box height', type: 'number', unit: 'mm', min: 0.1, max: 400, description: 'Height of the OCR code box.', usedBy: 'MRDF.', appliesTo: 'Next print files.', value: 4 },
   ],
   batchCode: { highestUsed: 1041, next: 1042 },

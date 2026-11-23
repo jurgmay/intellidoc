@@ -22,7 +22,7 @@ export interface SettingDef {
   appliesTo: string;
 }
 
-export const GROUPS = ['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print file marks', 'MRDF page codes'] as const;
+export const GROUPS = ['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'MRDF page codes'] as const;
 
 export const SETTINGS: SettingDef[] = [
   {
@@ -98,85 +98,85 @@ export const SETTINGS: SettingDef[] = [
     appliesTo: 'Next run sheet e-mail.',
   },
   {
-    key: 'autoCompose', column: 'auto_compose', group: 'Print file marks', label: 'Make print files automatically', type: 'boolean',
+    key: 'autoCompose', column: 'auto_compose', group: 'Print production settings', label: 'Make print files automatically', type: 'boolean',
     description: 'When on, the folder watcher makes the print PDFs of a job as soon as it is Received, and again for any job it could not do. When off, print files are made only by running the compose command. Off until the marks below have been checked on a printed proof.',
     usedBy: 'Folder watcher: after each job is Received. It also needs the COMPOSE_OUT_DIR folder in the watcher .env file; without it nothing is made, whatever this says.',
     appliesTo: 'The watcher re-reads this every minute; no restart needed. Print files already made are not changed.',
   },
   {
-    key: 'maxPagesPerPdf', column: 'max_pages_per_pdf', group: 'Print file marks', label: 'Maximum pages in one print file', type: 'integer', unit: 'pages', min: 2, max: 1000000,
+    key: 'maxPagesPerPdf', column: 'max_pages_per_pdf', group: 'Print production settings', label: 'Maximum pages in one print file', type: 'integer', unit: 'pages', min: 2, max: 1000000,
     description: 'A batch is printed from one PDF. When a file passes this many pages it is closed after the mailpiece that took it over, and the batch continues in a new file, so a file can run over by up to one mailpiece. The run sheet and blank padding pages count.',
     usedBy: 'Print file composition: where a batch is split into files.',
     appliesTo: 'Next print file composed.',
   },
   {
-    key: 'markSeqFontPt', column: 'mark_seq_font_pt', group: 'Print file marks', label: 'Sequence number: font size', type: 'number', unit: 'pt', min: 1, max: 72, step: 0.1,
+    key: 'markSeqFontPt', column: 'mark_seq_font_pt', group: 'Print production settings', label: 'Sequence number: font size', type: 'number', unit: 'pt', min: 1, max: 72, step: 0.1,
     description: 'Size of the sequence number text (OCR-B), e.g. 1042/000123.',
     usedBy: 'Print file composition: the sequence number printed on the first page of each mailpiece, for the enclosing machine camera.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markSeqLeftMm', column: 'mark_seq_left_mm', group: 'Print file marks', label: 'Sequence number: left', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
+    key: 'markSeqLeftMm', column: 'mark_seq_left_mm', group: 'Print production settings', label: 'Sequence number: left', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
     description: 'Left edge of the box the sequence number is centred in. Measured from the top left of the trim box.',
     usedBy: 'Print file composition: the sequence number printed on the first page of each mailpiece, for the enclosing machine camera.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markSeqTopMm', column: 'mark_seq_top_mm', group: 'Print file marks', label: 'Sequence number: top', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
+    key: 'markSeqTopMm', column: 'mark_seq_top_mm', group: 'Print production settings', label: 'Sequence number: top', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
     description: 'Top edge of the box the sequence number is centred in. Measured from the top left of the trim box.',
     usedBy: 'Print file composition: the sequence number printed on the first page of each mailpiece, for the enclosing machine camera.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markSeqWidthMm', column: 'mark_seq_width_mm', group: 'Print file marks', label: 'Sequence number: box width', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
+    key: 'markSeqWidthMm', column: 'mark_seq_width_mm', group: 'Print production settings', label: 'Sequence number: box width', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
     description: 'Width of the box the sequence number is centred in.',
     usedBy: 'Print file composition: the sequence number printed on the first page of each mailpiece, for the enclosing machine camera.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markSeqHeightMm', column: 'mark_seq_height_mm', group: 'Print file marks', label: 'Sequence number: box height', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
+    key: 'markSeqHeightMm', column: 'mark_seq_height_mm', group: 'Print production settings', label: 'Sequence number: box height', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
     description: 'Height of the box the sequence number is centred in.',
     usedBy: 'Print file composition: the sequence number printed on the first page of each mailpiece, for the enclosing machine camera.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markDmLeftMm', column: 'mark_dm_left_mm', group: 'Print file marks', label: 'Data Matrix: left', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
+    key: 'markDmLeftMm', column: 'mark_dm_left_mm', group: 'Print production settings', label: 'Data Matrix: left', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
     description: 'Left edge of the Data Matrix. Measured from the top left of the trim box.',
     usedBy: 'Print file composition: the Data Matrix printed on the first page of each mailpiece.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markDmTopMm', column: 'mark_dm_top_mm', group: 'Print file marks', label: 'Data Matrix: top', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
+    key: 'markDmTopMm', column: 'mark_dm_top_mm', group: 'Print production settings', label: 'Data Matrix: top', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
     description: 'Top edge of the Data Matrix. Measured from the top left of the trim box.',
     usedBy: 'Print file composition: the Data Matrix printed on the first page of each mailpiece.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markDmWidthMm', column: 'mark_dm_width_mm', group: 'Print file marks', label: 'Data Matrix: width', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
+    key: 'markDmWidthMm', column: 'mark_dm_width_mm', group: 'Print production settings', label: 'Data Matrix: width', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
     description: 'The code is square and is fitted inside the smaller of its width and height.',
     usedBy: 'Print file composition: the Data Matrix printed on the first page of each mailpiece.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markDmHeightMm', column: 'mark_dm_height_mm', group: 'Print file marks', label: 'Data Matrix: height', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
+    key: 'markDmHeightMm', column: 'mark_dm_height_mm', group: 'Print production settings', label: 'Data Matrix: height', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
     description: 'The code is square and is fitted inside the smaller of its width and height.',
     usedBy: 'Print file composition: the Data Matrix printed on the first page of each mailpiece.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markDotXMm', column: 'mark_dot_x_mm', group: 'Print file marks', label: 'Pack start dot: centre across', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
+    key: 'markDotXMm', column: 'mark_dot_x_mm', group: 'Print production settings', label: 'Pack start dot: centre across', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
     description: 'Distance of the dot centre from the left of the trim box.',
     usedBy: 'Print file composition: the dot printed on the first page of each mailpiece that marks where a pack starts.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markDotYMm', column: 'mark_dot_y_mm', group: 'Print file marks', label: 'Pack start dot: centre down', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
+    key: 'markDotYMm', column: 'mark_dot_y_mm', group: 'Print production settings', label: 'Pack start dot: centre down', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
     description: 'Distance of the dot centre from the top of the trim box.',
     usedBy: 'Print file composition: the dot printed on the first page of each mailpiece that marks where a pack starts.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markDotDiameterMm', column: 'mark_dot_diameter_mm', group: 'Print file marks', label: 'Pack start dot: diameter', type: 'number', unit: 'mm', min: 0.1, max: 50, step: 0.1,
+    key: 'markDotDiameterMm', column: 'mark_dot_diameter_mm', group: 'Print production settings', label: 'Pack start dot: diameter', type: 'number', unit: 'mm', min: 0.1, max: 50, step: 0.1,
     description: 'Diameter of the dot. It is red, or black when the page is printed mono.',
     usedBy: 'Print file composition: the dot printed on the first page of each mailpiece that marks where a pack starts.',
     appliesTo: 'Next print file composed. Files already made are not changed.',

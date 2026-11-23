@@ -38,7 +38,7 @@ export function ActivityPage({ refreshMs = 3000 }: { refreshMs?: number }) {
       {error && <Alert color="red" icon={<IconAlertCircle size={16} />}>{error}</Alert>}
       {data && data.autoCompose === false && (
         <Alert color="yellow" icon={<IconAlertCircle size={16} />} title="Print files are not made automatically">
-          "Make print files automatically" is off, so jobs wait until someone presses Make print files on the Jobs screen. Turn it on in <Anchor component={Link} to="/settings">Settings</Anchor> (Print file marks).
+          "Make print files automatically" is off, so jobs wait until someone presses Make print files on the Jobs screen. Turn it on in <Anchor component={Link} to="/settings">Settings</Anchor> (Print production settings).
         </Alert>
       )}
       {data?.inboxUnavailable && <Alert color="yellow" icon={<IconAlertCircle size={16} />} title="The inbox cannot be shown">{data.inboxUnavailable}</Alert>}
