@@ -50,16 +50,17 @@ describe('times', () => {
       inbox: [{ stem: 'w', xmlName: 'w.xml', xmlBytes: 1, pdfName: null, pdfBytes: null, modifiedAt: '2026-11-22T21:04:30.000Z' }],
       jobs: [job(1, { baseName: 'done', pdfFileName: 'done.pdf' })],
       recent: [act(2, { label: 'done.xml', startedAt: '2026-11-22T21:00:00.000Z', finishedAt: '2026-11-22T21:00:10.000Z' }), act(3, { kind: 'PDF check', label: 'DONE.pdf', startedAt: '2026-11-22T21:00:10.000Z', finishedAt: '2026-11-22T21:02:40.000Z' }),
-        act(4, { kind: 'Print files', label: 'Job 1: done.pdf', startedAt: '2026-11-22T21:01:00.000Z', finishedAt: '2026-11-22T21:01:30.000Z', detail: '2 of 2 batches made' })],
+        act(4, { kind: 'Print files', label: 'Job 1: done.pdf', jobId: 1, startedAt: '2026-11-22T21:03:00.000Z', finishedAt: '2026-11-22T21:03:30.000Z', detail: '2 of 2 batches made' })],
     }), NOW);
     expect(durationText(l[0]!, NOW)).toBe('2m 0s, about 2 min left');
     expect(l[0]).toMatchObject({ start: '2026-11-22T21:03:00.000Z', end: null });
     expect(durationText(l[1]!, NOW)).toBe('waiting 30s'); expect(l[1]).toMatchObject({ start: null, end: null });
     const job1 = l.find((x) => x.name === 'done.pdf')!;
-    expect(job1).toMatchObject({ start: '2026-11-22T21:00:00.000Z', end: '2026-11-22T21:02:40.000Z' });
-    expect(durationText(job1, NOW)).toBe('2m 40s');
-    const print = l.find((x) => x.detail?.startsWith('Print files:'))!;
-    expect(print).toMatchObject({ stage: 'Completed' }); expect(durationText(print, NOW)).toBe('30s');
+    // one row for the file: from the start of the import to the end of the print files
+    expect(l.filter((x) => x.name === 'done.pdf')).toHaveLength(1);
+    expect(job1).toMatchObject({ start: '2026-11-22T21:00:00.000Z', end: '2026-11-22T21:03:30.000Z' });
+    expect(durationText(job1, NOW)).toBe('3m 30s');
+    expect(l.filter((x) => x.detail?.startsWith('Print files:'))).toHaveLength(0);
   });
   it('shows Start time, End time and Duration columns instead of Time, and no Size column', async () => {
     show();

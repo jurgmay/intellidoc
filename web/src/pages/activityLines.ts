@@ -36,6 +36,18 @@ export function buildLines(d: ActivityData, now: number = Date.now()): ActivityL
   const jobOf = (r: { jobId: number | null; label: string }) => (r.jobId !== null ? jobById.get(r.jobId) : undefined) ?? jobByStem.get(stemOf(r.label));
   /** "Job 7: j7.pdf" is the print files row's label; the file name is what follows. */
   const fileOf = (r: { jobId: number | null; label: string }): string => (r.jobId !== null ? jobById.get(r.jobId)?.pdfFileName : undefined) ?? r.label.replace(/^Job \d+:\s*/, '');
+  // Making the print files continues the job's line rather than adding one: it ends when the print files were last made.
+  const printedAt = new Map<number, string>();
+  for (const r of d.recent.filter((x) => x.state === 'Done' && x.kind === 'Print files' && x.jobId !== null && x.finishedAt)) {
+    const seen = printedAt.get(r.jobId!);
+    if (!seen || seen < r.finishedAt!) printedAt.set(r.jobId!, r.finishedAt!);
+  }
+  /** From the start of the import to the end of the last step: the PDF check, or making the print files when that came later. */
+  const jobTimes = (jobId: number, imported: { start: string; end: string } | undefined, receivedAt: string): { start: string | null; end: string } => {
+    const printed = printedAt.get(jobId);
+    const end = printed && (!imported || printed > imported.end) ? printed : imported?.end ?? receivedAt;
+    return { start: imported?.start ?? null, end };
+  };
   const busy = new Set<string>();
   for (const r of d.running) {
     busy.add(r.label.toLowerCase());
@@ -58,11 +70,7 @@ export function buildLines(d: ActivityData, now: number = Date.now()): ActivityL
     const made = j.batchCount > 0 && j.composedBatchCount === j.batchCount;
     lines.push({ key: `c${j.id}`, stage: j.status === 'PDF Rejected' ? 'Failed' : 'Completed', name: j.pdfFileName, account: j.customerName, bytes: null, pdf: 'arrived',
       detail: j.status === 'PDF Rejected' ? `PDF rejected (${j.pdfError ?? 'no reason given'}) for:` : made ? 'Print files made for:' : j.composedBatchCount > 0 ? `Print files made for ${j.composedBatchCount} of ${j.batchCount} batches of:` : 'Ready; print files not made yet for:',
-      progress: null, seconds: null, ...(doneByStem.get(j.baseName.toLowerCase()) ?? { start: null, end: j.receivedAt }), waitingSince: null, stalled: false });
-  }
-  // Making the print files is work of its own, with its own times.
-  for (const r of d.recent.filter((x) => x.state === 'Done' && x.kind === 'Print files')) {
-    lines.push({ key: `p${r.id}`, stage: 'Completed', name: fileOf(r), account: jobOf(r)?.customerName ?? null, bytes: null, pdf: 'arrived', detail: `Print files: ${r.detail ?? 'made'}. File:`, progress: null, seconds: null, start: r.startedAt, end: r.finishedAt ?? r.updatedAt, waitingSince: null, stalled: false });
+      progress: null, seconds: null, ...jobTimes(j.id, doneByStem.get(j.baseName.toLowerCase()), j.receivedAt), waitingSince: null, stalled: false });
   }
   // Stable: keep the order built above within a stage (the inbox is already in the watcher's order), and show the stages in ORDER.
   return lines.map((l, i) => ({ l, i })).sort((a, b) => ORDER.indexOf(a.l.stage) - ORDER.indexOf(b.l.stage) || a.i - b.i).map((x) => x.l);
