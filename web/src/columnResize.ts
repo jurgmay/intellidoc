@@ -101,7 +101,11 @@ export function installColumnResize(root: HTMLElement = document.body): () => vo
   if (!document.getElementById('col-resize-style')) {
     // Once the columns are fixed, a cell holds only as much as its width: it must clip rather than spill into the next column.
     const style = document.createElement('style'); style.id = 'col-resize-style';
-    style.textContent = 'table[data-col-fixed] th, table[data-col-fixed] td { overflow: hidden; text-overflow: ellipsis; }';
+    style.textContent = [
+      'table[data-col-fixed] th, table[data-col-fixed] td { overflow: hidden; text-overflow: ellipsis; }',
+      // Faint lines between the columns show where the handles are: half the strength of the row lines, in either colour scheme.
+      'table[data-col-resize] > thead > tr > th:not(:last-child), table[data-col-resize] > tbody > tr > td:not(:last-child) { border-right: 1px solid color-mix(in srgb, var(--table-border-color, var(--mantine-color-gray-3)) 45%, transparent); }',
+    ].join('\n');
     document.head.appendChild(style);
   }
   const scan = () => root.querySelectorAll('table').forEach((t) => { if (!t.hasAttribute(DONE)) enhanceTable(t); });
