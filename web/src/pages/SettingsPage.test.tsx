@@ -7,7 +7,7 @@ import { theme } from '../theme';
 import { SettingsPage } from './SettingsPage';
 
 const payload = {
-  groups: ['Enclosing', 'PDF and alerts', 'Print production settings', 'Page size', 'Envelope window', 'Sequence number', 'MRDF page codes', 'Network access', 'Workflow server'],
+  groups: ['Enclosing', 'PDF and alerts', 'Print production settings', 'Page size', 'Envelope window', 'Sequence number', 'MRDF page codes', 'Network access', 'Workflow server', 'Email settings', 'H-POD API settings'],
   settings: [
     { key: 'machineEnclosingMaxSheets', group: 'Enclosing', label: 'Machine enclosing: maximum sheets per letter', type: 'integer', unit: 'sheets', min: 1, max: 500,
       description: 'The machine can enclose letters of up to this many sheets.', usedBy: 'Import: routes mailpieces.', appliesTo: 'Next file imported.', value: 12 },
@@ -20,6 +20,11 @@ const payload = {
     { key: 'networkUsername', group: 'Network access', label: 'Username', type: 'text', description: 'The account the app signs in with.', usedBy: 'Nothing yet.', appliesTo: 'Saved immediately.', value: '' },
     { key: 'networkPassword', group: 'Network access', label: 'Password', type: 'secret', description: 'Stored encrypted.', usedBy: 'Nothing yet.', appliesTo: 'Saved immediately.', value: '', isSet: false },
     { key: 'workflowNetworkPath', group: 'Workflow server', label: 'Network path', type: 'text', description: 'Network path of the workflow server.', usedBy: 'Nothing yet.', appliesTo: 'Saved immediately.', value: '\\\\wf01' },
+    { key: 'smtpServer', group: 'Email settings', label: 'SMTP server', type: 'text', description: 'The mail server.', usedBy: 'Test button.', appliesTo: 'Saved immediately.', value: '' },
+    { key: 'smtpPort', group: 'Email settings', label: 'SMTP port', type: 'integer', unit: 'port', min: 1, max: 65535, description: 'The mail server port.', usedBy: 'Test button.', appliesTo: 'Saved immediately.', value: 587 },
+    { key: 'smtpPassword', group: 'Email settings', label: 'SMTP password', type: 'secret', description: 'Stored encrypted.', usedBy: 'Test button.', appliesTo: 'Saved immediately.', value: '', isSet: false },
+    { key: 'hpodEndpoint', group: 'H-POD API settings', label: 'Endpoint', type: 'url', description: 'The H-POD API address.', usedBy: 'Test button.', appliesTo: 'Saved immediately.', value: '' },
+    { key: 'hpodPassword', group: 'H-POD API settings', label: 'Password', type: 'secret', description: 'Stored encrypted.', usedBy: 'Nothing yet.', appliesTo: 'Saved immediately.', value: '', isSet: true },
     { key: 'mrdfOcrRotationDeg', group: 'MRDF page codes', label: 'OCR code: rotation', type: 'integer', unit: '°', allowed: [0, 90, 180, 270], description: 'Turns the OCR code clockwise.', usedBy: 'MRDF.', appliesTo: 'Next print files.', value: 0 },
     { key: 'mrdfOcrHeightMm', group: 'MRDF page codes', label: 'OCR code: box height', type: 'number', unit: 'mm', min: 0.1, max: 400, description: 'Height of the OCR code box.', usedBy: 'MRDF.', appliesTo: 'Next print files.', value: 4 },
   ],
@@ -55,7 +60,7 @@ describe('SettingsPage', () => {
   it('names the first tab General and opens on it', async () => {
     wrap();
     const tabs = await screen.findAllByRole('tab');
-    expect(tabs.map((t) => t.textContent)).toEqual(['General', 'Control marks', 'Network', 'Postal rates', 'Postal formats', 'Paper', 'Anonymous addressees', 'Change log']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['General', 'Control marks', 'Network', 'Connectivity', 'Postal rates', 'Postal formats', 'Paper', 'Anonymous addressees', 'Change log']);
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
   });
   it('puts the mark positions on the Control marks tab and the rest on General, with one save bar for both', async () => {
@@ -154,6 +159,53 @@ describe('SettingsPage', () => {
       await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.url === '/api/settings/networkPassword/secret')).toBe(true));
       await waitFor(() => expect(within(screen.getByRole('tabpanel')).queryByRole('button', { name: 'Remove saved password' })).toBeNull());
       expect(screen.getByText('No unsaved changes')).toBeInTheDocument();
+    });
+  });
+
+  describe('Connectivity tab', () => {
+    const tests = () => calls.filter((c) => c.url.startsWith('/api/settings/test-'));
+    const open = async (user: ReturnType<typeof userEvent.setup>) => {
+      await screen.findByText('Make print files automatically');
+      await user.click(screen.getByRole('tab', { name: 'Connectivity' }));
+      return within(screen.getByRole('tabpanel'));
+    };
+    const answer = (ok: boolean, message: string) => (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string, init?: { method?: string; body?: string }) => {
+      calls.push({ url, method: init?.method ?? 'GET', body: init?.body ? JSON.parse(init.body) : undefined });
+      if (url.startsWith('/api/settings/test-')) return new Response(JSON.stringify({ ok, message }), { status: 200 });
+      return new Response(JSON.stringify(url.includes('audit') ? { rows: [] } : payload), { status: 200 });
+    });
+    it('has the two groups with a test button each, and none of it on General', async () => {
+      const user = userEvent.setup(); wrap();
+      await screen.findByText('Make print files automatically');
+      expect(within(screen.getByRole('tabpanel')).queryByText('SMTP server')).toBeNull();
+      const panel = await open(user);
+      expect(panel.getByRole('heading', { name: 'Email settings' })).toBeInTheDocument();
+      expect(panel.getByRole('heading', { name: 'H-POD API settings' })).toBeInTheDocument();
+      expect(panel.getByRole('button', { name: 'Send a test e-mail to the system administrator' })).toBeInTheDocument();
+      expect(panel.getByRole('button', { name: 'Test the connection' })).toBeInTheDocument();
+    });
+    it('sends the e-mail settings on screen to the test, without an empty password box, and shows the answer', async () => {
+      const user = userEvent.setup(); wrap();
+      const panel = await open(user);
+      answer(true, 'Test e-mail sent to admin@latcham.co.uk. Check the inbox.');
+      await user.type(panel.getByLabelText(/SMTP server/), 'smtp.example.com');
+      await user.click(panel.getByRole('button', { name: 'Send a test e-mail to the system administrator' }));
+      expect(await screen.findByText(/Test e-mail sent to admin@latcham.co.uk/)).toBeInTheDocument();
+      const body = (tests()[0]!.body as { values: Record<string, unknown> }).values;
+      expect(tests()[0]!.url).toBe('/api/settings/test-email');
+      expect(body).toMatchObject({ smtpServer: 'smtp.example.com', smtpPort: 587 });
+      expect(body).not.toHaveProperty('smtpPassword'); expect(body).not.toHaveProperty('hpodEndpoint');
+      expect(calls.some((c) => c.method === 'PUT')).toBe(false); // testing saves nothing
+    });
+    it('shows a failed test in red and tests the H-POD address on screen', async () => {
+      const user = userEvent.setup(); wrap();
+      const panel = await open(user);
+      answer(false, 'Could not reach https://hpod.example.com: ENOTFOUND');
+      await user.type(panel.getByLabelText(/Endpoint/), 'https://hpod.example.com');
+      await user.click(panel.getByRole('button', { name: 'Test the connection' }));
+      expect(await screen.findByText(/ENOTFOUND/)).toBeInTheDocument();
+      expect(tests()[0]!.url).toBe('/api/settings/test-hpod');
+      expect((tests()[0]!.body as { values: Record<string, unknown> }).values).toMatchObject({ hpodEndpoint: 'https://hpod.example.com' });
     });
   });
 

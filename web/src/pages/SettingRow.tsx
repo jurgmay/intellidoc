@@ -30,6 +30,8 @@ export function SettingRow({ setting: s, value, changed, error, onChange, onRemo
       control = <Select label={label} data={s.options ?? []} value={value as string} onChange={(v) => v && onChange(v)} allowDeselect={false} error={error} />;
       break;
     case 'text':
+    case 'email':
+    case 'url':
       control = <TextInput label={label} value={value as string} onChange={(e) => onChange(e.currentTarget.value)} error={error} autoComplete="off" />;
       break;
     case 'secret':

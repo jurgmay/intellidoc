@@ -2,7 +2,7 @@ import { api, ApiError } from './client';
 
 export type SettingValue = number | boolean | string;
 export interface SettingView {
-  key: string; group: string; label: string; type: 'number' | 'integer' | 'boolean' | 'select' | 'emails' | 'text' | 'secret';
+  key: string; group: string; label: string; type: 'number' | 'integer' | 'boolean' | 'select' | 'emails' | 'text' | 'email' | 'url' | 'secret';
   unit?: string; min?: number; max?: number; step?: number; allowed?: number[];
   description: string; usedBy: string; appliesTo: string;
   value: SettingValue; options?: string[];
@@ -30,3 +30,9 @@ export async function getMarksPreview(page: MarksPreviewPage, values: Record<str
   }
   return res.blob();
 }
+
+export interface TestResult { ok: boolean; message: string }
+/** Sends a test e-mail to the alert recipients with the e-mail settings given (the ones on screen, saved or not). */
+export const testEmail = (values: Record<string, SettingValue>): Promise<TestResult> => api('/api/settings/test-email', { method: 'POST', body: { values } });
+/** Checks that the H-POD API endpoint given answers. */
+export const testHpod = (values: Record<string, SettingValue>): Promise<TestResult> => api('/api/settings/test-hpod', { method: 'POST', body: { values } });

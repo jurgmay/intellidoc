@@ -3,7 +3,7 @@
  * The web page is generated from this list, so the explanation shown next to a setting is the one that lives next to the code.
  */
 export type SettingValue = number | boolean | string;
-export type SettingType = 'number' | 'integer' | 'boolean' | 'select' | 'emails' | 'text' | 'secret';
+export type SettingType = 'number' | 'integer' | 'boolean' | 'select' | 'emails' | 'text' | 'email' | 'url' | 'secret';
 
 export interface SettingDef {
   key: string;
@@ -24,7 +24,7 @@ export interface SettingDef {
   appliesTo: string;
 }
 
-export const GROUPS = ['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'Page size', 'Envelope window', 'Sequence number', 'Data Matrix', 'Pack start dot', 'MRDF page codes', 'Network access', 'Workflow server', 'IntelliDoc folders', 'Bluecrest File-Based folders', 'Postal docketing'] as const;
+export const GROUPS = ['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'Page size', 'Envelope window', 'Sequence number', 'Data Matrix', 'Pack start dot', 'MRDF page codes', 'Network access', 'Workflow server', 'IntelliDoc folders', 'Bluecrest File-Based folders', 'Postal docketing', 'Email settings', 'H-POD API settings'] as const;
 
 export const SETTINGS: SettingDef[] = [
   {
@@ -381,10 +381,88 @@ export const SETTINGS: SettingDef[] = [
     usedBy: 'Nothing reads it yet: it is kept here so the watcher and the app can take it from one place.',
     appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
   },
+  {
+    key: 'emailEnabled', column: 'email_enabled', group: 'Email settings', label: 'Send e-mail', type: 'boolean',
+    description: 'Master switch for e-mail sent by IntelliDoc. Off keeps every e-mail from being sent. The test button on this tab sends one whatever this says, so you can check the settings first.',
+    usedBy: 'Nothing reads it yet: the watcher and the run sheet e-mail still use the SMTP_* lines in their .env files.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'smtpFromName', column: 'smtp_from_name', group: 'Email settings', label: 'SMTP \'from\' name', type: 'text',
+    description: 'The name e-mails show as the sender, e.g. IntelliDoc.',
+    usedBy: 'The test e-mail button; the other e-mails will take it later.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'smtpFromAddress', column: 'smtp_from_address', group: 'Email settings', label: 'SMTP \'from\' address', type: 'email',
+    description: 'The address e-mails are sent from. The mail server may insist it is one the SMTP user is allowed to send as.',
+    usedBy: 'The test e-mail button; the other e-mails will take it later.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'smtpReplyTo', column: 'smtp_reply_to', group: 'Email settings', label: 'SMTP \'reply to\'', type: 'email',
+    description: 'Where replies go, if not to the \'from\' address. Leave empty to use the \'from\' address.',
+    usedBy: 'The test e-mail button; the other e-mails will take it later.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'smtpServer', column: 'smtp_server', group: 'Email settings', label: 'SMTP server', type: 'text',
+    description: 'Host name of the mail server, e.g. smtp.office365.com.',
+    usedBy: 'The test e-mail button; the other e-mails will take it later.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'smtpPort', column: 'smtp_port', group: 'Email settings', label: 'SMTP port', type: 'integer', unit: 'port', min: 1, max: 65535,
+    description: 'Port of the mail server. 587 (STARTTLS) is usual; 465 uses TLS from the start; 25 is plain.',
+    usedBy: 'The test e-mail button; the other e-mails will take it later.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'smtpUsername', column: 'smtp_username', group: 'Email settings', label: 'SMTP username', type: 'text',
+    description: 'The user to sign in to the mail server with. Leave empty if the server needs no sign-in.',
+    usedBy: 'The test e-mail button; the other e-mails will take it later.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'smtpPassword', column: 'smtp_password', group: 'Email settings', label: 'SMTP password', type: 'secret',
+    description: 'The password for the SMTP username. It is stored encrypted and is never shown again: type a new one to replace it, or use Remove to clear it.',
+    usedBy: 'The test e-mail button; the other e-mails will take it later. It is read on the server only and never sent to a browser.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'hpodEndpoint', column: 'hpod_endpoint', group: 'H-POD API settings', label: 'Endpoint', type: 'url',
+    description: 'The web address of the H-POD API, starting http:// or https://.',
+    usedBy: 'Nothing reads it yet except the test button on this tab.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'hpodInstance', column: 'hpod_instance', group: 'H-POD API settings', label: 'Instance', type: 'text',
+    description: 'The H-POD instance to use.',
+    usedBy: 'Nothing reads it yet except the test button on this tab.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'hpodAccountCode', column: 'hpod_account_code', group: 'H-POD API settings', label: 'Account code', type: 'text',
+    description: 'The H-POD account code.',
+    usedBy: 'Nothing reads it yet except the test button on this tab.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'hpodUsername', column: 'hpod_username', group: 'H-POD API settings', label: 'Username', type: 'text',
+    description: 'The user to sign in to the H-POD API with.',
+    usedBy: 'Nothing reads it yet except the test button on this tab.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'hpodPassword', column: 'hpod_password', group: 'H-POD API settings', label: 'Password', type: 'secret',
+    description: 'The password for the H-POD user. It is stored encrypted and is never shown again: type a new one to replace it, or use Remove to clear it.',
+    usedBy: 'Nothing reads it yet. It is read on the server only and never sent to a browser.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
 ];
 
 /** Groups whose settings are labelled without the group's name (the heading says it): Width under Page size, Left under Envelope window, Left under Sequence number, Left under Data Matrix. */
-const NAMED_BY_GROUP = new Set<string>(['Network access', 'Workflow server', 'Bluecrest File-Based folders', 'Page size', 'Envelope window', 'Sequence number', 'Data Matrix', 'Pack start dot']);
+const NAMED_BY_GROUP = new Set<string>(['H-POD API settings', 'Network access', 'Workflow server', 'Bluecrest File-Based folders', 'Page size', 'Envelope window', 'Sequence number', 'Data Matrix', 'Pack start dot']);
 /** The setting's full name, for messages and the change log, where the heading is not there to say which "Left" it is: "Sequence number: left". */
 export function nameOf(def: SettingDef): string {
   return NAMED_BY_GROUP.has(def.group) ? `${def.group}: ${def.label.charAt(0).toLowerCase()}${def.label.slice(1)}` : def.label;
@@ -423,6 +501,19 @@ export function validate(def: SettingDef, raw: unknown, options?: string[]): { v
       const t = raw.trim();
       if (t.length > MAX_TEXT) return { error: `${nameOf(def)} must be at most ${MAX_TEXT} characters` };
       if (/[\u0000-\u001f]/.test(t)) return { error: `${nameOf(def)} cannot contain line breaks or control characters` };
+      return { value: t };
+    }
+    case 'email': {
+      if (typeof raw !== 'string') return { error: `${nameOf(def)} must be text` };
+      const t = raw.trim();
+      return t === '' || EMAIL.test(t) ? { value: t } : { error: `${nameOf(def)}: not an e-mail address: ${t}` };
+    }
+    case 'url': {
+      if (typeof raw !== 'string') return { error: `${nameOf(def)} must be text` };
+      const t = raw.trim();
+      if (t === '') return { value: t };
+      if (t.length > MAX_TEXT) return { error: `${nameOf(def)} must be at most ${MAX_TEXT} characters` };
+      try { const u = new URL(t); if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('scheme'); } catch { return { error: `${nameOf(def)} must be a web address starting http:// or https://` }; }
       return { value: t };
     }
     case 'secret': {

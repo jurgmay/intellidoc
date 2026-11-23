@@ -22,14 +22,15 @@ import { reportRoutes } from './reports/routes.js';
 import type { ReportStore } from './reports/types.js';
 import { settingsRoutes } from './settings/routes.js';
 import type { SettingsStore } from './settings/store.js';
+import type { Connectivity } from './settings/connectivity.js';
 import { drawMarksPreview, type MarksPreviewer } from './settings/preview.js';
 
-export interface AppDeps { activity?: Omit<ActivityDeps, 'jobs' | 'settings'>; settings: SettingsStore; customers: CustomerStore; costing: CostingStore; postal: PostalStore; reference: ReferenceStore; reprice: RepriceStore; recipients: RecipientStore; reports: ReportStore; /** Jobs and making their print files. Optional so a server without print folders can still start. */ jobs?: JobDeps; /** Draws the marks preview (needs Ghostscript); tests pass a fake. */ marksPreview?: MarksPreviewer; /** Folder with the built web app, served at / when it exists. */ webDir?: string }
+export interface AppDeps { activity?: Omit<ActivityDeps, 'jobs' | 'settings'>; settings: SettingsStore; customers: CustomerStore; costing: CostingStore; postal: PostalStore; reference: ReferenceStore; reprice: RepriceStore; recipients: RecipientStore; reports: ReportStore; /** Jobs and making their print files. Optional so a server without print folders can still start. */ jobs?: JobDeps; /** The checks behind the test buttons on Settings > Connectivity (sending an e-mail, reaching the H-POD API); tests pass fakes. */ connectivity?: Connectivity; /** Draws the marks preview (needs Ghostscript); tests pass a fake. */ marksPreview?: MarksPreviewer; /** Folder with the built web app, served at / when it exists. */ webDir?: string }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
   app.get('/api/health', async () => ({ ok: true }));
-  settingsRoutes(app, deps.settings, deps.marksPreview ?? drawMarksPreview);
+  settingsRoutes(app, deps.settings, deps.marksPreview ?? drawMarksPreview, deps.connectivity);
   customerRoutes(app, deps.customers);
   costingRoutes(app, deps.costing);
   postalRoutes(app, deps.postal);
