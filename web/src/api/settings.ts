@@ -3,7 +3,7 @@ import { api, ApiError } from './client';
 export type SettingValue = number | boolean | string;
 export interface SettingView {
   key: string; group: string; label: string; type: 'number' | 'integer' | 'boolean' | 'select' | 'emails';
-  unit?: string; min?: number; max?: number; step?: number;
+  unit?: string; min?: number; max?: number; step?: number; allowed?: number[];
   description: string; usedBy: string; appliesTo: string;
   value: SettingValue; options?: string[];
 }

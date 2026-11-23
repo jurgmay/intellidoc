@@ -162,3 +162,23 @@ describe('POST /api/settings/marks-preview', () => {
     expect(r.statusCode).toBe(503); expect(r.json().error).toMatch(/Ghostscript was not found/);
   });
 });
+
+describe('MRDF OCR code rotation', () => {
+  it('is 0, 90, 180 or 270 and nothing else', async () => {
+    const def = BY_KEY.get('mrdfOcrRotationDeg')!;
+    expect(def.group).toBe('MRDF page codes');
+    expect(store.values['mrdfOcrRotationDeg']).toBe(0);
+    expect((await put({ mrdfOcrRotationDeg: 270 })).statusCode).toBe(200);
+    expect(store.values['mrdfOcrRotationDeg']).toBe(270);
+    const bad = await put({ mrdfOcrRotationDeg: 45 });
+    expect(bad.statusCode).toBe(422); expect(bad.json().errors.mrdfOcrRotationDeg).toMatch(/must be one of: 0, 90, 180, 270/);
+    expect((await put({ mrdfOcrRotationDeg: 90.5 })).statusCode).toBe(422);
+  });
+  it('reaches the preview', async () => {
+    let seen: unknown;
+    const a = await buildApp({ settings: store, customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: new MemoryRecipientStore(), reports: new MemoryReportStore(), reference: new MemoryReferenceStore(),
+      marksPreview: async (_p, marks) => { seen = marks.mrdf?.ocr; return new Uint8Array([1]); } });
+    await a.inject({ method: 'POST', url: '/api/settings/marks-preview', payload: { page: 'mrdf', values: { mrdfOcrRotationDeg: 180 } } });
+    expect(seen).toMatchObject({ rotationDeg: 180 });
+  });
+});

@@ -43,8 +43,12 @@ function drawGrid(page: PDFPage, f: Frame, font: PDFFont, size: PageSize): void 
   }
 }
 
-function outline(page: PDFPage, r: ReturnType<typeof rect>): void {
-  page.drawRectangle({ ...r, borderColor: BOX_LINE, borderWidth: 0.4, borderDashArray: [2, 1.5] });
+function outline(page: PDFPage, r: ReturnType<typeof rect>, deg = 0): void {
+  if (deg % 360 === 0) { page.drawRectangle({ ...r, borderColor: BOX_LINE, borderWidth: 0.4, borderDashArray: [2, 1.5] }); return; }
+  // turned clockwise about its centre
+  const cx = r.x + r.width / 2, cy = r.y + r.height / 2, a = (-deg * Math.PI) / 180, cos = Math.cos(a), sin = Math.sin(a);
+  const corners = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([sx, sy]) => { const dx = (sx! * r.width) / 2, dy = (sy! * r.height) / 2; return { x: cx + dx * cos - dy * sin, y: cy + dx * sin + dy * cos }; });
+  corners.forEach((c, i) => page.drawLine({ start: c, end: corners[(i + 1) % 4]!, thickness: 0.4, color: BOX_LINE, dashArray: [2, 1.5] }));
 }
 
 /** The preview as a one-page PDF of the given page size (the trim box is the whole page). */
@@ -73,7 +77,7 @@ export async function buildMarksPreviewPdf(which: PreviewPage, marks: MarkSettin
     const m = marks.mrdf;
     const side = Math.min(m.dm.widthMm, m.dm.heightMm);
     outline(page, rect(frame, { leftMm: m.dm.leftMm, topMm: m.dm.topMm, widthMm: side, heightMm: side }));
-    outline(page, rect(frame, m.ocr));
+    outline(page, rect(frame, m.ocr), m.ocr.rotationDeg ?? 0);
     drawMrdfMarks(page, ocg, ocrb, m, mrdfPageCodes(SAMPLE.batchCode, SAMPLE.sequence, 1, 2), trim);
     caption = 'Front of a sheet, MRDF page codes';
   }

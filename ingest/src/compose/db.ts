@@ -9,7 +9,7 @@ export interface ComposeSettings { autoCompose: boolean; maxPagesPerPdf: number;
 export async function loadComposeSettings(pool: sql.ConnectionPool): Promise<ComposeSettings> {
   const r = (await pool.request().query<Record<string, number>>(`SELECT CAST(auto_compose AS INT) AS auto_compose, max_pages_per_pdf, page_width_mm, page_height_mm, mark_seq_font_pt, mark_seq_left_mm, mark_seq_top_mm, mark_seq_width_mm, mark_seq_height_mm,
       mark_dm_left_mm, mark_dm_top_mm, mark_dm_width_mm, mark_dm_height_mm, mark_dot_x_mm, mark_dot_y_mm, mark_dot_diameter_mm,
-      mrdf_dm_left_mm, mrdf_dm_top_mm, mrdf_dm_width_mm, mrdf_dm_height_mm, mrdf_ocr_font_pt, mrdf_ocr_left_mm, mrdf_ocr_top_mm, mrdf_ocr_width_mm, mrdf_ocr_height_mm FROM idoc.settings WHERE settings_id = 1`)).recordset[0];
+      mrdf_dm_left_mm, mrdf_dm_top_mm, mrdf_dm_width_mm, mrdf_dm_height_mm, mrdf_ocr_font_pt, mrdf_ocr_left_mm, mrdf_ocr_top_mm, mrdf_ocr_width_mm, mrdf_ocr_height_mm, mrdf_ocr_rotation_deg FROM idoc.settings WHERE settings_id = 1`)).recordset[0];
   if (!r) throw new Error('idoc.settings has no row');
   const n = (k: string): number => Number(r[k]);
   return {
@@ -20,7 +20,7 @@ export async function loadComposeSettings(pool: sql.ConnectionPool): Promise<Com
       dot: { xMm: n('mark_dot_x_mm'), yMm: n('mark_dot_y_mm'), diameterMm: n('mark_dot_diameter_mm') },
       mrdf: {
         dm: { leftMm: n('mrdf_dm_left_mm'), topMm: n('mrdf_dm_top_mm'), widthMm: n('mrdf_dm_width_mm'), heightMm: n('mrdf_dm_height_mm') },
-        ocr: { fontPt: n('mrdf_ocr_font_pt'), leftMm: n('mrdf_ocr_left_mm'), topMm: n('mrdf_ocr_top_mm'), widthMm: n('mrdf_ocr_width_mm'), heightMm: n('mrdf_ocr_height_mm') },
+        ocr: { fontPt: n('mrdf_ocr_font_pt'), leftMm: n('mrdf_ocr_left_mm'), topMm: n('mrdf_ocr_top_mm'), widthMm: n('mrdf_ocr_width_mm'), heightMm: n('mrdf_ocr_height_mm'), rotationDeg: n('mrdf_ocr_rotation_deg') },
       },
     },
   };

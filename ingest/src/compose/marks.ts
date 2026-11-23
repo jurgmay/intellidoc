@@ -2,7 +2,7 @@
 import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
 import { join, sep } from 'node:path';
-import { PDFDict, PDFDocument, PDFName, PDFNumber, PDFRef, PDFString, PDFHexString, PDFOperator, PDFOperatorNames, grayscale, rgb, pushGraphicsState, popGraphicsState, type PDFFont, type PDFPage } from 'pdf-lib';
+import { PDFDict, PDFDocument, PDFName, PDFNumber, PDFRef, PDFString, PDFHexString, PDFOperator, PDFOperatorNames, degrees, grayscale, rgb, pushGraphicsState, popGraphicsState, type PDFFont, type PDFPage } from 'pdf-lib';
 import bwipjs from 'bwip-js';
 
 /** Black for every mark: DeviceGray 0, so it is black toner only whatever the RIP does with RGB. */
@@ -13,12 +13,25 @@ export const MM = 72 / 25.4;
 export const DEFAULT_PAGE_MM = { widthMm: 210, heightMm: 297 };
 export interface PageSize { widthMm: number; heightMm: number }
 
+/** The MRDF OCR code: a box the text is centred in, then turned clockwise about the box centre (0, 90, 180 or 270; missing means 0). */
+export interface OcrBox { fontPt: number; leftMm: number; topMm: number; widthMm: number; heightMm: number; rotationDeg?: number }
+
 export interface MarkSettings {
   seq: { fontPt: number; leftMm: number; topMm: number; widthMm: number; heightMm: number };
   dm: { leftMm: number; topMm: number; widthMm: number; heightMm: number };
   dot: { xMm: number; yMm: number; diameterMm: number };
   /** The MRDF page codes, drawn on the front of every sheet when the customer uses MRDF. */
-  mrdf?: { dm: { leftMm: number; topMm: number; widthMm: number; heightMm: number }; ocr: { fontPt: number; leftMm: number; topMm: number; widthMm: number; heightMm: number } };
+  mrdf?: { dm: { leftMm: number; topMm: number; widthMm: number; heightMm: number }; ocr: OcrBox };
+}
+
+/**
+ * Where drawText must start (the left end of the baseline, in PDF points) for text of this width and cap height to be centred on (cx, cy) once
+ * turned clockwise by `deg` about that centre. pdf-lib turns text about its start point, anticlockwise for a positive angle, hence -deg.
+ */
+export function rotatedTextOrigin(cx: number, cy: number, textWidth: number, capHeight: number, deg: number): { x: number; y: number } {
+  const a = (-deg * Math.PI) / 180, cos = Math.cos(a), sin = Math.sin(a);
+  const hx = textWidth / 2, hy = capHeight / 2; // the middle of the text, from its start
+  return { x: cx - (hx * cos - hy * sin), y: cy - (hx * sin + hy * cos) };
 }
 
 /** "Right("00000" & code; 5)": the last `n` characters, zero-padded on the left. */
@@ -88,7 +101,9 @@ export function drawMrdfMarks(page: PDFPage, ocg: PDFRef, font: PDFFont, m: NonN
   beginLayer(page, ocg);
   drawMatrix(page, text.matrix, m.dm, trim);
   const o = m.ocr, tw = font.widthOfTextAtSize(text.ocr, o.fontPt), capH = font.heightAtSize(o.fontPt, { descender: false });
-  page.drawText(text.ocr, { font, size: o.fontPt, color: BLACK, x: trim.x + o.leftMm * MM + (o.widthMm * MM - tw) / 2, y: trim.y + trim.height - o.topMm * MM - (o.heightMm * MM + capH) / 2 });
+  const deg = o.rotationDeg ?? 0;
+  const at = rotatedTextOrigin(trim.x + (o.leftMm + o.widthMm / 2) * MM, trim.y + trim.height - (o.topMm + o.heightMm / 2) * MM, tw, capH, deg);
+  page.drawText(text.ocr, { font, size: o.fontPt, color: BLACK, x: at.x, y: at.y, rotate: degrees(-deg) });
   endLayer(page);
 }
 

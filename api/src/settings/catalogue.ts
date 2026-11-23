@@ -14,6 +14,8 @@ export interface SettingDef {
   unit?: string;
   min?: number;
   max?: number;
+  /** A number that may only be one of these (shown as a drop-down). */
+  allowed?: number[];
   step?: number;
   description: string;
   /** Where the app uses it, in plain words. */
@@ -271,6 +273,12 @@ export const SETTINGS: SettingDef[] = [
     usedBy: 'Print file composition: the MRDF codes printed on the front of every sheet for customers that use MRDF, read by the Bluecrest inserter.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
+  {
+    key: 'mrdfOcrRotationDeg', column: 'mrdf_ocr_rotation_deg', group: 'MRDF page codes', label: 'OCR code: rotation', type: 'integer', unit: '°', allowed: [0, 90, 180, 270],
+    description: 'Turns the OCR code clockwise about the centre of its box: 0 reads left to right, 90 reads downwards, 180 upside down, 270 upwards. The box is turned with it, so its width and height swap at 90 and 270.',
+    usedBy: 'Print file composition: the MRDF codes printed on the front of every sheet for customers that use MRDF, read by the Bluecrest inserter.',
+    appliesTo: 'Next print file composed. Files already made are not changed.',
+  },
 ];
 
 /** Groups whose settings are labelled without the group's name (the heading says it): Width under Page size, Left under Envelope window, Left under Sequence number, Left under Data Matrix. */
@@ -298,6 +306,7 @@ export function validate(def: SettingDef, raw: unknown, options?: string[]): { v
       if (typeof raw !== 'number' || !Number.isFinite(raw)) return { error: `${nameOf(def)} must be a number` };
       if (def.type === 'integer' && !Number.isInteger(raw)) return { error: `${nameOf(def)} must be a whole number` };
       if (def.min !== undefined && raw < def.min) return { error: `${nameOf(def)} must be at least ${def.min}` };
+      if (def.allowed && !def.allowed.includes(raw)) return { error: `${nameOf(def)} must be one of: ${def.allowed.join(', ')}` };
       if (def.max !== undefined && raw > def.max) return { error: `${nameOf(def)} must be at most ${def.max}` };
       return { value: raw };
     }

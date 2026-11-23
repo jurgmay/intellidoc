@@ -15,7 +15,7 @@ export function marksFromValues(v: Record<string, SettingValue>): MarkSettings {
     dot: { xMm: n('markDotXMm'), yMm: n('markDotYMm'), diameterMm: n('markDotDiameterMm') },
     mrdf: {
       dm: { leftMm: n('mrdfDmLeftMm'), topMm: n('mrdfDmTopMm'), widthMm: n('mrdfDmWidthMm'), heightMm: n('mrdfDmHeightMm') },
-      ocr: { fontPt: n('mrdfOcrFontPt'), leftMm: n('mrdfOcrLeftMm'), topMm: n('mrdfOcrTopMm'), widthMm: n('mrdfOcrWidthMm'), heightMm: n('mrdfOcrHeightMm') },
+      ocr: { fontPt: n('mrdfOcrFontPt'), leftMm: n('mrdfOcrLeftMm'), topMm: n('mrdfOcrTopMm'), widthMm: n('mrdfOcrWidthMm'), heightMm: n('mrdfOcrHeightMm'), rotationDeg: n('mrdfOcrRotationDeg') },
     },
   };
 }

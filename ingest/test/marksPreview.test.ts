@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import { PDFDict, PDFDocument, PDFName } from 'pdf-lib';
 import { buildMarksPreviewPdf, GhostscriptPng, renderMarksPreview, type PngRenderer } from '../src/compose/preview.js';
-import { DEFAULT_PAGE_MM, MM } from '../src/compose/marks.js';
+import { DEFAULT_PAGE_MM, MM, rotatedTextOrigin } from '../src/compose/marks.js';
 
 const marks = { seq: { fontPt: 8, leftMm: 20, topMm: 40, widthMm: 45, heightMm: 4 }, dm: { leftMm: 20, topMm: 30, widthMm: 8, heightMm: 8 }, dot: { xMm: 205.5, yMm: 269, diameterMm: 2 },
   mrdf: { dm: { leftMm: 10, topMm: 10, widthMm: 8, heightMm: 8 }, ocr: { fontPt: 8.2, leftMm: 20, topMm: 10, widthMm: 30, heightMm: 4 } } };
@@ -43,5 +43,30 @@ describe('the marks preview page', () => {
   });
   it('says so when Ghostscript is not installed', async () => {
     await expect(new GhostscriptPng('definitely-not-gs').png(await buildMarksPreviewPdf('window', marks, win, DEFAULT_PAGE_MM))).rejects.toThrow(/Ghostscript was not found/);
+  });
+});
+
+describe('the MRDF OCR code rotation', () => {
+  const tw = 30, capH = 4, cx = 100, cy = 200;
+  /** The middle of the text once drawn: from its start along the (turned) baseline by half its width, then up the (turned) cap height by half. */
+  const middle = (deg: number) => {
+    const o = rotatedTextOrigin(cx, cy, tw, capH, deg), a = (-deg * Math.PI) / 180;
+    return { x: o.x + (tw / 2) * Math.cos(a) - (capH / 2) * Math.sin(a), y: o.y + (tw / 2) * Math.sin(a) + (capH / 2) * Math.cos(a), end: { x: o.x + tw * Math.cos(a), y: o.y + tw * Math.sin(a) }, start: o };
+  };
+  it('keeps the text centred on the box centre at 0, 90, 180 and 270', () => {
+    for (const deg of [0, 90, 180, 270]) { const m = middle(deg); expect(m.x).toBeCloseTo(cx, 9); expect(m.y).toBeCloseTo(cy, 9); }
+  });
+  it('turns clockwise: 90 reads downwards, 180 upside down, 270 upwards', () => {
+    const d = (deg: number) => { const m = middle(deg); return { dx: Math.sign(Math.round(m.end.x - m.start.x)), dy: Math.sign(Math.round(m.end.y - m.start.y)) }; };
+    expect(d(0)).toEqual({ dx: 1, dy: 0 });
+    expect(d(90)).toEqual({ dx: 0, dy: -1 }); // PDF y points up, so downwards is negative
+    expect(d(180)).toEqual({ dx: -1, dy: 0 });
+    expect(d(270)).toEqual({ dx: 0, dy: 1 });
+  });
+  it('is drawn in the preview, with the box turned too', async () => {
+    for (const rotationDeg of [0, 90, 180, 270]) {
+      const pdf = await buildMarksPreviewPdf('mrdf', { ...marks, mrdf: { ...marks.mrdf, ocr: { ...marks.mrdf.ocr, rotationDeg } } }, win, DEFAULT_PAGE_MM);
+      expect((await PDFDocument.load(pdf)).getPageCount()).toBe(1);
+    }
   });
 });
