@@ -41,6 +41,12 @@ describe('SettingsPage', () => {
     expect(screen.getByText('No unsaved changes')).toBeInTheDocument();
     expect(screen.getByText(/Highest batch code used so far/)).toHaveTextContent('1041');
   });
+  it('names the first tab General and opens on it', async () => {
+    wrap();
+    const tabs = await screen.findAllByRole('tab');
+    expect(tabs.map((t) => t.textContent)).toEqual(['General', 'Postal rates', 'Postal formats', 'Paper', 'Anonymous addressees', 'Change log']);
+    expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+  });
   it('saves only what was changed', async () => {
     const user = userEvent.setup();
     wrap();
