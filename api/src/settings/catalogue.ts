@@ -275,7 +275,7 @@ export const SETTINGS: SettingDef[] = [
   },
   {
     key: 'mrdfOcrRotationDeg', column: 'mrdf_ocr_rotation_deg', group: 'MRDF page codes', label: 'OCR code: rotation', type: 'integer', unit: '°', allowed: [0, 90, 180, 270],
-    description: 'Turns the OCR code clockwise about the centre of its box: 0 reads left to right, 90 reads downwards, 180 upside down, 270 upwards. The box is turned with it, so its width and height swap at 90 and 270.',
+    description: 'Turns the OCR code clockwise about the centre of its box: 0 reads left to right, 90 reads downwards, 180 upside down, 270 upwards. The box is the area the code occupies on the page and stays as you set it, so for 90 or 270 make it tall and narrow; the text is centred in it.',
     usedBy: 'Print file composition: the MRDF codes printed on the front of every sheet for customers that use MRDF, read by the Bluecrest inserter.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
