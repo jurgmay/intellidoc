@@ -13,7 +13,7 @@ export const MM = 72 / 25.4;
 export const DEFAULT_PAGE_MM = { widthMm: 210, heightMm: 297 };
 export interface PageSize { widthMm: number; heightMm: number }
 
-/** The MRDF OCR code: a box the text is centred in, then turned clockwise about the box centre (0, 90, 180 or 270; missing means 0). */
+/** The MRDF OCR code: the box it occupies on the page (as set, never turned) and the text turned clockwise about the box centre (0, 90, 180 or 270; missing means 0). */
 export interface OcrBox { fontPt: number; leftMm: number; topMm: number; widthMm: number; heightMm: number; rotationDeg?: number }
 
 export interface MarkSettings {

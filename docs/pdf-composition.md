@@ -78,7 +78,7 @@ For a customer with **Use MRDF** on, composing a batch also does two things.
 
 * a Data Matrix of 23 digits: batch code (10), sequence (6), sheet number (2), sheets in the mailpiece (2), `000`;
 * an OCR-B code (font size 8.2 by default): sheet number (2), sheets in the mailpiece (2), sequence (6), e.g. `0203000007`.
-  The OCR code has a **rotation** setting (0, 90, 180 or 270, clockwise, about the centre of its box; the box turns with it, so width and height swap at 90 and 270): 0 reads left to right, 90 reads downwards, 270 upwards. The marks preview draws it.
+  The OCR code has a **rotation** setting (0, 90, 180 or 270, clockwise, about the centre of its box; the box is the area the code occupies on the page and is never turned, so for 90 or 270 set it tall and narrow): 0 reads left to right, 90 reads downwards, 270 upwards. The marks preview draws it.
 
 The sheet number and sheet count are of the composed file, padding included, so they are what the inserter will see. (FileMaker counted from the source pages; the two agree whenever every pack has an even number of pages.)
 

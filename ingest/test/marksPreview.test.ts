@@ -63,7 +63,7 @@ describe('the MRDF OCR code rotation', () => {
     expect(d(180)).toEqual({ dx: -1, dy: 0 });
     expect(d(270)).toEqual({ dx: 0, dy: 1 });
   });
-  it('is drawn in the preview, with the box turned too', async () => {
+  it('is drawn in the preview for every angle', async () => {
     for (const rotationDeg of [0, 90, 180, 270]) {
       const pdf = await buildMarksPreviewPdf('mrdf', { ...marks, mrdf: { ...marks.mrdf, ocr: { ...marks.mrdf.ocr, rotationDeg } } }, win, DEFAULT_PAGE_MM);
       expect((await PDFDocument.load(pdf)).getPageCount()).toBe(1);
