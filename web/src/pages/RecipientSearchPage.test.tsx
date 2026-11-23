@@ -133,10 +133,11 @@ describe('RecipientSearchPage', () => {
     const box = within(mp).getByRole('table', { name: 'Letters in the envelope' });
     const field = (label: string) => within(mp).getAllByText(label)[0]!.nextSibling; // the first one is in the header (the letters table has a Released column too)
     expect(field('Letters')).toHaveTextContent('3');
-    expect(field('Released')).toHaveTextContent('2026-11-18');
+    expect(field('Released')).toHaveTextContent('18/11/2026');
     expect(field('Job')).toHaveTextContent('job-9');
     expect(field('Sent from')).toHaveTextContent('Odevo > Highline Solicitors');
     expect(field('Invoiced to')).toHaveTextContent('Odevo');
+    expect(within(box).getAllByText('18/11/2026')).toHaveLength(3); // each letter's own release date
     expect(within(box).queryByText('job-9')).not.toBeInTheDocument(); // not repeated on every letter
     expect(within(box).queryByText('Odevo > Highline Solicitors')).not.toBeInTheDocument();
   });
@@ -206,6 +207,7 @@ describe('RecipientSearchPage', () => {
     expect(within(dialog).getByText('£0.83')).toBeInTheDocument(); // what the customer pays
     expect(within(dialog).getByText('£0.69')).toBeInTheDocument(); // what it costs
     expect(within(dialog).getByText('2026 prices')).toBeInTheDocument();
+    expect(within(dialog).getByText(/Priced 18\/11\/2026 09:31\./)).toBeInTheDocument();
     expect(within(dialog).getByText(/1 colour, 3 mono and 0 blank pages/)).toBeInTheDocument();
   });
 
