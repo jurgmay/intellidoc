@@ -19,7 +19,7 @@ const pack = (packId: number, position: number, over: Partial<RecipientPack> = {
   packId, position, sequence: position, startPage: 1 + (position - 1) * 2, pageCount: 2, releaseDate: '2026-11-18T09:00:00', references: {}, ...over,
 });
 const row = (mailpieceId: number, ancestors: number[], over: Partial<MemoryRecipient>): MemoryRecipient => ({
-  mailpieceId, batchCode: 9000 + mailpieceId, batchStatus: 'Printed', job: `job-${mailpieceId}`, releaseDate: '2026-11-18T09:00:00', isCancelled: false,
+  mailpieceId, sequenceNumber: null, batchCode: 9000 + mailpieceId, batchStatus: 'Printed', job: `job-${mailpieceId}`, releaseDate: '2026-11-18T09:00:00', isCancelled: false,
   addressLines: ['Ann Lee', '1 High Street', 'Town'], postcode: 'AB1 2CD', accountCode: 'X', accountName: 'X', accountPath: 'X', invoicingCode: 'X', invoicingName: 'X', brand: null,
   priceSell: null, packs: [pack(mailpieceId * 10, 1)], ancestors, ...over,
 });
@@ -126,6 +126,32 @@ describe('recipient search: matching', () => {
     expect(r.truncated).toBe(true);
     expect(r.scope).toEqual({ id: 1, label: 'Parent' });
     expect((await get('accountId=1&name=patel&limit=2')).json().truncated).toBe(false);
+  });
+});
+
+describe('recipient search: the mailpieces of a batch', () => {
+  beforeEach(() => {
+    store.recipients = [
+      row(1, [1], { batchId: 70, sequenceNumber: 2 }), row(2, [1, 2], { batchId: 70, sequenceNumber: 1 }), row(3, [3], { batchId: 70, sequenceNumber: 3 }),
+      row(4, [1], { batchId: 71, sequenceNumber: null }), row(5, [1], { batchId: 70, sequenceNumber: null }),
+    ];
+  });
+  it('lists them in print order (unnumbered last) within the account scope, without needing a name or reference', async () => {
+    expect(await packs('accountId=1&batchId=70')).toEqual([2, 1, 5]);
+    expect(await packs('accountId=2&batchId=70')).toEqual([2]);
+    expect((await get('accountId=1&batchId=70')).json().rows[0].sequenceNumber).toBe(1);
+  });
+  it('pages with offset and says when there are more', async () => {
+    const first = (await get('accountId=1&batchId=70&limit=2')).json();
+    expect(first.rows.map((r: { mailpieceId: number }) => r.mailpieceId)).toEqual([2, 1]);
+    expect(first.truncated).toBe(true);
+    const next = (await get('accountId=1&batchId=70&limit=2&offset=2')).json();
+    expect(next.rows.map((r: { mailpieceId: number }) => r.mailpieceId)).toEqual([5]);
+    expect(next.truncated).toBe(false);
+  });
+  it('checks batchId and offset are numbers', async () => {
+    expect((await get('accountId=1&batchId=x')).json().errors.batchId).toBeTruthy();
+    expect((await get('accountId=1&batchId=70&offset=-1')).json().errors.offset).toBeTruthy();
   });
 });
 

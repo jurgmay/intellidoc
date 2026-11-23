@@ -4,6 +4,7 @@ import { buildApp } from './app.js';
 import { MemoryJobComposer, MemoryJobStore } from './jobs/memoryStore.js';
 import { MemoryReportStore } from './reports/memoryStore.js';
 import { MemoryRecipientStore } from './recipients/memoryStore.js';
+import { MemoryBatchStore, type MemoryBatch } from './batches/memoryStore.js';
 import { MemoryCostingStore } from './costing/memoryStore.js';
 import { MemoryRepriceStore } from './reprice/memoryStore.js';
 import { MemoryPostalStore } from './postal/memoryStore.js';
@@ -79,6 +80,20 @@ recipients.prices.set(502, { ...recipients.prices.get(501)!, mailpieceId: 502, b
 recipients.prices.set(503, { mailpieceId: 503, batchCode: 7001, priced: false, reason: 'No costing model was in force for this customer on 2026-11-20.', pricedAt: null, model: null, packs: 1, colourPages: 0, monoPages: 2, blankPages: 0, lines: [],
   productionCost: 0, productionSell: 0, postageCost: 0, postageSell: 0, totalCost: 0, totalSell: 0, warnings: null });
 for (const r of recipients.recipients) { const p = recipients.prices.get(r.mailpieceId ?? 0); if (p?.priced) r.priceSell = p.totalSell; }
+// Batches: 7251 holds two mailpieces, from two different sub-accounts of Odevo and Acme.
+const batches = new MemoryBatchStore();
+batches.scopeList = recipients.scopeList;
+let seq = 0;
+for (const r of recipients.recipients) { r.batchId = r.batchCode ?? undefined; r.sequenceNumber = r.batchCode === 7251 ? ++seq : 1; }
+const batch = (batchCode: number, over: Partial<MemoryBatch>): MemoryBatch => {
+  const mine = recipients.recipients.filter((r) => r.batchCode === batchCode);
+  return { batchId: batchCode, batchCode, status: 'Printed', job: mine[0]?.job ?? '', createdAt: '2026-11-18T09:31:00', department: 'Machine enclosing', service: 'Royal Mail 2nd Class (Letter)', envelope: 'C5 window envelope',
+    brand: mine[0]?.brand ?? null, invoicingCode: mine[0]?.invoicingCode ?? '', invoicingName: mine[0]?.invoicingName ?? '', mailpieces: mine.length, mailpiecesInBatch: mine.length, cancelled: 0,
+    packs: mine.reduce((a, r) => a + r.packs.length, 0), pages: mine.reduce((a, r) => a + r.packs.reduce((b, k) => b + k.pageCount, 0), 0), sheets: mine.length,
+    priceSell: Math.round(mine.reduce((a, r) => a + (r.priceSell ?? 0), 0) * 1e4) / 1e4, unpriced: mine.filter((r) => r.priceSell === null).length,
+    ancestors: [...new Set(mine.flatMap((r) => r.ancestors))], ...over };
+};
+batches.batches = [batch(7250, {}), batch(7251, { createdAt: '2026-11-19T10:02:00', status: 'Created', department: 'Hand enclosing' }), batch(7252, { createdAt: '2026-11-20T08:20:00', status: 'Despatched' })];
 const reports = new MemoryReportStore();
 reports.accounts = [{ id: 101, code: 'ACME', name: 'Acme Energy Ltd' }, { id: 106, code: 'ODEVO', name: 'Odevo' }];
 const usageDays = Array.from({ length: 21 }, (_, i) => new Date(Date.UTC(2026, 10, 1 + i)).toISOString().slice(0, 10)).filter((d) => ![6, 7, 13, 14, 20, 21].includes(Number(d.slice(8))));
@@ -123,6 +138,6 @@ inbox.items = [
 ];
 const composer = new MemoryJobComposer();
 composer.result = [{ batchCode: 7031, files: ['7031_1.pdf'], mrdfFile: null, skipped: null }, { batchCode: 7032, files: ['7032_1.pdf'], mrdfFile: null, skipped: null }];
-const app = await buildApp({ settings: store, hpod: new HpodSessions(store, { fetch: fakeHpodFetch() }), customers, costing, postal, reference: new MemoryReferenceStore(), reprice, recipients, reports, jobs: { store: jobs, composer }, activity: { store: activityStore, inbox }, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
+const app = await buildApp({ settings: store, hpod: new HpodSessions(store, { fetch: fakeHpodFetch() }), customers, costing, postal, reference: new MemoryReferenceStore(), reprice, recipients, batches, reports, jobs: { store: jobs, composer }, activity: { store: activityStore, inbox }, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
 await app.listen({ port: Number(process.env['API_PORT'] ?? 3001), host: '127.0.0.1' });
 console.log('Stub API (no database) on http://127.0.0.1:3001');

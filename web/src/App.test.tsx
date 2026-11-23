@@ -17,6 +17,11 @@ describe('navigation', () => {
     expect(screen.getByRole('link', { name: 'Mailpieces' })).toHaveAttribute('href', '/mailpieces');
     expect(screen.queryByText('Recipient search')).not.toBeInTheDocument();
   });
+  it('has a Batches page in the menu', async () => {
+    show('/batches');
+    expect(await screen.findByRole('heading', { name: 'Batches' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Batches' })).toHaveAttribute('href', '/batches');
+  });
   it('sends the old address to the new one', async () => {
     show('/search');
     expect(await screen.findByRole('heading', { name: 'Mailpieces' })).toBeInTheDocument();

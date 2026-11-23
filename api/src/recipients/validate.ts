@@ -30,7 +30,11 @@ export function parseRecipientQuery(raw: Raw): RecipientQuery {
   if (to && !validDate(to)) errors['to'] = 'Use a date like 2026-11-21.';
   if (from && to && !errors['from'] && !errors['to'] && from > to) errors['to'] = 'The end date is before the start date.';
 
-  if (!name && !address && !reference && !from && !to && !errors['accountId']) errors['name'] = 'Enter a name, address, reference or date range to search for.';
+  const bat = text(raw['batchId']);
+  if (bat !== null && !/^\d+$/.test(bat)) errors['batchId'] = 'The batch is not a number.';
+  const batchId = bat && /^\d+$/.test(bat) ? Number(bat) : null;
+
+  if (!name && !address && !reference && !from && !to && batchId === null && !errors['accountId']) errors['name'] = 'Enter a name, address, reference or date range to search for.';
 
   const lim = text(raw['limit']);
   let limit = DEFAULT_LIMIT;
@@ -38,8 +42,11 @@ export function parseRecipientQuery(raw: Raw): RecipientQuery {
     if (!/^\d+$/.test(lim) || Number(lim) < 1 || Number(lim) > MAX_LIMIT) errors['limit'] = `Limit must be between 1 and ${MAX_LIMIT}.`;
     else limit = Number(lim);
   }
+  const off = text(raw['offset']);
+  let offset = 0;
+  if (off) { if (!/^\d+$/.test(off)) errors['offset'] = 'Offset must be a number from 0.'; else offset = Number(off); }
   if (Object.keys(errors).length) throw new ValidationError(errors);
-  return { accountId, name, address, reference, referenceKey, from, to, limit };
+  return { accountId, name, address, reference, referenceKey, from, to, batchId, limit, offset };
 }
 
 /** The pattern a LIKE needs for "contains" (`%x%`), exact (`x`) or prefix (`x%`), with the wildcard characters in the text made literal. */

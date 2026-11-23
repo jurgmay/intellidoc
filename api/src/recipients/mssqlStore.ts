@@ -6,7 +6,7 @@ import { containsPattern, referencePattern } from './validate.js';
 /** `pack.document_sequence` for a pack that the customer's sequence rules do not list. */
 const UNLISTED = 99;
 
-const TREE = `
+export const TREE = `
 WITH tree (account_id) AS (
   SELECT account_id FROM idoc.account WHERE account_id = @scope
   UNION ALL
@@ -33,7 +33,7 @@ export class MssqlRecipientStore implements RecipientStore {
     const label = (await this.scopes()).find((s) => s.id === q.accountId)?.label;
     if (label === undefined) throw new NotFoundError('That account does not exist.');
 
-    const req = this.pool.request().input('scope', sql.Int, q.accountId).input('top', sql.Int, q.limit + 1);
+    const req = this.pool.request().input('scope', sql.Int, q.accountId).input('top', sql.Int, q.limit + 1).input('skip', sql.Int, q.offset);
     // The name and address are the mailpiece's (every pack in it has the same address). A reference or a date matches when one of its packs has it.
     const where: string[] = [];
     const ofPack: string[] = [];
@@ -56,10 +56,11 @@ export class MssqlRecipientStore implements RecipientStore {
     }
     if (q.from) { req.input('from', sql.Date, q.from); ofPack.push('p.release_date >= @from'); }
     if (q.to) { req.input('to', sql.Date, q.to); ofPack.push('p.release_date < DATEADD(DAY, 1, @to)'); }
+    if (q.batchId !== null) { req.input('batch', sql.BigInt, q.batchId); where.push('m.batch_id = @batch'); }
     if (ofPack.length) where.push(`EXISTS (SELECT 1 FROM idoc.pack p WHERE p.mailpiece_id = m.mailpiece_id AND ${ofPack.join(' AND ')})`);
 
     const found = (await req.query(`${TREE}
-      SELECT TOP (@top) m.mailpiece_id, b.batch_code, b.current_status AS batch_status, j.base_name AS job,
+      SELECT m.mailpiece_id, m.sequence_number, b.batch_code, b.current_status AS batch_status, j.base_name AS job,
              CONVERT(NVARCHAR(19), rel.release_date, 126) AS release_date, ad.postcode, m.is_cancelled,
              m.submitting_account_code AS account_code, m.submitting_account_name AS account_name, m.submitting_account_path AS account_path,
              m.invoicing_account_code, m.invoicing_account_name, COALESCE(m.brand_name, br.name) AS brand,
@@ -72,7 +73,8 @@ export class MssqlRecipientStore implements RecipientStore {
       LEFT JOIN idoc.brand br ON br.brand_id = m.brand_id
       CROSS APPLY (SELECT MAX(p.release_date) AS release_date FROM idoc.pack p WHERE p.mailpiece_id = m.mailpiece_id) rel
       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-      ORDER BY rel.release_date DESC, m.mailpiece_id DESC`)).recordset as Record<string, any>[]; // eslint-disable-line @typescript-eslint/no-explicit-any
+      ORDER BY ${q.batchId !== null ? 'CASE WHEN m.sequence_number IS NULL THEN 1 ELSE 0 END, m.sequence_number, m.mailpiece_id' : 'rel.release_date DESC, m.mailpiece_id DESC'}
+      OFFSET @skip ROWS FETCH NEXT @top ROWS ONLY`)).recordset as Record<string, any>[]; // eslint-disable-line @typescript-eslint/no-explicit-any
 
     const truncated = found.length > q.limit;
     const page = found.slice(0, q.limit);
@@ -107,7 +109,7 @@ export class MssqlRecipientStore implements RecipientStore {
     const rows: RecipientRow[] = page.map((r) => {
       const id = Number(r['mailpiece_id']);
       return {
-        mailpieceId: id, batchCode: r['batch_code'] == null ? null : Number(r['batch_code']), batchStatus: r['batch_status'] ?? null,
+        mailpieceId: id, sequenceNumber: r['sequence_number'] == null ? null : Number(r['sequence_number']), batchCode: r['batch_code'] == null ? null : Number(r['batch_code']), batchStatus: r['batch_status'] ?? null,
         job: r['job'], releaseDate: r['release_date'], addressLines: lines.get(id) ?? [], postcode: r['postcode'], isCancelled: Boolean(r['is_cancelled']),
         accountCode: r['account_code'], accountName: r['account_name'], accountPath: r['account_path'],
         invoicingCode: r['invoicing_account_code'] ?? null, invoicingName: r['invoicing_account_name'] ?? null, brand: r['brand'] ?? null,

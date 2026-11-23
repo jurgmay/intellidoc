@@ -1,5 +1,5 @@
 import { AppShell, Group, Image, NavLink, Text } from '@mantine/core';
-import { IconActivity, IconChartBar, IconFiles, IconPlugConnected, IconReportMoney, IconSearch, IconSettings, IconUsers } from '@tabler/icons-react';
+import { IconActivity, IconChartBar, IconFiles, IconPackage, IconPlugConnected, IconReportMoney, IconSearch, IconSettings, IconUsers } from '@tabler/icons-react';
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { ActivityPage } from './pages/ActivityPage';
 import { CustomerPage } from './pages/CustomerPage';
@@ -9,9 +9,10 @@ import { JobsPage } from './pages/JobsPage';
 import { MarginPage } from './pages/MarginPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { RecipientSearchPage } from './pages/RecipientSearchPage';
+import { BatchesPage } from './pages/BatchesPage';
 import { SettingsPage } from './pages/SettingsPage';
 
-const NAV = [{ to: '/customers', label: 'Customers', icon: IconUsers }, { to: '/activity', label: 'Activity', icon: IconActivity }, { to: '/jobs', label: 'Jobs', icon: IconFiles }, { to: '/mailpieces', label: 'Mailpieces', icon: IconSearch }, { to: '/reports', label: 'Usage report', icon: IconChartBar }, { to: '/margin', label: 'Margin report', icon: IconReportMoney }, { to: '/hpod', label: 'H-POD', icon: IconPlugConnected }, { to: '/settings', label: 'Settings', icon: IconSettings }];
+const NAV = [{ to: '/customers', label: 'Customers', icon: IconUsers }, { to: '/activity', label: 'Activity', icon: IconActivity }, { to: '/jobs', label: 'Jobs', icon: IconFiles }, { to: '/mailpieces', label: 'Mailpieces', icon: IconSearch }, { to: '/batches', label: 'Batches', icon: IconPackage }, { to: '/reports', label: 'Usage report', icon: IconChartBar }, { to: '/margin', label: 'Margin report', icon: IconReportMoney }, { to: '/hpod', label: 'H-POD', icon: IconPlugConnected }, { to: '/settings', label: 'Settings', icon: IconSettings }];
 
 export function App() {
   const { pathname } = useLocation();
@@ -35,6 +36,7 @@ export function App() {
           <Route path="/customers/:id" element={<CustomerPage />} />
           <Route path="/activity" element={<ActivityPage />} />
           <Route path="/jobs" element={<JobsPage />} />
+          <Route path="/batches" element={<BatchesPage />} />
           <Route path="/mailpieces" element={<RecipientSearchPage />} />
           <Route path="/search" element={<Navigate to="/mailpieces" replace />} />
           <Route path="/reports" element={<ReportsPage />} />
