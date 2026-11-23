@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Alert, Badge, Box, Button, Group, Loader, Paper, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
-import { IconAlertCircle, IconSearch } from '@tabler/icons-react';
+import { IconAlertCircle, IconChevronRight, IconSearch } from '@tabler/icons-react';
 import { ApiError } from '../api/client';
 import { MailpiecePriceModal } from './MailpiecePriceModal';
 import { EMPTY_FORM, getRecipientSearchSession, saveRecipientSearchSession } from './recipientSearchSession';
@@ -25,21 +25,24 @@ export function RecipientSearchPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [result, setResult] = useState<RecipientResult | null>(kept.result);
   const [searchedAt, setSearchedAt] = useState<string | null>(kept.searchedAt);
+  const [expanded, setExpanded] = useState<number[]>(kept.expanded);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [priceOf, setPriceOf] = useState<number | null>(null);
 
   // keep what is on the page, so it is still there after going to another page and coming back
-  useEffect(() => { saveRecipientSearchSession({ account, form, result, searchedAt }); }, [account, form, result, searchedAt]);
+  useEffect(() => { saveRecipientSearchSession({ account, form, result, searchedAt, expanded }); }, [account, form, result, searchedAt, expanded]);
   useEffect(() => { listScopes().then((r) => setScopes(r.rows)).catch((e: Error) => setError(e.message)); }, []);
   const set = (k: keyof typeof EMPTY) => (e: { currentTarget: { value: string } }) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, [k]: v })); };
+
+  const toggle = (id: number) => setExpanded((e) => (e.includes(id) ? e.filter((x) => x !== id) : [...e, id]));
 
   async function submit(e: { preventDefault: () => void }) {
     e.preventDefault();
     setError(null); setErrors({});
     if (!account) { setErrors({ accountId: 'Choose the account to search in. A search covers that account and the accounts below it.' }); return; }
     setBusy(true);
-    try { setResult(await searchRecipients({ accountId: Number(account), ...form })); setSearchedAt(new Date().toISOString()); }
+    try { setResult(await searchRecipients({ accountId: Number(account), ...form })); setSearchedAt(new Date().toISOString()); setExpanded([]); }
     catch (err) {
       setResult(null);
       if (err instanceof ApiError && err.fieldErrors) setErrors(err.fieldErrors); else setError((err as Error).message);
@@ -67,7 +70,7 @@ export function RecipientSearchPage() {
             {errors['limit'] && <Text c="red" size="sm">{errors['limit']}</Text>}
             <Group>
               <Button type="submit" leftSection={<IconSearch size={16} />} loading={busy}>Search</Button>
-              <Button variant="default" onClick={() => { setForm(EMPTY); setErrors({}); setResult(null); setSearchedAt(null); }}>Clear</Button>
+              <Button variant="default" onClick={() => { setForm(EMPTY); setErrors({}); setResult(null); setSearchedAt(null); setExpanded([]); }}>Clear</Button>
             </Group>
           </Stack>
         </form>
@@ -83,10 +86,17 @@ export function RecipientSearchPage() {
             {result.truncated && ' There are more than this. Narrow the search to see the rest.'}
             {searchedAt && <> Searched at {new Date(searchedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}; search again to refresh.</>}
           </Text>
-          {result.rows.map((r) => (
-            <Paper key={r.mailpieceId} withBorder data-testid="mailpiece" aria-label={`Mailpiece to ${r.addressLines[0] ?? 'this recipient'}`}>
-              {/* the mailpiece: what is the same for every letter in the envelope */}
-              <Group justify="space-between" align="flex-start" wrap="nowrap" p="sm" bg="var(--mantine-color-default-hover)" style={{ borderBottom: '1px solid var(--mantine-color-default-border)' }}>
+          {result.rows.map((r) => {
+            const open = expanded.includes(r.mailpieceId);
+            const who = r.addressLines[0] ?? 'this recipient';
+            return (
+            <Paper key={r.mailpieceId} withBorder data-testid="mailpiece" aria-label={`Mailpiece to ${who}`}>
+              {/* the mailpiece: what is the same for every letter in the envelope. Click it to show or hide the letters. */}
+              <Group role="button" tabIndex={0} aria-expanded={open} aria-label={`${open ? 'Hide' : 'Show'} the letters for ${who}`} justify="space-between" align="flex-start" wrap="nowrap" p="sm" bg="var(--mantine-color-default-hover)"
+                style={{ cursor: 'pointer', borderBottom: open ? '1px solid var(--mantine-color-default-border)' : undefined }}
+                onClick={() => toggle(r.mailpieceId)}
+                onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle(r.mailpieceId); } }}>
+                <IconChevronRight size={18} style={{ flex: 'none', marginTop: 4, transition: 'transform 150ms', transform: open ? 'rotate(90deg)' : undefined }} aria-hidden />
                 <div style={{ minWidth: 0, flex: '1 1 18rem' }}>
                   <Group gap="xs" wrap="nowrap"><Text fw={600}>{r.addressLines[0]}</Text>{r.isCancelled && <Badge size="xs" color="red" variant="light">Cancelled</Badge>}</Group>
                   <Text size="sm" c="dimmed">{addressLine(r.addressLines, r.postcode)}</Text>
@@ -99,10 +109,10 @@ export function RecipientSearchPage() {
                   <Field label="Sent from">{r.accountPath}{r.brand && <Text size="xs" c="dimmed">{r.brand}</Text>}</Field>
                   <Field label="Invoiced to">{r.invoicingName ?? '–'}</Field>
                 </Group>
-                <Button size="compact-sm" variant="light" aria-label={`Price of the mailpiece to ${r.addressLines[0] ?? 'this recipient'}`} onClick={() => setPriceOf(r.mailpieceId)}>{r.priceSell == null ? 'Not priced' : `£${r.priceSell.toFixed(2)}`}</Button>
+                <Button size="compact-sm" variant="light" aria-label={`Price of the mailpiece to ${r.addressLines[0] ?? 'this recipient'}`} onClick={(e) => { e.stopPropagation(); setPriceOf(r.mailpieceId); }}>{r.priceSell == null ? 'Not priced' : `£${r.priceSell.toFixed(2)}`}</Button>
               </Group>
               {/* the letters in the envelope, in the order they go in: what is specific to each */}
-              <Box p="sm">
+              {open && <Box p="sm">
                 <Table withTableBorder withColumnBorders aria-label="Letters in the envelope">
                   <Table.Thead>
                     <Table.Tr><Table.Th w={70}>Letter</Table.Th><Table.Th w={110}>Sequence</Table.Th><Table.Th w={130}>Pages</Table.Th><Table.Th w={110}>Released</Table.Th><Table.Th>Fields</Table.Th></Table.Tr>
@@ -119,9 +129,10 @@ export function RecipientSearchPage() {
                     ))}
                   </Table.Tbody>
                 </Table>
-              </Box>
+              </Box>}
             </Paper>
-          ))}
+            );
+          })}
         </Stack>
       )}
       <MailpiecePriceModal mailpieceId={priceOf} onClose={() => setPriceOf(null)} />

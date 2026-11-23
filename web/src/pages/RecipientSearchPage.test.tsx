@@ -44,6 +44,7 @@ describe('RecipientSearchPage', () => {
     await userEvent.type(screen.getByLabelText('Reference'), 'T-10*');
     await userEvent.click(screen.getByRole('button', { name: 'Search' }));
     await screen.findByText('Mrs A Patel');
+    await userEvent.click(screen.getByRole('button', { name: 'Show the letters for Mrs A Patel' }));
     first.unmount();   // another page is shown
     const searches = urls.filter((u) => u.startsWith('/api/recipients/search')).length;
     show();            // and back again
@@ -51,6 +52,7 @@ describe('RecipientSearchPage', () => {
     expect(screen.getByLabelText('Reference')).toHaveValue('T-10*');
     await waitFor(() => expect(screen.getByRole('combobox', { name: /Search in/ })).toHaveValue('Odevo'));
     expect(screen.getByText('Mrs A Patel')).toBeInTheDocument();
+    expect(screen.getAllByTestId('pack')).toHaveLength(3); // the letters that were open are still open
     expect(screen.getByText(/1 found in Odevo and below. Searched at \d\d:\d\d/)).toBeInTheDocument();
     expect(urls.filter((u) => u.startsWith('/api/recipients/search'))).toHaveLength(searches); // shown as it was: no new search
     await userEvent.click(screen.getByRole('button', { name: 'Clear' }));
@@ -100,9 +102,34 @@ describe('RecipientSearchPage', () => {
     expect(within(tr).getByText('Cancelled')).toBeInTheDocument();
   });
 
+  it('shows only the mailpiece headers at first, and the header shows or hides the letters when it is clicked', async () => {
+    await searchFor();
+    const header = screen.getByRole('button', { name: 'Show the letters for Mrs A Patel' });
+    expect(header).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByTestId('pack')).not.toBeInTheDocument();
+    expect(screen.getByText('12 Mill Lane, Leeds, LS1 4AB')).toBeInTheDocument(); // the header still has the common details
+    await userEvent.click(header);
+    expect(screen.getByRole('button', { name: 'Hide the letters for Mrs A Patel' })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getAllByTestId('pack')).toHaveLength(3);
+    await userEvent.click(screen.getByRole('button', { name: 'Hide the letters for Mrs A Patel' }));
+    expect(screen.queryByTestId('pack')).not.toBeInTheDocument();
+    // the keyboard works too
+    screen.getByRole('button', { name: 'Show the letters for Mrs A Patel' }).focus();
+    await userEvent.keyboard('{Enter}');
+    expect(screen.getAllByTestId('pack')).toHaveLength(3);
+  });
+
+  it('opens the price, and not the letters, when the price is clicked', async () => {
+    await searchFor();
+    await userEvent.click(screen.getByRole('button', { name: /price of the mailpiece to Mrs A Patel/i }));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(screen.queryByTestId('pack')).not.toBeInTheDocument();
+  });
+
   it('shows the shared details in the mailpiece header, and the letters in their own box beneath it', async () => {
     await searchFor();
     const mp = screen.getByTestId('mailpiece');
+    await toggleHeader('Mrs A Patel');
     const box = within(mp).getByRole('table', { name: 'Letters in the envelope' });
     const field = (label: string) => within(mp).getAllByText(label)[0]!.nextSibling; // the first one is in the header (the letters table has a Released column too)
     expect(field('Letters')).toHaveTextContent('3');
@@ -116,6 +143,7 @@ describe('RecipientSearchPage', () => {
 
   it('lists the letters in the envelope in order, each with its pages, sequence and fields', async () => {
     await searchFor();
+    await toggleHeader('Mrs A Patel');
     const packs = screen.getAllByTestId('pack');
     expect(packs).toHaveLength(3);
     expect(packs.map((p) => within(p).getByLabelText(/Letter \d/).getAttribute('aria-label'))).toEqual(['Letter 1', 'Letter 2', 'Letter 3']);
@@ -134,6 +162,7 @@ describe('RecipientSearchPage', () => {
   it('shows one box of letters for each mailpiece', async () => {
     respond = (url) => url.startsWith('/api/recipients/scopes') ? { status: 200, json: { rows: scopes } } : { status: 200, json: { scope: { id: 1, label: 'Odevo' }, truncated: false, rows: [hit, { ...hit, mailpieceId: 6, addressLines: ['Mr B Jones', '1 Road'], packs: [{ ...hit.packs[0]!, packId: 21, references: {} }] }] } };
     await searchFor();
+    await toggleHeader('Mrs A Patel'); await toggleHeader('Mr B Jones');
     const mps = screen.getAllByTestId('mailpiece');
     expect(mps).toHaveLength(2);
     expect(within(mps[0]!).getAllByTestId('pack')).toHaveLength(3);
@@ -164,6 +193,8 @@ describe('RecipientSearchPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Search' }));
     await screen.findByText('Mrs A Patel');
   };
+
+  const toggleHeader = (who: string) => userEvent.click(screen.getByRole('button', { name: new RegExp(`(Show|Hide) the letters for ${who}`) }));
 
   it('shows what the customer pays on each hit and opens the breakdown', async () => {
     await searchFor();

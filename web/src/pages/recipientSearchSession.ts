@@ -7,11 +7,13 @@ export interface RecipientSearchSession {
   result: RecipientResult | null;
   /** When the results were fetched (ISO). */
   searchedAt: string | null;
+  /** The mailpieces whose letters are shown. */
+  expanded: number[];
 }
 
 export const EMPTY_FORM = { name: '', address: '', reference: '', referenceKey: '', from: '', to: '' };
 const KEY = 'intellidoc.recipientSearch';
-const blank = (): RecipientSearchSession => ({ account: null, form: { ...EMPTY_FORM }, result: null, searchedAt: null });
+const blank = (): RecipientSearchSession => ({ account: null, form: { ...EMPTY_FORM }, result: null, searchedAt: null, expanded: [] });
 
 function load(): RecipientSearchSession {
   try {
