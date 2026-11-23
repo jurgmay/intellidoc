@@ -103,8 +103,8 @@ export function installColumnResize(root: HTMLElement = document.body): () => vo
     const style = document.createElement('style'); style.id = 'col-resize-style';
     style.textContent = [
       'table[data-col-fixed] th, table[data-col-fixed] td { overflow: hidden; text-overflow: ellipsis; }',
-      // Faint lines between the columns show where the handles are: half the strength of the row lines, in either colour scheme.
-      'table[data-col-resize] > thead > tr > th:not(:last-child), table[data-col-resize] > tbody > tr > td:not(:last-child) { border-right: 1px solid color-mix(in srgb, var(--table-border-color, var(--mantine-color-gray-3)) 45%, transparent); }',
+      // Faint lines between the header cells show where the handles are: half the strength of the row lines, in either colour scheme.
+      'table[data-col-resize] > thead > tr > th:not(:last-child) { border-right: 1px solid color-mix(in srgb, var(--table-border-color, var(--mantine-color-gray-3)) 45%, transparent); }',
     ].join('\n');
     document.head.appendChild(style);
   }
