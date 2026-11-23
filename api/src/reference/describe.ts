@@ -12,11 +12,11 @@ export const describePaperDeleted = (name: string): string => `Paper "${name}" d
 
 export function describeFormatChange(old: FormatView, next: FormatInput): string | null {
   const parts: string[] = [];
-  if (old.maxWeightG !== next.maxWeightG) parts.push(`most weight ${old.maxWeightG}g -> ${next.maxWeightG}g`);
-  if (old.maxThicknessMm !== next.maxThicknessMm) parts.push(`most thickness ${show(old.maxThicknessMm)} -> ${show(next.maxThicknessMm)}${next.maxThicknessMm === null ? '' : ' mm'}`);
-  if (old.maxSheets !== next.maxSheets) parts.push(`most sheets ${show(old.maxSheets)} -> ${show(next.maxSheets)}`);
-  if (old.maxLengthMm !== next.maxLengthMm) parts.push(`most length ${old.maxLengthMm} mm -> ${next.maxLengthMm} mm`);
-  if (old.maxWidthMm !== next.maxWidthMm) parts.push(`most width ${old.maxWidthMm} mm -> ${next.maxWidthMm} mm`);
+  if (old.maxWeightG !== next.maxWeightG) parts.push(`maximum weight ${old.maxWeightG}g -> ${next.maxWeightG}g`);
+  if (old.maxThicknessMm !== next.maxThicknessMm) parts.push(`maximum thickness ${show(old.maxThicknessMm)} -> ${show(next.maxThicknessMm)}${next.maxThicknessMm === null ? '' : ' mm'}`);
+  if (old.maxSheets !== next.maxSheets) parts.push(`maximum sheets ${show(old.maxSheets)} -> ${show(next.maxSheets)}`);
+  if (old.maxLengthMm !== next.maxLengthMm) parts.push(`maximum length ${old.maxLengthMm} mm -> ${next.maxLengthMm} mm`);
+  if (old.maxWidthMm !== next.maxWidthMm) parts.push(`maximum width ${old.maxWidthMm} mm -> ${next.maxWidthMm} mm`);
   return parts.length ? `Postal format "${old.name}": ${parts.join(', ')}` : null;
 }
 

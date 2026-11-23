@@ -66,7 +66,7 @@ describe('postal formats', () => {
     const r = await put('/api/reference/postal-formats/1', { name: 'Hacked', rank: 9, maxWeightG: 120, maxThicknessMm: 6.5, maxSheets: null, maxLengthMm: 245, maxWidthMm: 170.5 });
     expect(r.statusCode).toBe(204);
     expect(store.formatRows[0]).toMatchObject({ name: 'Letter', rank: 1, maxWeightG: 120, maxThicknessMm: 6.5, maxSheets: null, maxLengthMm: 245, maxWidthMm: 170.5 });
-    expect((await get('/api/reference/history')).json().rows[0].summary).toBe('Postal format "Letter": most weight 100g -> 120g, most thickness 5 -> 6.5 mm, most sheets 16 -> not set, most length 240 mm -> 245 mm, most width 165 mm -> 170.5 mm');
+    expect((await get('/api/reference/history')).json().rows[0].summary).toBe('Postal format "Letter": maximum weight 100g -> 120g, maximum thickness 5 -> 6.5 mm, maximum sheets 16 -> not set, maximum length 240 mm -> 245 mm, maximum width 165 mm -> 170.5 mm');
   });
   it('keeps the formats in order: a bigger one cannot take less than a smaller one', async () => {
     const low = await put('/api/reference/postal-formats/2', { maxWeightG: 90, maxThicknessMm: 25, maxSheets: 125, maxLengthMm: 353, maxWidthMm: 250 });

@@ -20,11 +20,11 @@ export function checkFormatLimits(self: FormatView, input: FormatInput, others: 
     if (lo !== null && v < lo) errs[key] = `${label} cannot be less than ${smaller!.name} (${lo})`;
     else if (hi !== null && v > hi) errs[key] = `${label} cannot be more than ${larger!.name} (${hi})`;
   };
-  check('maxWeightG', 'Most weight', input.maxWeightG, (f) => f.maxWeightG);
-  check('maxThicknessMm', 'Most thickness', input.maxThicknessMm, (f) => f.maxThicknessMm);
-  check('maxSheets', 'Most sheets', input.maxSheets, (f) => f.maxSheets);
-  check('maxLengthMm', 'Most length', input.maxLengthMm, (f) => f.maxLengthMm);
-  check('maxWidthMm', 'Most width', input.maxWidthMm, (f) => f.maxWidthMm);
+  check('maxWeightG', 'Maximum weight', input.maxWeightG, (f) => f.maxWeightG);
+  check('maxThicknessMm', 'Maximum thickness', input.maxThicknessMm, (f) => f.maxThicknessMm);
+  check('maxSheets', 'Maximum sheets', input.maxSheets, (f) => f.maxSheets);
+  check('maxLengthMm', 'Maximum length', input.maxLengthMm, (f) => f.maxLengthMm);
+  check('maxWidthMm', 'Maximum width', input.maxWidthMm, (f) => f.maxWidthMm);
   if (Object.keys(errs).length) throw new ValidationError(errs);
 }
 

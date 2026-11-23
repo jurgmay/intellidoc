@@ -108,11 +108,11 @@ function FormatDialog({ f, onClose, onDone }: { f: PostalFormat; onClose: () => 
   return (
     <Modal opened onClose={onClose} title={`Edit ${f.name}`}>
       <Stack>{msg && <Alert color="red">{msg}</Alert>}
-        <TextInput label="Most weight (g)" inputMode="numeric" value={w} onChange={(e) => setW(e.currentTarget.value)} error={err['maxWeightG']} data-autofocus />
-        <TextInput label="Most thickness (mm)" inputMode="decimal" placeholder="no limit" value={t} onChange={(e) => setT(e.currentTarget.value)} error={err['maxThicknessMm']} />
-        <TextInput label="Most sheets" inputMode="numeric" placeholder="no limit" value={n} onChange={(e) => setN(e.currentTarget.value)} error={err['maxSheets']} />
-        <TextInput label="Most length (mm)" description="The longer side." inputMode="decimal" value={ml} onChange={(e) => setMl(e.currentTarget.value)} error={err['maxLengthMm']} />
-        <TextInput label="Most width (mm)" description="The shorter side." inputMode="decimal" value={mw} onChange={(e) => setMw(e.currentTarget.value)} error={err['maxWidthMm']} />
+        <TextInput label="Maximum weight (g)" inputMode="numeric" value={w} onChange={(e) => setW(e.currentTarget.value)} error={err['maxWeightG']} data-autofocus />
+        <TextInput label="Maximum thickness (mm)" inputMode="decimal" placeholder="no limit" value={t} onChange={(e) => setT(e.currentTarget.value)} error={err['maxThicknessMm']} />
+        <TextInput label="Maximum sheets" inputMode="numeric" placeholder="no limit" value={n} onChange={(e) => setN(e.currentTarget.value)} error={err['maxSheets']} />
+        <TextInput label="Maximum length (mm)" description="The longer side." inputMode="decimal" value={ml} onChange={(e) => setMl(e.currentTarget.value)} error={err['maxLengthMm']} />
+        <TextInput label="Maximum width (mm)" description="The shorter side." inputMode="decimal" value={mw} onChange={(e) => setMw(e.currentTarget.value)} error={err['maxWidthMm']} />
         <Group justify="flex-end"><Button variant="default" onClick={onClose}>Cancel</Button><Button onClick={save}>Save</Button></Group></Stack>
     </Modal>
   );
@@ -125,7 +125,7 @@ export function PostalFormatsTab() {
     <Shell what="the postal formats" state={s} history={s.history}
       intro={<>The size limits of each postal format. At import a mailpiece is put in the smallest format whose limits it is within (weight, thickness and sheets), then the next one up. These are Royal Mail's definitions: length is the longer side and width the shorter, so a 240 x 165 mm letter is the same either way round. Larger formats cannot have lower limits than smaller ones. Length and width are recorded for each format but the import does not check them yet. The names are fixed because the app refers to them. A change applies to the next job imported.</>}>
       <Table withTableBorder striped verticalSpacing="xs">
-        <Table.Thead><Table.Tr><Table.Th>Format</Table.Th><Table.Th ta="right">Most weight</Table.Th><Table.Th ta="right">Most thickness</Table.Th><Table.Th ta="right">Most sheets</Table.Th><Table.Th ta="right">Most length</Table.Th><Table.Th ta="right">Most width</Table.Th><Table.Th>Services</Table.Th><Table.Th /></Table.Tr></Table.Thead>
+        <Table.Thead><Table.Tr><Table.Th>Format</Table.Th><Table.Th ta="right">Maximum weight</Table.Th><Table.Th ta="right">Maximum thickness</Table.Th><Table.Th ta="right">Maximum sheets</Table.Th><Table.Th ta="right">Maximum length</Table.Th><Table.Th ta="right">Maximum width</Table.Th><Table.Th>Services</Table.Th><Table.Th /></Table.Tr></Table.Thead>
         <Table.Tbody>
           {(s.data ?? []).map((f) => (
             <Table.Tr key={f.id}>
