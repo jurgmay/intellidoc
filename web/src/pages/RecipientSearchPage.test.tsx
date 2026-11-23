@@ -79,7 +79,7 @@ describe('RecipientSearchPage', () => {
     const row = await screen.findByText('Mrs A Patel');
     const search = urls.find((u) => u.startsWith('/api/recipients/search'))!;
     expect(new URLSearchParams(search.split('?')[1])).toEqual(new URLSearchParams({ accountId: '1', name: 'patel', reference: 'T-10*' }));
-    const tr = row.closest('tr')!;
+    const tr = row.closest<HTMLElement>('[data-testid="mailpiece"]')!;
     expect(within(tr).getByText('Odevo > Highline Solicitors')).toBeInTheDocument();
     expect(within(tr).getByText('7001')).toBeInTheDocument();
     expect(screen.getByText(/1 found in Odevo and below/)).toBeInTheDocument();
@@ -87,7 +87,7 @@ describe('RecipientSearchPage', () => {
 
   it('shows the address in one comma separated line under the name', async () => {
     await searchFor();
-    const tr = screen.getByText('Mrs A Patel').closest('tr')!;
+    const tr = screen.getByText('Mrs A Patel').closest<HTMLElement>('[data-testid="mailpiece"]')!;
     expect(within(tr).getByText('12 Mill Lane, Leeds, LS1 4AB')).toBeInTheDocument();
     expect(within(tr).queryByText('LS1 4AB')).not.toBeInTheDocument();
   });
@@ -95,9 +95,23 @@ describe('RecipientSearchPage', () => {
   it('does not repeat a postcode that is already an address line, and flags a cancelled mailpiece', async () => {
     respond = (url) => url.startsWith('/api/recipients/scopes') ? { status: 200, json: { rows: scopes } } : { status: 200, json: { scope: { id: 1, label: 'Odevo' }, truncated: false, rows: [{ ...hit, addressLines: ['Mrs A Patel', '12 Mill Lane', 'LS1 4AB'], isCancelled: true }] } };
     await searchFor();
-    const tr = screen.getByText('Mrs A Patel').closest('tr')!;
+    const tr = screen.getByText('Mrs A Patel').closest<HTMLElement>('[data-testid="mailpiece"]')!;
     expect(within(tr).getByText('12 Mill Lane, LS1 4AB')).toBeInTheDocument();
     expect(within(tr).getByText('Cancelled')).toBeInTheDocument();
+  });
+
+  it('shows the shared details in the mailpiece header, and the letters in their own box beneath it', async () => {
+    await searchFor();
+    const mp = screen.getByTestId('mailpiece');
+    const box = within(mp).getByRole('table', { name: 'Letters in the envelope' });
+    const field = (label: string) => within(mp).getAllByText(label)[0]!.nextSibling; // the first one is in the header (the letters table has a Released column too)
+    expect(field('Letters')).toHaveTextContent('3');
+    expect(field('Released')).toHaveTextContent('2026-11-18');
+    expect(field('Job')).toHaveTextContent('job-9');
+    expect(field('Sent from')).toHaveTextContent('Odevo > Highline Solicitors');
+    expect(field('Invoiced to')).toHaveTextContent('Odevo');
+    expect(within(box).queryByText('job-9')).not.toBeInTheDocument(); // not repeated on every letter
+    expect(within(box).queryByText('Odevo > Highline Solicitors')).not.toBeInTheDocument();
   });
 
   it('lists the letters in the envelope in order, each with its pages, sequence and fields', async () => {
@@ -105,12 +119,26 @@ describe('RecipientSearchPage', () => {
     const packs = screen.getAllByTestId('pack');
     expect(packs).toHaveLength(3);
     expect(packs.map((p) => within(p).getByLabelText(/Letter \d/).getAttribute('aria-label'))).toEqual(['Letter 1', 'Letter 2', 'Letter 3']);
-    expect(packs[0]).toHaveTextContent('2 pages, sequence 1');
+    expect(within(packs[0]!).getAllByRole('cell')[1]).toHaveTextContent(/^1$/);
+    expect(within(packs[1]!).getAllByRole('cell')[1]).toHaveTextContent(/^2$/);
+    expect(packs[0]).toHaveTextContent('2 pages');
+    expect(packs[0]).toHaveTextContent('from page 3');
     expect(packs[0]).toHaveTextContent('Tenant Reference: T-1001');
     expect(packs[0]).toHaveTextContent('Document Type: Bill');
     expect(packs[1]).toHaveTextContent('Document Type: Arrears');
-    expect(packs[2]).toHaveTextContent('1 page, not in the sequence');
+    expect(packs[2]).toHaveTextContent('Not in the sequence');
+    expect(packs[2]).toHaveTextContent('1 page');
     expect(packs[2]).toHaveTextContent('Document Type: Leaflet');
+  });
+
+  it('shows one box of letters for each mailpiece', async () => {
+    respond = (url) => url.startsWith('/api/recipients/scopes') ? { status: 200, json: { rows: scopes } } : { status: 200, json: { scope: { id: 1, label: 'Odevo' }, truncated: false, rows: [hit, { ...hit, mailpieceId: 6, addressLines: ['Mr B Jones', '1 Road'], packs: [{ ...hit.packs[0]!, packId: 21, references: {} }] }] } };
+    await searchFor();
+    const mps = screen.getAllByTestId('mailpiece');
+    expect(mps).toHaveLength(2);
+    expect(within(mps[0]!).getAllByTestId('pack')).toHaveLength(3);
+    expect(within(mps[1]!).getAllByTestId('pack')).toHaveLength(1);
+    expect(within(mps[1]!).getByText('None')).toBeInTheDocument(); // a letter with no fields
   });
 
   it('shows the server\'s message next to the field, and says when there are more results', async () => {
