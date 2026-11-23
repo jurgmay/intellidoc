@@ -42,7 +42,6 @@ describe('Reports page: margin report', () => {
     expect(screen.getByRole('combobox', { name: 'Report' })).toHaveValue('Usage report');
     expect(screen.getByText('PDF')).toBeInTheDocument();
     await chooseMargin();
-    expect(screen.queryByText('PDF')).toBeNull();   // the margin report is screen only
     expect(screen.getByText(/Internal: shows costs/)).toBeInTheDocument();
   });
   it('clears the report on screen when the type is changed', async () => {
@@ -75,7 +74,7 @@ describe('Reports page: margin report', () => {
     expect(days.getByText('£3.50')).toBeInTheDocument();
     expect(days.getByText('17.5%')).toBeInTheDocument();
     expect(screen.getByText(/2 of 15 mailpieces have no price/)).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /PDF/ })).toBeNull();     // internal, screen only
+    expect(screen.getByRole('link', { name: /PDF/ })).toHaveAttribute('href', '/api/reports/margin.pdf?invoicingAccountId=5&from=2026-11-01&to=2026-11-02');
   });
   it('shows a loss in red and no percentage when nothing was sold', async () => {
     respond = (url) => url.startsWith('/api/reports/invoicing-accounts') ? { status: 200, json: { rows: [{ id: 5, code: 'ODEVO', name: 'Odevo' }] } }

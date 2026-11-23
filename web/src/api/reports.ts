@@ -29,4 +29,5 @@ export interface MarginReport {
   postage: ({ format: string; service: string } & MarginCounts)[];
   totals: MarginCounts;
 }
+export const marginPdfUrl = (q: UsageQuery): string => `/api/reports/margin.pdf?${qs(q)}`;
 export const getMargin = (q: UsageQuery): Promise<MarginReport> => api(`/api/reports/margin?${qs(q)}`);
