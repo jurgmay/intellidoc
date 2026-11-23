@@ -15,6 +15,7 @@ import { MssqlJobStore } from './jobs/mssqlStore.js';
 import { MssqlReportStore } from './reports/mssqlStore.js';
 import { MssqlSettingsStore } from './settings/store.js';
 import { secretBoxFromEnv } from './settings/secret.js';
+import { HpodSessions } from './hpod/service.js';
 
 const cs = process.env['INTELLIDOC_DB'];
 if (!cs) { console.error('Set INTELLIDOC_DB (see api/.env.example)'); process.exit(2); }
@@ -23,7 +24,8 @@ const customers = new MssqlCustomerStore(pool);
 const rollJobNumbers = (): void => { customers.applyDuePending().then((n) => { if (n > 0) console.log(`${n} pending job number(s) took effect`); }).catch((e: Error) => console.error('Pending job numbers:', e.message)); };
 rollJobNumbers();
 setInterval(rollJobNumbers, 10 * 60_000).unref();
-const app = await buildApp({ settings: new MssqlSettingsStore(pool, secretBoxFromEnv()), customers, costing: new MssqlCostingStore(pool), postal: new MssqlPostalStore(pool), reference: new MssqlReferenceStore(pool), reprice: new MssqlRepriceStore(pool, new Repricer(cs)), recipients: new MssqlRecipientStore(pool), reports: new MssqlReportStore(pool), jobs: { store: new MssqlJobStore(pool), composer: new IngestJobComposer(cs) }, activity: { store: new MssqlActivityStore(pool), inbox: new FsInboxReader() }, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
+const settings = new MssqlSettingsStore(pool, secretBoxFromEnv());
+const app = await buildApp({ settings, hpod: new HpodSessions(settings), customers, costing: new MssqlCostingStore(pool), postal: new MssqlPostalStore(pool), reference: new MssqlReferenceStore(pool), reprice: new MssqlRepriceStore(pool, new Repricer(cs)), recipients: new MssqlRecipientStore(pool), reports: new MssqlReportStore(pool), jobs: { store: new MssqlJobStore(pool), composer: new IngestJobComposer(cs) }, activity: { store: new MssqlActivityStore(pool), inbox: new FsInboxReader() }, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
 const port = Number(process.env['API_PORT'] ?? 3001);
 const host = process.env['API_HOST'] ?? '127.0.0.1';
 await app.listen({ port, host });

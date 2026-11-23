@@ -13,6 +13,7 @@ import { SETTINGS, validate, BY_KEY, nameOf } from '../src/settings/catalogue.js
 import type { MarksPreviewer } from '../src/settings/preview.js';
 import type { Connectivity, TestResult } from '../src/settings/connectivity.js';
 import type { SmtpSettings } from '../../ingest/src/mail.js';
+import type { HpodConfig } from '../../ingest/src/hpod/client.js';
 
 let store: MemorySettingsStore; let app: FastifyInstance;
 beforeEach(async () => { store = new MemorySettingsStore(); app = await buildApp({ settings: store, customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: new MemoryRecipientStore(), reports: new MemoryReportStore(), reference: new MemoryReferenceStore() }); });
@@ -282,11 +283,11 @@ describe('connectivity settings', () => {
   });
 
   describe('test buttons', () => {
-    let sent: { smtp: SmtpSettings; to: string[] }[]; let checked: string[];
+    let sent: { smtp: SmtpSettings; to: string[] }[]; let hpodTried: { config: HpodConfig; missing: string[] }[];
     let result: TestResult;
     const make = async () => {
-      sent = []; checked = []; result = { ok: true, message: 'fine' };
-      const fake: Connectivity = { sendTestEmail: async (smtp, to) => { sent.push({ smtp, to }); return result; }, checkEndpoint: async (url) => { checked.push(url); return result; } };
+      sent = []; hpodTried = []; result = { ok: true, message: 'fine' };
+      const fake: Connectivity = { sendTestEmail: async (smtp, to) => { sent.push({ smtp, to }); return result; }, testHpod: async (config, missing) => { hpodTried.push({ config, missing }); return result; } };
       return buildApp({ settings: store, customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: new MemoryRecipientStore(), reports: new MemoryReportStore(), reference: new MemoryReferenceStore(), connectivity: fake });
     };
     const post = (a: FastifyInstance, url: string, values?: Record<string, unknown>) => a.inject({ method: 'POST', url, payload: { values } });
@@ -330,12 +331,28 @@ describe('connectivity settings', () => {
       const r = await post(a, '/api/settings/test-email', mail);
       expect(r.json().ok).toBe(false); expect(r.json().message).toMatch(/INTELLIDOC_SECRET_KEY/);
     });
-    it('check the H-POD endpoint on screen', async () => {
+    it('sign in to H-POD with the details on screen, and the typed password, saving nothing', async () => {
       const a = await make();
-      expect((await post(a, '/api/settings/test-hpod', {})).json()).toEqual({ ok: false, message: 'Enter the Endpoint first.' });
-      expect((await post(a, '/api/settings/test-hpod', { hpodEndpoint: 'https://hpod.example.com/api' })).json()).toEqual({ ok: true, message: 'fine' });
-      expect(checked).toEqual(['https://hpod.example.com/api']);
+      const r = await post(a, '/api/settings/test-hpod', { hpodEndpoint: 'https://hpod.example.com/api', hpodInstance: 'uk', hpodAccountCode: 'latcham', hpodUsername: 'jo@latcham.example', hpodPassword: 'typed-pass' });
+      expect(r.json()).toEqual({ ok: true, message: 'fine' });
+      expect(hpodTried).toEqual([{ missing: [], config: { endpoint: 'https://hpod.example.com/api', instance: 'uk', accountLogin: 'latcham', emailAddress: 'jo@latcham.example', password: 'typed-pass' } }]);
+      expect(store.values['hpodEndpoint']).toBe(''); expect(store.rows).toHaveLength(0);
+      expect(JSON.stringify(r.json())).not.toContain('typed-pass');
+    });
+    it('use the saved password when none is typed, and list what is missing', async () => {
+      await put({ hpodPassword: 'saved-pass' });
+      const a = await make();
+      await post(a, '/api/settings/test-hpod', { hpodEndpoint: 'https://hpod.example.com/api', hpodUsername: 'jo@latcham.example' });
+      expect(hpodTried[0]).toEqual({ missing: ['Instance', 'Account code'], config: { endpoint: 'https://hpod.example.com/api', instance: '', accountLogin: '', emailAddress: 'jo@latcham.example', password: 'saved-pass' } });
       expect((await post(a, '/api/settings/test-hpod', { hpodEndpoint: 'nope' })).statusCode).toBe(422);
+    });
+    it('say when a saved H-POD password cannot be read because the key is not set', async () => {
+      await put({ hpodPassword: 'saved-pass' });
+      store = Object.assign(new MemorySettingsStore(null), { values: { ...store.values } });
+      const a = await make();
+      const r = await post(a, '/api/settings/test-hpod', {});
+      expect(r.json().ok).toBe(false); expect(r.json().message).toMatch(/INTELLIDOC_SECRET_KEY/);
+      expect(hpodTried).toHaveLength(0);
     });
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { checkEndpoint, fromHeader, sendTestEmail, smtpFromValues, testEmailRecipients } from '../src/settings/connectivity.js';
+import { fromHeader, sendTestEmail, smtpFromValues, testEmailRecipients } from '../src/settings/connectivity.js';
 
 describe('smtpFromValues', () => {
   const base = { smtpServer: 'smtp.office365.com', smtpPort: 587, smtpFromName: 'Intelli "Doc"', smtpFromAddress: 'idoc@latcham.co.uk', smtpReplyTo: '', smtpUsername: '' };
@@ -28,19 +28,5 @@ describe('sendTestEmail', () => {
   it('returns a failure as the result, never throws', async () => {
     const r = await sendTestEmail(smtp, ['x@y.co'], { send: async () => { throw Object.assign(new Error('Invalid login: 535 5.7.3 Authentication unsuccessful'), { code: 'EAUTH' }); } });
     expect(r.ok).toBe(false); expect(r.message).toBe('The test e-mail could not be sent (EAUTH): Invalid login: 535 5.7.3 Authentication unsuccessful');
-  });
-});
-
-describe('checkEndpoint', () => {
-  const answer = (status: number): typeof fetch => (async () => new Response('', { status })) as unknown as typeof fetch;
-  it('counts any answer below 500 as reached, and says the sign-in was not tested', async () => {
-    for (const s of [200, 301, 401, 404]) { const r = await checkEndpoint('https://h.example.com', answer(s)); expect(r.ok).toBe(true); expect(r.message).toMatch(new RegExp(`HTTP ${s}`)); expect(r.message).toMatch(/sign-in details were not tested/); }
-  });
-  it('treats a server error as a failure', async () => { expect(await checkEndpoint('https://h.example.com', answer(503))).toMatchObject({ ok: false, message: expect.stringContaining('HTTP 503') }); });
-  it('explains a network failure and a timeout', async () => {
-    const dns = (async () => { throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ENOTFOUND' } }); }) as unknown as typeof fetch;
-    expect(await checkEndpoint('https://nope.example.com', dns)).toEqual({ ok: false, message: 'Could not reach https://nope.example.com: ENOTFOUND' });
-    const slow = ((_u: string, init: RequestInit) => new Promise((_r, rej) => init.signal!.addEventListener('abort', () => rej(Object.assign(new Error('x'), { name: 'TimeoutError' }))))) as unknown as typeof fetch;
-    expect(await checkEndpoint('https://slow.example.com', slow, 20)).toMatchObject({ ok: false, message: expect.stringMatching(/did not answer/) });
   });
 });

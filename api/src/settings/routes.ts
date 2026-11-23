@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { BY_KEY, GROUPS, SETTINGS, validate, type SettingValue } from './catalogue.js';
 import type { Change, SettingsStore } from './store.js';
 import { SecretKeyMissing } from './secret.js';
+import { hpodConfigFromValues } from '../hpod/service.js';
 import { realConnectivity, smtpFromValues, testEmailRecipients, type Connectivity } from './connectivity.js';
 import { marksFromValues, pageSizeFromValues, windowFromValues, type MarksPreviewer } from './preview.js';
 
@@ -94,13 +95,15 @@ export function settingsRoutes(app: FastifyInstance, store: SettingsStore, previ
     return connectivity.sendTestEmail(smtp.smtp, to);
   });
 
-  /** Checks that the H-POD API address answers (it does not sign in). */
+  /** Signs in to H-POD with the details on screen (POST /authenticate), which tests the address, the network and the credentials. The result is 200 with ok true or false. */
   app.post('/api/settings/test-hpod', async (req, reply) => {
-    const { values, errors } = await overlayValues(store, (req.body as { values?: unknown } | null)?.values);
+    const { values, typed, errors } = await overlayValues(store, (req.body as { values?: unknown } | null)?.values);
     if (Object.keys(errors).length) return body422(reply, errors);
-    const url = String(values['hpodEndpoint'] ?? '').trim();
-    if (!url) return { ok: false, message: 'Enter the Endpoint first.' };
-    return connectivity.checkEndpoint(url);
+    let password: string | null;
+    try { password = await passwordFor('hpodPassword', typed); }
+    catch (e) { if (e instanceof SecretKeyMissing) return { ok: false, message: e.message }; throw e; }
+    const { config, missing } = hpodConfigFromValues(values, password);
+    return connectivity.testHpod(config, missing);
   });
 
   /** Removes a saved password (the only way to clear one: an empty value in PUT is refused). */

@@ -24,8 +24,11 @@ import { settingsRoutes } from './settings/routes.js';
 import type { SettingsStore } from './settings/store.js';
 import type { Connectivity } from './settings/connectivity.js';
 import { drawMarksPreview, type MarksPreviewer } from './settings/preview.js';
+import { hpodErrorStatus, hpodRoutes } from './hpod/routes.js';
+import type { HpodService } from './hpod/service.js';
+import { HpodError } from '../../ingest/src/hpod/client.js';
 
-export interface AppDeps { activity?: Omit<ActivityDeps, 'jobs' | 'settings'>; settings: SettingsStore; customers: CustomerStore; costing: CostingStore; postal: PostalStore; reference: ReferenceStore; reprice: RepriceStore; recipients: RecipientStore; reports: ReportStore; /** Jobs and making their print files. Optional so a server without print folders can still start. */ jobs?: JobDeps; /** The checks behind the test buttons on Settings > Connectivity (sending an e-mail, reaching the H-POD API); tests pass fakes. */ connectivity?: Connectivity; /** Draws the marks preview (needs Ghostscript); tests pass a fake. */ marksPreview?: MarksPreviewer; /** Folder with the built web app, served at / when it exists. */ webDir?: string }
+export interface AppDeps { activity?: Omit<ActivityDeps, 'jobs' | 'settings'>; settings: SettingsStore; customers: CustomerStore; costing: CostingStore; postal: PostalStore; reference: ReferenceStore; reprice: RepriceStore; recipients: RecipientStore; reports: ReportStore; /** Jobs and making their print files. Optional so a server without print folders can still start. */ jobs?: JobDeps; /** The H-POD module (sign-in session, submissions, tracking, every API call). Optional so a test can leave it out. */ hpod?: HpodService; /** The checks behind the test buttons on Settings > Connectivity (sending an e-mail, signing in to H-POD); tests pass fakes. */ connectivity?: Connectivity; /** Draws the marks preview (needs Ghostscript); tests pass a fake. */ marksPreview?: MarksPreviewer; /** Folder with the built web app, served at / when it exists. */ webDir?: string }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
@@ -38,12 +41,14 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   repriceRoutes(app, deps.reprice);
   recipientRoutes(app, deps.recipients);
   reportRoutes(app, deps.reports);
+  if (deps.hpod) hpodRoutes(app, deps.hpod);
   if (deps.jobs) jobRoutes(app, deps.jobs);
   if (deps.activity && deps.jobs) activityRoutes(app, { ...deps.activity, settings: deps.settings, jobs: deps.jobs.store });
   app.setErrorHandler((err, _req, reply) => {
     if (err instanceof ValidationError) return reply.code(422).send({ errors: err.fieldErrors });
     if (err instanceof ConflictError) return reply.code(409).send({ error: err.message });
     if (err instanceof NotFoundError) return reply.code(404).send({ error: err.message });
+    if (err instanceof HpodError) return reply.code(hpodErrorStatus(err)).send({ error: err.message, kind: err.kind });
     const e = err as Error & { statusCode?: number };
     if (e.statusCode && e.statusCode < 500) return reply.code(e.statusCode).send({ error: e.message });
     console.error(err);
