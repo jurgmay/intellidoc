@@ -69,7 +69,7 @@ Accounts form one tree through `parent_account_id`. A customer is an account tha
 
 Tests: `npm test`. The database tests (`npm run test:db`) read `INTELLIDOC_TEST_DB` from `api/.env.test` (copy `.env.test.example`). They drop and recreate the `idoc` schema in that database, so point it at a test database, never at real data.
 
-## Recipient search
+## Recipient search (the Mailpieces page)
 
 `GET /api/recipients/scopes` lists the accounts a search can be scoped to. `GET /api/recipients/search?accountId=…` needs an account and searches that account and everything below it. Optional: `name` (contains, first address line), `address` (contains, other lines and postcode), `reference` (exact, or prefix with a trailing `*`), `referenceKey` (limit `reference` to one passthrough name), `from` and `to` (release dates, YYYY-MM-DD, inclusive) and `limit` (1 to 500, default 100). At least one of name, address, reference or a date is required, and text terms need 2 or more characters. The reply is `{ scope, rows, truncated }`.
 

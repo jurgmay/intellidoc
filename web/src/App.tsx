@@ -11,7 +11,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { RecipientSearchPage } from './pages/RecipientSearchPage';
 import { SettingsPage } from './pages/SettingsPage';
 
-const NAV = [{ to: '/customers', label: 'Customers', icon: IconUsers }, { to: '/activity', label: 'Activity', icon: IconActivity }, { to: '/jobs', label: 'Jobs', icon: IconFiles }, { to: '/search', label: 'Recipient search', icon: IconSearch }, { to: '/reports', label: 'Usage report', icon: IconChartBar }, { to: '/margin', label: 'Margin report', icon: IconReportMoney }, { to: '/hpod', label: 'H-POD', icon: IconPlugConnected }, { to: '/settings', label: 'Settings', icon: IconSettings }];
+const NAV = [{ to: '/customers', label: 'Customers', icon: IconUsers }, { to: '/activity', label: 'Activity', icon: IconActivity }, { to: '/jobs', label: 'Jobs', icon: IconFiles }, { to: '/mailpieces', label: 'Mailpieces', icon: IconSearch }, { to: '/reports', label: 'Usage report', icon: IconChartBar }, { to: '/margin', label: 'Margin report', icon: IconReportMoney }, { to: '/hpod', label: 'H-POD', icon: IconPlugConnected }, { to: '/settings', label: 'Settings', icon: IconSettings }];
 
 export function App() {
   const { pathname } = useLocation();
@@ -35,7 +35,8 @@ export function App() {
           <Route path="/customers/:id" element={<CustomerPage />} />
           <Route path="/activity" element={<ActivityPage />} />
           <Route path="/jobs" element={<JobsPage />} />
-          <Route path="/search" element={<RecipientSearchPage />} />
+          <Route path="/mailpieces" element={<RecipientSearchPage />} />
+          <Route path="/search" element={<Navigate to="/mailpieces" replace />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/margin" element={<MarginPage />} />
           <Route path="/hpod" element={<HpodPage />} />

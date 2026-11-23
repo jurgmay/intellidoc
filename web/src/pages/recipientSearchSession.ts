@@ -1,6 +1,6 @@
 import type { RecipientResult } from '../api/recipients';
 
-/** What the Recipient search page shows, kept while the app is open so leaving the page and coming back finds it as it was. Not kept after the tab is closed. */
+/** What the Mailpieces page shows, kept while the app is open so leaving the page and coming back finds it as it was. Not kept after the tab is closed. */
 export interface RecipientSearchSession {
   account: string | null;
   form: { name: string; address: string; reference: string; referenceKey: string; from: string; to: string };

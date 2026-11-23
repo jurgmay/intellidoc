@@ -51,7 +51,7 @@ export function RecipientSearchPage() {
 
   return (
     <Stack>
-      <Title order={2}>Recipient search</Title>
+      <Title order={2}>Mailpieces</Title>
       <Paper withBorder p="md">
         <form onSubmit={submit}>
           <Stack>
