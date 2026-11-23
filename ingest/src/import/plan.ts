@@ -34,7 +34,7 @@ export function settingsOwner(byId: Map<string, PlanAccount>, a: PlanAccount): P
   for (let i = 0; i < 100 && cur.inheritsSettings && cur.parentLegacyId; i++) cur = byId.get(cur.parentLegacyId) ?? cur;
   return cur;
 }
-/** The top of the tree this account sits in: the batching boundary. */
+/** The top of the tree this account sits in (not the batching boundary: that is the account that holds the settings, see settingsOwner). */
 export function rootOf(byId: Map<string, PlanAccount>, a: PlanAccount): PlanAccount {
   let cur = a;
   for (let i = 0; i < 100 && cur.parentLegacyId; i++) cur = byId.get(cur.parentLegacyId) ?? cur;

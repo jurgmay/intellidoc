@@ -1,5 +1,5 @@
 import { DEFAULT_ANONYMOUS, type AccountConfig, type EnvelopeOption, type ReferenceData } from '../reference.js';
-import { rootOf, settingsOwner, type Plan } from './plan.js';
+import { settingsOwner, type Plan } from './plan.js';
 
 /**
  * Builds the ingest's reference data straight from an import plan (no database), so a real XML/PDF pair can be
@@ -26,7 +26,7 @@ export function referenceFromPlan(plan: Plan): ReferenceData {
   for (const a of plan.accounts) {
     const cust = settingsOwner(accById, a);
     accounts.set(a.code, {
-      code: a.code, customerCode: rootOf(accById, a).code, invoicingCode: accById.get(a.invoicingLegacyId ?? '')?.code ?? cust.code, brands: plan.brands.filter((b) => b.customerLegacyId === cust.legacyId).map((b) => b.name),
+      code: a.code, customerCode: cust.code, invoicingCode: accById.get(a.invoicingLegacyId ?? '')?.code ?? cust.code, brands: plan.brands.filter((b) => b.customerLegacyId === cust.legacyId).map((b) => b.name),
       batchingKey: cust.batchingKey, matchingEnabled: cust.isAddressMatching,
       matchIncludeKeys: cust.matchRules.filter((r) => r.isInclude).map((r) => r.key),
       matchExclude: cust.matchRules.filter((r) => !r.isInclude).map((r) => ({ key: r.key, value: r.value ?? '' })),

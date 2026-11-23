@@ -10,7 +10,7 @@ Agreed with the business on 21 Nov 2026. This is a specification. Nothing in it 
 ## 2. Account tree
 
 - One tree through `parent_account_id`, any depth (Odevo > Vegner Group > B-hive Partners > 150+ sub-accounts). `grouping_account_id` is retired.
-- The **root** of a tree is the batching boundary: "customer" in the batch uniqueness rule means the root. Sub-accounts under one root that resolve to the same envelope, brand, inserts and so on batch together.
+- The account that **holds the settings** is the batching boundary (changed 23 Nov 2026; it was the root of the tree): "customer" in the batch uniqueness rule means the account itself if it has its own settings, or the nearest ancestor that does not inherit (`idoc.v_account_owner`). Sub-accounts that inherit from the same holder and resolve to the same envelope, brand, inserts and so on batch together. B-hive's 150+ sub-accounts belong to B-hive Partners, not to Odevo above it.
 - An account cannot be moved under its own descendant.
 - Migration: each sub-account that has a grouping customer becomes a child of that customer, with every setting group set to inherit. Behaviour is unchanged on day one. Where `parent_account_id` and `grouping_account_id` disagree for an account, **the parent wins**.
 
@@ -50,7 +50,7 @@ The user decides which envelopes an account may use (its effective list). The im
 - `account.invoicing_account_id` is the invoicing account (NULL = the account that holds the settings, so nothing changes for existing customers). `idoc.v_account_invoicing` gives the effective one. The API and the import check that it is the account itself or an ancestor.
 - The **job number, name and return address on the run sheet come from the invoicing account**. A job number belongs to an invoicing account and applies to all its sub-accounts.
 - **Invoicing accounts never share a batch**: the invoicing account is part of the batch key (and recorded on each batch and mailpiece). Production batching is otherwise unaffected by who is invoiced.
-- The batching boundary is now the **root of the tree**: jobs, batches, mailpieces and packs belong to the root.
+- The batching boundary is the **account that holds the settings** (itself, or the nearest ancestor that does not inherit): jobs, batches, mailpieces and packs belong to it, and the Activity and Jobs screens show it as the Account. A job whose packs come from accounts with different holders is refused ("A job must belong to one customer"). Jobs imported before this change keep the account they were given then; reset the scratch database (`npm run db:rebuild <folder>`) and import again to see the change.
 - Packs from different sub-accounts are not merged into one envelope by default (the sub-account and the invoicing account are in the match key).  There is no opt-in to merge them; it was decided not to build one (section 3a).
 - The FileMaker import reads `id_invoicingAccount` (name assumed) and falls back, with a warning, when it is not an ancestor.
 - Editing the job number and return address of a sub-account that is itself an invoicing account is not on the screens yet.
