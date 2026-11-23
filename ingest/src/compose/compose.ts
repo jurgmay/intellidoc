@@ -2,7 +2,7 @@ import { PDFDocument, PDFName, PDFString, type PDFPage } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { analysePageInk } from '../pdfInk.js';
 import { pagesToGrey, type BatchPlan, type PlannedSegment } from './plan.js';
-import { addBookmarks, addMarksLayer, dataMatrixText, drawMarks, drawMrdfMarks, loadOcrbFont, sequenceText, type MarkSettings } from './marks.js';
+import { addBookmarks, addMarksLayer, dataMatrixText, DEFAULT_PAGE_MM, drawMarks, drawMrdfMarks, loadOcrbFont, MM, sequenceText, type MarkSettings, type PageSize } from './marks.js';
 import { mailpiecePages, mrdfPageCodes } from './mrdf.js';
 import type { GreyConverter } from './grey.js';
 
@@ -14,6 +14,8 @@ export interface ComposeInput {
   runSheet: Uint8Array | null;
   plan: BatchPlan;
   marks: MarkSettings;
+  /** Size of a blank page that has no page before it to copy from. Default A4 (the setting on the Settings page). */
+  pageSize?: PageSize;
   /** Needed only when a page that is in colour has to be printed mono. */
   grey: GreyConverter | null;
   /** The file name of a segment, given its number and how many segments the batch has. */
@@ -37,7 +39,6 @@ export interface ComposedFile {
 }
 
 type Box = { x: number; y: number; width: number; height: number };
-const A4: [number, number] = [595.276, 841.89];
 
 /** Source pages (1-based) that are in colour and have to be greyed: blank and already-mono pages are left alone. */
 export async function colourPagesToGrey(source: Uint8Array, plan: BatchPlan, onProgress?: (done: number, total: number) => void): Promise<number[]> {
@@ -108,7 +109,8 @@ async function composeSegment(input: ComposeInput, seg: PlannedSegment,
 
   step(0.4, 'placing the pages');
   const placed: PDFPage[] = [];
-  let last: [number, number] = A4;
+  const pageSize = input.pageSize ?? DEFAULT_PAGE_MM;
+  let last: [number, number] = [pageSize.widthMm * MM, pageSize.heightMm * MM];
   seg.pages.forEach((_, i) => {
     const w = where[i];
     let page: PDFPage;

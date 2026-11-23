@@ -22,7 +22,7 @@ export interface SettingDef {
   appliesTo: string;
 }
 
-export const GROUPS = ['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'Sequence number', 'Data Matrix', 'Pack start dot', 'MRDF page codes'] as const;
+export const GROUPS = ['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'Page size', 'Envelope window', 'Sequence number', 'Data Matrix', 'Pack start dot', 'MRDF page codes'] as const;
 
 export const SETTINGS: SettingDef[] = [
   {
@@ -108,6 +108,42 @@ export const SETTINGS: SettingDef[] = [
     description: 'A batch is printed from one PDF. When a file passes this many pages it is closed after the mailpiece that took it over, and the batch continues in a new file, so a file can run over by up to one mailpiece. The run sheet and blank padding pages count.',
     usedBy: 'Print file composition: where a batch is split into files.',
     appliesTo: 'Next print file composed.',
+  },
+  {
+    key: 'pageWidthMm', column: 'page_width_mm', group: 'Page size', label: 'Width', type: 'number', unit: 'mm', min: 50, max: 1000, step: 0.1,
+    description: 'Width of the page the marks are measured on. A4 is 210 mm. Rarely needs to change.',
+    usedBy: 'Marks preview: the size of the page drawn. Print file composition: the size of a blank page when there is no page before it to copy a size from (normally a blank copies the page before it). Pages copied from the customer PDF keep their own size.',
+    appliesTo: 'Next print file composed, and the next preview.',
+  },
+  {
+    key: 'pageHeightMm', column: 'page_height_mm', group: 'Page size', label: 'Height', type: 'number', unit: 'mm', min: 50, max: 1000, step: 0.1,
+    description: 'Height of the page the marks are measured on. A4 is 297 mm. Rarely needs to change.',
+    usedBy: 'Marks preview: the size of the page drawn. Print file composition: the size of a blank page when there is no page before it to copy a size from (normally a blank copies the page before it). Pages copied from the customer PDF keep their own size.',
+    appliesTo: 'Next print file composed, and the next preview.',
+  },
+  {
+    key: 'windowLeftMm', column: 'window_left_mm', group: 'Envelope window', label: 'Left', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
+    description: 'Left edge of the address window, where it lies over the letter once folded and enclosed. Measured from the top left of the trim box.',
+    usedBy: 'Marks preview on the Control marks tab: the window is drawn so you can see the marks sit inside it. The print files do not use it.',
+    appliesTo: 'Immediately, in the next preview. Print files are not affected.',
+  },
+  {
+    key: 'windowTopMm', column: 'window_top_mm', group: 'Envelope window', label: 'Top', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
+    description: 'Top edge of the address window. Measured from the top left of the trim box.',
+    usedBy: 'Marks preview on the Control marks tab: the window is drawn so you can see the marks sit inside it. The print files do not use it.',
+    appliesTo: 'Immediately, in the next preview. Print files are not affected.',
+  },
+  {
+    key: 'windowWidthMm', column: 'window_width_mm', group: 'Envelope window', label: 'Width', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
+    description: 'Width of the address window.',
+    usedBy: 'Marks preview on the Control marks tab: the window is drawn so you can see the marks sit inside it. The print files do not use it.',
+    appliesTo: 'Immediately, in the next preview. Print files are not affected.',
+  },
+  {
+    key: 'windowHeightMm', column: 'window_height_mm', group: 'Envelope window', label: 'Height', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
+    description: 'Height of the address window.',
+    usedBy: 'Marks preview on the Control marks tab: the window is drawn so you can see the marks sit inside it. The print files do not use it.',
+    appliesTo: 'Immediately, in the next preview. Print files are not affected.',
   },
   {
     key: 'markSeqFontPt', column: 'mark_seq_font_pt', group: 'Sequence number', label: 'Font size', type: 'number', unit: 'pt', min: 1, max: 72, step: 0.1,
@@ -237,8 +273,8 @@ export const SETTINGS: SettingDef[] = [
   },
 ];
 
-/** Groups whose settings are labelled without the group's name (the heading says it): Left under Sequence number, Left under Data Matrix. */
-const NAMED_BY_GROUP = new Set<string>(['Sequence number', 'Data Matrix', 'Pack start dot']);
+/** Groups whose settings are labelled without the group's name (the heading says it): Width under Page size, Left under Envelope window, Left under Sequence number, Left under Data Matrix. */
+const NAMED_BY_GROUP = new Set<string>(['Page size', 'Envelope window', 'Sequence number', 'Data Matrix', 'Pack start dot']);
 /** The setting's full name, for messages and the change log, where the heading is not there to say which "Left" it is: "Sequence number: left". */
 export function nameOf(def: SettingDef): string {
   return NAMED_BY_GROUP.has(def.group) ? `${def.group}: ${def.label.charAt(0).toLowerCase()}${def.label.slice(1)}` : def.label;

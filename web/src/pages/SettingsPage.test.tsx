@@ -7,7 +7,7 @@ import { theme } from '../theme';
 import { SettingsPage } from './SettingsPage';
 
 const payload = {
-  groups: ['Enclosing', 'PDF and alerts', 'Print production settings', 'Sequence number', 'MRDF page codes'],
+  groups: ['Enclosing', 'PDF and alerts', 'Print production settings', 'Page size', 'Envelope window', 'Sequence number', 'MRDF page codes'],
   settings: [
     { key: 'machineEnclosingMaxSheets', group: 'Enclosing', label: 'Machine enclosing: maximum sheets per letter', type: 'integer', unit: 'sheets', min: 1, max: 500,
       description: 'The machine can enclose letters of up to this many sheets.', usedBy: 'Import: routes mailpieces.', appliesTo: 'Next file imported.', value: 12 },
@@ -15,6 +15,8 @@ const payload = {
       description: 'When on, an XML is imported as soon as it arrives.', usedBy: 'Folder watcher.', appliesTo: 'No restart needed.', value: true },
     { key: 'autoCompose', group: 'Print production settings', label: 'Make print files automatically', type: 'boolean', description: 'Make the print files as soon as a job is ready.', usedBy: 'Folder watcher.', appliesTo: 'No restart needed.', value: false },
     { key: 'markSeqFontPt', group: 'Sequence number', label: 'Font size', type: 'number', unit: 'pt', min: 1, max: 72, description: 'Size of the sequence number.', usedBy: 'Print files.', appliesTo: 'Next print files.', value: 8 },
+    { key: 'windowWidthMm', group: 'Envelope window', label: 'Width', type: 'number', unit: 'mm', min: 0.1, max: 400, description: 'Width of the address window.', usedBy: 'Marks preview.', appliesTo: 'Next preview.', value: 90 },
+    { key: 'pageWidthMm', group: 'Page size', label: 'Width', type: 'number', unit: 'mm', min: 50, max: 1000, description: 'Width of the page.', usedBy: 'Marks preview.', appliesTo: 'Next preview.', value: 210 },
     { key: 'mrdfOcrHeightMm', group: 'MRDF page codes', label: 'OCR code: box height', type: 'number', unit: 'mm', min: 0.1, max: 400, description: 'Height of the OCR code box.', usedBy: 'MRDF.', appliesTo: 'Next print files.', value: 4 },
   ],
   batchCode: { highestUsed: 1041, next: 1042 },
@@ -30,11 +32,13 @@ beforeEach(() => {
     if (url === '/api/settings' && init?.method === 'PUT') {
       return new Response(JSON.stringify({ changed: 1, ...payload, settings: payload.settings.map((s) => (s.key === 'machineEnclosingMaxSheets' ? { ...s, value: 10 } : s)) }), { status: 200 });
     }
+    if (url === '/api/settings/marks-preview') return new Response(new Uint8Array([137, 80, 78, 71]), { status: 200, headers: { 'Content-Type': 'image/png' } });
     if (url.startsWith('/api/settings/audit')) return new Response(JSON.stringify({ rows: [] }), { status: 200 });
     return new Response(JSON.stringify(payload), { status: 200 });
   }));
 });
 afterEach(() => vi.unstubAllGlobals());
+const previews = () => calls.filter((c) => c.url === '/api/settings/marks-preview');
 
 describe('SettingsPage', () => {
   it('shows each setting with its explanation and where it is used', async () => {
@@ -88,5 +92,52 @@ describe('SettingsPage', () => {
     await user.clear(input); await user.type(input, '3');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
     expect((await screen.findAllByText(/must be at least 1/)).length).toBeGreaterThan(0);
+  });
+  describe('Preview positions', () => {
+    beforeEach(() => { URL.createObjectURL = vi.fn(() => 'blob:preview'); URL.revokeObjectURL = vi.fn(); });
+    const open = async (user: ReturnType<typeof userEvent.setup>) => {
+      await screen.findByText('Make print files automatically');
+      await user.click(screen.getByRole('tab', { name: 'Control marks' }));
+      await user.click(screen.getByRole('button', { name: 'Preview positions' }));
+    };
+    it('keeps the page size and envelope window with the other marks settings, away from General', async () => {
+      const user = userEvent.setup(); wrap();
+      await screen.findByText('Make print files automatically');
+      expect(within(screen.getByRole('tabpanel')).queryByRole('heading', { name: 'Envelope window' })).toBeNull();
+      await user.click(screen.getByRole('tab', { name: 'Control marks' }));
+      const panel = within(screen.getByRole('tabpanel'));
+      expect(panel.getByRole('heading', { name: 'Page size' })).toBeInTheDocument();
+      expect(panel.getByRole('heading', { name: 'Envelope window' })).toBeInTheDocument();
+    });
+    it('draws the page from the values on screen, saved or not, and sends only the mark settings', async () => {
+      const user = userEvent.setup(); wrap();
+      await screen.findByText('Make print files automatically');
+      await user.click(screen.getByRole('tab', { name: 'Control marks' }));
+      const font = screen.getByLabelText(/Font size/);
+      await user.clear(font); await user.type(font, '9');
+      await user.click(screen.getByRole('button', { name: 'Preview positions' }));
+      expect(await screen.findByRole('img', { name: /first page of a mailpiece/i })).toHaveAttribute('src', 'blob:preview');
+      expect(previews()).toHaveLength(1);
+      const body = previews()[0]!.body as { page: string; values: Record<string, unknown> };
+      expect(body.page).toBe('window');
+      expect(body.values).toMatchObject({ markSeqFontPt: 9, windowWidthMm: 90, pageWidthMm: 210 });
+      expect(body.values).not.toHaveProperty('autoCompose');
+      expect(calls.some((c) => c.method === 'PUT')).toBe(false); // previewing saves nothing
+    });
+    it('draws the MRDF page when asked', async () => {
+      const user = userEvent.setup(); wrap(); await open(user);
+      await screen.findByRole('img');
+      await user.click(screen.getByText('MRDF page codes', { selector: 'label, label *' }));
+      await waitFor(() => expect(previews()).toHaveLength(2));
+      expect((previews()[1]!.body as { page: string }).page).toBe('mrdf');
+    });
+    it('shows the reason when the picture cannot be drawn', async () => {
+      const user = userEvent.setup(); wrap();
+      (fetch as unknown as ReturnType<typeof vi.fn>).mockImplementation(async (url: string) => (url === '/api/settings/marks-preview'
+        ? new Response(JSON.stringify({ error: 'The preview could not be drawn: Ghostscript was not found (gs).' }), { status: 503 })
+        : new Response(JSON.stringify(url.includes('audit') ? { rows: [] } : payload), { status: 200 })));
+      await open(user);
+      expect(await screen.findByText(/Ghostscript was not found/)).toBeInTheDocument();
+    });
   });
 });

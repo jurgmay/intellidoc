@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, Button, Group, Loader, Paper, Stack, Tabs, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { IconAlertCircle } from '@tabler/icons-react';
+import { IconAlertCircle, IconEye } from '@tabler/icons-react';
 import { getSettings, saveSettings, type SettingsPayload, type SettingValue } from '../api/settings';
 import { ApiError } from '../api/client';
 import { SettingRow } from './SettingRow';
 import { BatchCodeCard } from './BatchCodeCard';
+import { MarksPreviewModal } from './MarksPreviewModal';
 import { ChangeLog } from './ChangeLog';
 import { PostalRatesTab } from './PostalRatesTab';
 import { AnonymousTab, PaperTab, PostalFormatsTab } from './ReferenceTabs';
 
-/** The settings on the Control marks tab: where the marks go on the page (sequence number, Data Matrix, pack start dot) and the MRDF page codes (Data Matrix, OCR code). */
-const CONTROL_MARK = /^(markSeq|markDm|markDot|mrdfDm|mrdfOcr)/;
+/** The settings on the Control marks tab: the page and envelope window, where the marks go on the page (sequence number, Data Matrix, pack start dot) and the MRDF page codes (Data Matrix, OCR code). */
+const CONTROL_MARK = /^(page|window|markSeq|markDm|markDot|mrdfDm|mrdfOcr)/;
 
 export function SettingsPage() {
   const [data, setData] = useState<SettingsPayload | null>(null);
@@ -20,6 +21,7 @@ export function SettingsPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState('general');
+  const [previewing, setPreviewing] = useState(false);
   const [logVersion, setLogVersion] = useState(0);
   /** The other tabs fetch their data only once they have been opened. */
   const [seen, setSeen] = useState<ReadonlySet<string>>(new Set());
@@ -101,7 +103,13 @@ export function SettingsPage() {
           </Stack>
         </Tabs.Panel>
         <Tabs.Panel value="marks" pt="lg">
-          <Stack gap="xl">{groups((s) => CONTROL_MARK.test(s.key))}</Stack>
+          <Stack gap="xl">
+            <Group justify="space-between" align="center">
+              <Text size="sm" c="dimmed" maw={640}>Positions are in millimetres from the top left of the page. Use the preview to see where everything falls.</Text>
+              <Button variant="light" leftSection={<IconEye size={16} />} onClick={() => setPreviewing(true)}>Preview positions</Button>
+            </Group>
+            {groups((s) => CONTROL_MARK.test(s.key))}
+          </Stack>
         </Tabs.Panel>
         <Tabs.Panel value="postal" pt="lg">{seen.has('postal') && <PostalRatesTab />}</Tabs.Panel>
         <Tabs.Panel value="formats" pt="lg">{seen.has('formats') && <PostalFormatsTab />}</Tabs.Panel>
@@ -110,6 +118,7 @@ export function SettingsPage() {
         <Tabs.Panel value="log" pt="lg"><ChangeLog version={logVersion} /></Tabs.Panel>
       </Tabs>
       {(tab === 'general' || tab === 'marks') && saveBar}
+      <MarksPreviewModal opened={previewing} onClose={() => setPreviewing(false)} values={Object.fromEntries(Object.entries(draft).filter(([k]) => CONTROL_MARK.test(k)))} />
     </Stack>
   );
 }

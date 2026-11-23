@@ -1,19 +1,19 @@
 import sql from 'mssql';
 import { COLOUR_MODES, type ColourMode } from '../costing/colour.js';
-import type { MarkSettings } from './marks.js';
+import type { MarkSettings, PageSize } from './marks.js';
 import type { BatchPlan, PlanMailpiece } from './plan.js';
 import type { ComposedFile } from './compose.js';
 
-export interface ComposeSettings { autoCompose: boolean; maxPagesPerPdf: number; marks: MarkSettings }
+export interface ComposeSettings { autoCompose: boolean; maxPagesPerPdf: number; pageSize: PageSize; marks: MarkSettings }
 
 export async function loadComposeSettings(pool: sql.ConnectionPool): Promise<ComposeSettings> {
-  const r = (await pool.request().query<Record<string, number>>(`SELECT CAST(auto_compose AS INT) AS auto_compose, max_pages_per_pdf, mark_seq_font_pt, mark_seq_left_mm, mark_seq_top_mm, mark_seq_width_mm, mark_seq_height_mm,
+  const r = (await pool.request().query<Record<string, number>>(`SELECT CAST(auto_compose AS INT) AS auto_compose, max_pages_per_pdf, page_width_mm, page_height_mm, mark_seq_font_pt, mark_seq_left_mm, mark_seq_top_mm, mark_seq_width_mm, mark_seq_height_mm,
       mark_dm_left_mm, mark_dm_top_mm, mark_dm_width_mm, mark_dm_height_mm, mark_dot_x_mm, mark_dot_y_mm, mark_dot_diameter_mm,
       mrdf_dm_left_mm, mrdf_dm_top_mm, mrdf_dm_width_mm, mrdf_dm_height_mm, mrdf_ocr_font_pt, mrdf_ocr_left_mm, mrdf_ocr_top_mm, mrdf_ocr_width_mm, mrdf_ocr_height_mm FROM idoc.settings WHERE settings_id = 1`)).recordset[0];
   if (!r) throw new Error('idoc.settings has no row');
   const n = (k: string): number => Number(r[k]);
   return {
-    autoCompose: n('auto_compose') === 1, maxPagesPerPdf: n('max_pages_per_pdf'),
+    autoCompose: n('auto_compose') === 1, maxPagesPerPdf: n('max_pages_per_pdf'), pageSize: { widthMm: n('page_width_mm'), heightMm: n('page_height_mm') },
     marks: {
       seq: { fontPt: n('mark_seq_font_pt'), leftMm: n('mark_seq_left_mm'), topMm: n('mark_seq_top_mm'), widthMm: n('mark_seq_width_mm'), heightMm: n('mark_seq_height_mm') },
       dm: { leftMm: n('mark_dm_left_mm'), topMm: n('mark_dm_top_mm'), widthMm: n('mark_dm_width_mm'), heightMm: n('mark_dm_height_mm') },

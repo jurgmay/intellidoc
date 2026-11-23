@@ -55,6 +55,14 @@ CREATE TABLE idoc.settings (
     mark_dot_x_mm                       DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_dot_x DEFAULT (205.5),     -- the pack start dot (centre); FileMaker's fixed position
     mark_dot_y_mm                       DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_dot_y DEFAULT (269),
     mark_dot_diameter_mm                DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_dot_d DEFAULT (2),
+    -- The page the marks are measured on (A4 unless the work changes): the size of blank pages the composer adds, and of the marks preview.
+    page_width_mm                       DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_page_width DEFAULT (210),
+    page_height_mm                      DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_page_height DEFAULT (297),
+    -- The address window of the envelope, as it lies over the letter (same units). Only the marks preview draws it; the print files do not use it.
+    window_left_mm                      DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_win_left DEFAULT (15),
+    window_top_mm                       DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_win_top DEFAULT (25),
+    window_width_mm                     DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_win_width DEFAULT (90),
+    window_height_mm                    DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_win_height DEFAULT (35),
     -- MRDF page codes (customers that use MRDF): on the front of every sheet, in the same units. Placeholders until set from a printed proof.
     mrdf_dm_left_mm                     DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_mrdf_dm_left DEFAULT (10),
     mrdf_dm_top_mm                      DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_mrdf_dm_top DEFAULT (10),
@@ -70,7 +78,8 @@ CREATE TABLE idoc.settings (
         AND mrdf_dm_left_mm >= 0 AND mrdf_dm_top_mm >= 0 AND mrdf_ocr_left_mm >= 0 AND mrdf_ocr_top_mm >= 0),
     CONSTRAINT ck_settings_marks CHECK (max_pages_per_pdf >= 2 AND mark_seq_font_pt > 0 AND mark_seq_width_mm > 0 AND mark_seq_height_mm > 0
         AND mark_dm_width_mm > 0 AND mark_dm_height_mm > 0 AND mark_dot_diameter_mm > 0
-        AND mark_seq_left_mm >= 0 AND mark_seq_top_mm >= 0 AND mark_dm_left_mm >= 0 AND mark_dm_top_mm >= 0 AND mark_dot_x_mm >= 0 AND mark_dot_y_mm >= 0),
+        AND mark_seq_left_mm >= 0 AND mark_seq_top_mm >= 0 AND mark_dm_left_mm >= 0 AND mark_dm_top_mm >= 0 AND mark_dot_x_mm >= 0 AND mark_dot_y_mm >= 0
+        AND page_width_mm > 0 AND page_height_mm > 0 AND window_width_mm > 0 AND window_height_mm > 0 AND window_left_mm >= 0 AND window_top_mm >= 0),
     CONSTRAINT ck_settings_positive CHECK (a4_sheet_weight_g > 0 AND a4_sheet_thickness_mm > 0 AND machine_enclosing_min_mailpieces >= 0
         AND machine_enclosing_max_sheets > 0 AND hand_enclosing_max_sheets > 0 AND pdf_wait_minutes >= 1 AND pdf_reminder_minutes >= 1)
 );

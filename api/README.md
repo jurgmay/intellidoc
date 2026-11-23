@@ -21,6 +21,7 @@ when a change takes effect. The Settings page is generated from that list, so th
 |---|---|
 | `GET /api/settings` | all settings with explanations and values, and the batch code |
 | `PUT /api/settings` | `{ "values": { key: value } }`; validated; 422 with a message per setting; one change-log row per changed value |
+| `POST /api/settings/marks-preview` | `{ "page": "window" \| "mrdf", "values": { key: value } }`: a PNG of the page with the control marks and envelope window drawn from the saved settings overlaid with `values` (nothing is saved). 422 for a value that could not be saved, 503 if the picture cannot be drawn (Ghostscript missing) |
 | `GET /api/settings/audit?limit=50` | the change log |
 | `PUT /api/settings/batch-code` | `{ "next": 5000 }`; only upwards, never onto a number already used |
 

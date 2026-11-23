@@ -9,6 +9,9 @@ import bwipjs from 'bwip-js';
 const BLACK = grayscale(0);
 
 export const MM = 72 / 25.4;
+/** The page size the settings start with (A4); the Settings page can change it, so this is only the first-time value and the fallback when a caller gives none. */
+export const DEFAULT_PAGE_MM = { widthMm: 210, heightMm: 297 };
+export interface PageSize { widthMm: number; heightMm: number }
 
 export interface MarkSettings {
   seq: { fontPt: number; leftMm: number; topMm: number; widthMm: number; heightMm: number };
