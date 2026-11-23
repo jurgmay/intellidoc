@@ -26,11 +26,11 @@ describe('GET /api/settings', () => {
     expect(w).toMatchObject({ value: 12, group: 'Enclosing' });
     expect(w.usedBy).toMatch(/machine/i);
     expect(body.settings.find((s: { key: string }) => s.key === 'machineEnclosingEnvelopeSize').options).toEqual(['C5', 'C4']);
-    expect(body.groups).toEqual(['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print file marks', 'MRDF page codes']);
+    expect(body.groups).toEqual(['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'MRDF page codes']);
     expect(body.batchCode).toEqual({ highestUsed: 1041, next: 1042 });
   });
   it('every setting names a column, a group that exists and a description', () => {
-    for (const s of SETTINGS) { expect(s.column).toMatch(/^[a-z0-9_]+$/); expect(['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print file marks', 'MRDF page codes']).toContain(s.group); expect(s.description.length).toBeGreaterThan(10); expect(s.usedBy.length).toBeGreaterThan(10); }
+    for (const s of SETTINGS) { expect(s.column).toMatch(/^[a-z0-9_]+$/); expect(['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'MRDF page codes']).toContain(s.group); expect(s.description.length).toBeGreaterThan(10); expect(s.usedBy.length).toBeGreaterThan(10); }
   });
 });
 

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
@@ -7,12 +7,15 @@ import { theme } from '../theme';
 import { SettingsPage } from './SettingsPage';
 
 const payload = {
-  groups: ['Enclosing', 'PDF and alerts'],
+  groups: ['Enclosing', 'PDF and alerts', 'Print production settings', 'MRDF page codes'],
   settings: [
     { key: 'machineEnclosingMaxSheets', group: 'Enclosing', label: 'Machine enclosing: maximum sheets per letter', type: 'integer', unit: 'sheets', min: 1, max: 500,
       description: 'The machine can enclose letters of up to this many sheets.', usedBy: 'Import: routes mailpieces.', appliesTo: 'Next file imported.', value: 12 },
     { key: 'xmlFirstEnabled', group: 'PDF and alerts', label: 'Import an XML without waiting for its PDF', type: 'boolean',
       description: 'When on, an XML is imported as soon as it arrives.', usedBy: 'Folder watcher.', appliesTo: 'No restart needed.', value: true },
+    { key: 'autoCompose', group: 'Print production settings', label: 'Make print files automatically', type: 'boolean', description: 'Make the print files as soon as a job is ready.', usedBy: 'Folder watcher.', appliesTo: 'No restart needed.', value: false },
+    { key: 'markSeqFontPt', group: 'Print production settings', label: 'Sequence number: font size', type: 'number', unit: 'pt', min: 1, max: 72, description: 'Size of the sequence number.', usedBy: 'Print files.', appliesTo: 'Next print files.', value: 8 },
+    { key: 'mrdfOcrHeightMm', group: 'MRDF page codes', label: 'OCR code: box height', type: 'number', unit: 'mm', min: 0.1, max: 400, description: 'Height of the OCR code box.', usedBy: 'MRDF.', appliesTo: 'Next print files.', value: 4 },
   ],
   batchCode: { highestUsed: 1041, next: 1042 },
 };
@@ -44,8 +47,23 @@ describe('SettingsPage', () => {
   it('names the first tab General and opens on it', async () => {
     wrap();
     const tabs = await screen.findAllByRole('tab');
-    expect(tabs.map((t) => t.textContent)).toEqual(['General', 'Postal rates', 'Postal formats', 'Paper', 'Anonymous addressees', 'Change log']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['General', 'Control marks', 'Postal rates', 'Postal formats', 'Paper', 'Anonymous addressees', 'Change log']);
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+  });
+  it('puts the mark positions on the Control marks tab and the rest on General, with one save bar for both', async () => {
+    wrap();
+    await screen.findByText('Make print files automatically');
+    let panel = within(screen.getByRole('tabpanel'));
+    expect(panel.getByText('Machine enclosing: maximum sheets per letter')).toBeInTheDocument();
+    expect(panel.getByText('Make print files automatically')).toBeInTheDocument();
+    expect(panel.queryByText('Sequence number: font size')).toBeNull();
+    expect(screen.getAllByText('No unsaved changes')).toHaveLength(1);
+    await userEvent.click(screen.getByRole('tab', { name: 'Control marks' }));
+    panel = within(screen.getByRole('tabpanel'));
+    expect(panel.getByText('Sequence number: font size')).toBeInTheDocument();
+    expect(panel.getByText('OCR code: box height')).toBeInTheDocument();
+    expect(panel.queryByText('Make print files automatically')).toBeNull();
+    expect(screen.getByText('No unsaved changes')).toBeInTheDocument();
   });
   it('saves only what was changed', async () => {
     const user = userEvent.setup();
