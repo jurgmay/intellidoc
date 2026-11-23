@@ -56,7 +56,7 @@ export function ActivityPage({ refreshMs = 3000 }: { refreshMs?: number }) {
       {(
         <Paper withBorder>
           <Table highlightOnHover>
-            <Table.Thead><Table.Tr><Table.Th style={{ whiteSpace: 'nowrap' }}>Status</Table.Th><Table.Th>Account</Table.Th><Table.Th ta="right" style={{ whiteSpace: 'nowrap' }}>Size</Table.Th><Table.Th style={{ whiteSpace: 'nowrap' }}>PDF</Table.Th><Table.Th>Progress</Table.Th><Table.Th style={{ whiteSpace: 'nowrap' }}>Start time</Table.Th><Table.Th style={{ whiteSpace: 'nowrap' }}>End time</Table.Th><Table.Th>Duration</Table.Th></Table.Tr></Table.Thead>
+            <Table.Thead><Table.Tr><Table.Th style={{ whiteSpace: 'nowrap' }}>Status</Table.Th><Table.Th data-min-width={288}>Account</Table.Th><Table.Th ta="right" style={{ whiteSpace: 'nowrap' }}>Size</Table.Th><Table.Th style={{ whiteSpace: 'nowrap' }}>PDF</Table.Th><Table.Th>Progress</Table.Th><Table.Th style={{ whiteSpace: 'nowrap' }}>Start time</Table.Th><Table.Th style={{ whiteSpace: 'nowrap' }}>End time</Table.Th><Table.Th>Duration</Table.Th></Table.Tr></Table.Thead>
             <Table.Tbody>
               {lines.map((l) => (
                 <Table.Tr key={l.key}>
