@@ -3,7 +3,7 @@ import type { RecipientResult } from '../api/recipients';
 /** What the Mailpieces page shows, kept while the app is open so leaving the page and coming back finds it as it was. Not kept after the tab is closed. */
 export interface RecipientSearchSession {
   account: string | null;
-  form: { name: string; address: string; reference: string; referenceKey: string; from: string; to: string };
+  form: { name: string; address: string; reference: string; referenceKey: string; jobGuid: string; packGuid: string; from: string; to: string };
   result: RecipientResult | null;
   /** When the results were fetched (ISO). */
   searchedAt: string | null;
@@ -11,7 +11,7 @@ export interface RecipientSearchSession {
   expanded: number[];
 }
 
-export const EMPTY_FORM = { name: '', address: '', reference: '', referenceKey: '', from: '', to: '' };
+export const EMPTY_FORM = { name: '', address: '', reference: '', referenceKey: '', jobGuid: '', packGuid: '', from: '', to: '' };
 const KEY = 'intellidoc.recipientSearch';
 const blank = (): RecipientSearchSession => ({ account: null, form: { ...EMPTY_FORM }, result: null, searchedAt: null, expanded: [] });
 

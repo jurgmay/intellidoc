@@ -46,7 +46,7 @@ export function MailpieceCard({ row: r, open, onToggle, onPrice, showSequence = 
       {open && <Box p="sm">
         <Table withTableBorder withColumnBorders aria-label="Letters in the envelope">
           <Table.Thead>
-            <Table.Tr><Table.Th w={70}>Letter</Table.Th><Table.Th w={110}>Sequence</Table.Th><Table.Th w={130}>Pages</Table.Th><Table.Th w={110}>Released</Table.Th><Table.Th>Fields</Table.Th></Table.Tr>
+            <Table.Tr><Table.Th w={70}>Letter</Table.Th><Table.Th w={110}>Sequence</Table.Th><Table.Th w={130}>Pages</Table.Th><Table.Th w={110}>Released</Table.Th><Table.Th>Fields</Table.Th><Table.Th>GUIDs</Table.Th></Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {r.packs.map((k) => (
@@ -56,6 +56,7 @@ export function MailpieceCard({ row: r, open, onToggle, onPrice, showSequence = 
                 <Table.Td>{k.pageCount} {k.pageCount === 1 ? 'page' : 'pages'}<Text size="xs" c="dimmed">from page {k.startPage}</Text></Table.Td>
                 <Table.Td>{ukDate(k.releaseDate)}</Table.Td>
                 <Table.Td>{Object.keys(k.references).length === 0 ? <Text size="sm" c="dimmed">None</Text> : Object.entries(k.references).map(([key, v]) => <div key={key}><Text span size="xs" c="dimmed">{key}: </Text>{v}</div>)}</Table.Td>
+                <Table.Td><Text size="xs" ff="monospace">{k.packGuid}</Text><Text size="xs" c="dimmed" ff="monospace">job {k.jobGuid}</Text></Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>

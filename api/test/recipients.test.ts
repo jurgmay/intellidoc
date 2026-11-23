@@ -15,8 +15,10 @@ import { MemorySettingsStore } from '../src/settings/store.js';
 let app: FastifyInstance;
 let store: MemoryRecipientStore;
 
+const guidOf = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+const JOB = '2ce8e2ed-b620-4ce3-9ef7-f52f7b449789';
 const pack = (packId: number, position: number, over: Partial<RecipientPack> = {}): RecipientPack => ({
-  packId, position, sequence: position, startPage: 1 + (position - 1) * 2, pageCount: 2, releaseDate: '2026-11-18T09:00:00', references: {}, ...over,
+  packId, packGuid: guidOf(packId), jobGuid: JOB, position, sequence: position, startPage: 1 + (position - 1) * 2, pageCount: 2, releaseDate: '2026-11-18T09:00:00', references: {}, ...over,
 });
 const row = (mailpieceId: number, ancestors: number[], over: Partial<MemoryRecipient>): MemoryRecipient => ({
   mailpieceId, sequenceNumber: null, batchCode: 9000 + mailpieceId, batchStatus: 'Printed', job: `job-${mailpieceId}`, releaseDate: '2026-11-18T09:00:00', isCancelled: false,
@@ -152,6 +154,29 @@ describe('recipient search: the mailpieces of a batch', () => {
   it('checks batchId and offset are numbers', async () => {
     expect((await get('accountId=1&batchId=x')).json().errors.batchId).toBeTruthy();
     expect((await get('accountId=1&batchId=70&offset=-1')).json().errors.offset).toBeTruthy();
+  });
+});
+
+describe('recipient search: by GUID', () => {
+  it('finds the mailpiece that has the pack, with any case or braces, and shows the GUIDs', async () => {
+    expect(await packs(`accountId=1&packGuid=${guidOf(20).toUpperCase()}`)).toEqual([2]);
+    expect(await packs(`accountId=1&packGuid=%7B${guidOf(12)}%7D`)).toEqual([1]);
+    expect((await get(`accountId=1&packGuid=${guidOf(12)}`)).json().rows[0].packs[0]).toMatchObject({ packId: 12, packGuid: guidOf(12), jobGuid: JOB });
+  });
+  it('finds every mailpiece that came from a job, within the account scope', async () => {
+    expect(await packs(`accountId=1&jobGuid=${JOB}`)).toEqual([2, 1]);
+    expect(await packs(`accountId=3&jobGuid=${JOB}`)).toEqual([3]);
+    expect(await packs('accountId=1&jobGuid=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')).toEqual([]);
+  });
+  it('both together need the same pack to match', async () => {
+    expect(await packs(`accountId=1&jobGuid=${JOB}&packGuid=${guidOf(12)}`)).toEqual([1]);
+    expect(await packs(`accountId=1&jobGuid=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&packGuid=${guidOf(12)}`)).toEqual([]);
+  });
+  it('refuses something that is not a GUID', async () => {
+    const r = await get('accountId=1&jobGuid=abc&packGuid=12345');
+    expect(r.statusCode).toBe(422);
+    expect(r.json().errors.jobGuid).toMatch(/GUID/);
+    expect(r.json().errors.packGuid).toMatch(/GUID/);
   });
 });
 

@@ -3,7 +3,7 @@ import { api } from './client';
 export interface SearchScope { id: number; label: string; isCustomer: boolean }
 /** One letter in an envelope. `position` is its place in the envelope; `sequence` is its number in the customer's pack sequence (null when unlisted). */
 export interface RecipientPack {
-  packId: number; position: number; sequence: number | null; startPage: number; pageCount: number; releaseDate: string; references: Record<string, string>;
+  packId: number; /** The pack's GUID and that of the job it came from. */ packGuid: string; jobGuid: string; position: number; sequence: number | null; startPage: number; pageCount: number; releaseDate: string; references: Record<string, string>;
 }
 /** One mailpiece (envelope) with its packs in envelope order. */
 export interface RecipientRow {
@@ -12,7 +12,7 @@ export interface RecipientRow {
   invoicingCode: string | null; invoicingName: string | null; brand: string | null; priceSell: number | null; packs: RecipientPack[];
 }
 export interface RecipientResult { scope: { id: number; label: string }; rows: RecipientRow[]; truncated: boolean }
-export interface RecipientQuery { accountId: number; name: string; address: string; reference: string; referenceKey: string; from: string; to: string }
+export interface RecipientQuery { accountId: number; name: string; address: string; reference: string; referenceKey: string; jobGuid: string; packGuid: string; from: string; to: string }
 
 /** The mailpieces of one batch, in print order, `limit` at a time starting after `offset`. */
 export const listBatchMailpieces = (accountId: number, batchId: number, offset: number, limit: number): Promise<RecipientResult> =>
@@ -22,7 +22,7 @@ export const listScopes = (): Promise<{ rows: SearchScope[] }> => api('/api/reci
 
 export function searchRecipients(q: RecipientQuery): Promise<RecipientResult> {
   const p = new URLSearchParams({ accountId: String(q.accountId) });
-  for (const k of ['name', 'address', 'reference', 'referenceKey', 'from', 'to'] as const) if (q[k].trim()) p.set(k, q[k].trim());
+  for (const k of ['name', 'address', 'reference', 'referenceKey', 'jobGuid', 'packGuid', 'from', 'to'] as const) if (q[k].trim()) p.set(k, q[k].trim());
   return api(`/api/recipients/search?${p.toString()}`);
 }
 

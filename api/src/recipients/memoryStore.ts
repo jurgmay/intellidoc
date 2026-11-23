@@ -32,7 +32,8 @@ export class MemoryRecipientStore implements RecipientStore {
       .filter((r) => !q.address || r.addressLines.slice(1).some((l) => has(l, q.address!)) || has(r.postcode, q.address))
       // a reference and a date match when one pack of the mailpiece has them (both on the same pack)
       .filter((r) => r.packs.some((k) =>
-        (!q.reference || Object.entries(k.references).some(([key, v]) => (!q.referenceKey || key.toLowerCase() === q.referenceKey.toLowerCase()) && refOk(v, q.reference!)))
+        (!q.packGuid || k.packGuid === q.packGuid) && (!q.jobGuid || k.jobGuid === q.jobGuid)
+        && (!q.reference || Object.entries(k.references).some(([key, v]) => (!q.referenceKey || key.toLowerCase() === q.referenceKey.toLowerCase()) && refOk(v, q.reference!)))
         && (!q.from || k.releaseDate.slice(0, 10) >= q.from) && (!q.to || k.releaseDate.slice(0, 10) <= q.to)))
       .sort(q.batchId !== null
         ? (a, b) => (a.sequenceNumber ?? Infinity) - (b.sequenceNumber ?? Infinity) || a.mailpieceId - b.mailpieceId

@@ -54,6 +54,10 @@ export function RecipientSearchPage() {
               <TextInput label="Address" description="Any part of an address line or the postcode" value={form.address} onChange={set('address')} error={errors['address']} />
             </Group>
             <Group grow align="flex-start">
+              <TextInput label="Job GUID" description="The H-POD job the letter came from" value={form.jobGuid} onChange={set('jobGuid')} error={errors['jobGuid']} />
+              <TextInput label="Pack GUID" description="The GUID of one letter" value={form.packGuid} onChange={set('packGuid')} error={errors['packGuid']} />
+            </Group>
+            <Group grow align="flex-start">
               <TextInput label="Reference" description="Exact, or start it and end with *" value={form.reference} onChange={set('reference')} error={errors['reference']} />
               <TextInput label="Reference name" description="Optional, e.g. Tenant Reference" value={form.referenceKey} onChange={set('referenceKey')} />
               <TextInput label="Released from" type="date" value={form.from} onChange={set('from')} error={errors['from']} />
