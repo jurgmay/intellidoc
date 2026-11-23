@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { PDFDocument } from 'pdf-lib';
-import { envelopeText, buildRunSheet, printMethod, weightBandLines, postalServiceText, type RunSheetInput } from '../src/runsheet/data.js';
+import { envelopeText, buildRunSheet, runSheetsFromIngest, printMethod, weightBandLines, postalServiceText, type RunSheetInput } from '../src/runsheet/data.js';
 import { mergePdfs, renderRunSheet } from '../src/runsheet/pdf.js';
 import { printFileName } from '../src/compose/job.js';
 import { spawnSync } from 'node:child_process';
+import { run } from './helpers.js';
+import { fixtureReference } from '../src/fixtureReference.js';
 
 const input: RunSheetInput = {
   batchCode: 1042, brand: 'Leeds Building Society', batchNumber: 16, batchTotal: 23, jobNumber: 'J-77', customerName: 'Uinsure', submitted: new Date('2026-11-20T10:00:00Z'),
@@ -14,6 +16,11 @@ const input: RunSheetInput = {
 };
 
 describe('run sheet data', () => {
+  it('total pages include the blank the composer adds after a pack with an odd number of pages', async () => {
+    const r = await run([{ pages: 3 }, { pages: 2, surname: 'Jones' }]);
+    const total = runSheetsFromIngest(r, fixtureReference(), { firstCode: 1 }).reduce((t, d) => t + d.totalPages, 0);
+    expect(total).toBe(6);
+  });
   it('wording of print method follows the FileMaker calculation', () => {
     expect(printMethod('A4 White', true, 'Colour')).toBe('Finished size A4; printed 1-up on A4 White; colour; duplex');
     expect(printMethod('A4 White - Edge-to-edge', false, 'Mono')).toBe('Finished size A4; 1-up on SRA4; mono; simplex');

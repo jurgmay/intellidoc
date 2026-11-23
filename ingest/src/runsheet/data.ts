@@ -136,7 +136,7 @@ export function runSheetsFromIngest(r: IngestResult, ref: ReferenceData, opts: {
       isDuplex: options.duplex,
       colour: options.colour,
       mailpieces: mps.length,
-      pages: mps.reduce((n, m) => n + m.packs.reduce((p, k) => p + k.parsed.pageCount, 0), 0),
+      pages: mps.reduce((n, m) => n + m.packs.reduce((p, k) => p + k.parsed.pageCount + (k.parsed.pageCount % 2), 0), 0),   // an odd pack gets a blank page after it
       department: DEPARTMENT[b.enclosing],
       envelopeCode: b.envelopeCode,
       envelopeDescription: stock?.description ?? b.envelopeSize,
