@@ -134,14 +134,14 @@ export function ActivityPage({ refreshMs = 3000 }: { refreshMs?: number }) {
       {(
         <Paper withBorder>
           <Table highlightOnHover>
-            <Table.Thead><Table.Tr><Table.Th>Status</Table.Th><Table.Th>File</Table.Th><Table.Th ta="right">Size</Table.Th><Table.Th>PDF</Table.Th><Table.Th>Progress</Table.Th><Table.Th>Start time</Table.Th><Table.Th>End time</Table.Th><Table.Th>Duration</Table.Th></Table.Tr></Table.Thead>
+            <Table.Thead><Table.Tr><Table.Th miw="max-content">Status</Table.Th><Table.Th>File</Table.Th><Table.Th ta="right">Size</Table.Th><Table.Th miw="max-content">PDF</Table.Th><Table.Th>Progress</Table.Th><Table.Th>Start time</Table.Th><Table.Th>End time</Table.Th><Table.Th>Duration</Table.Th></Table.Tr></Table.Thead>
             <Table.Tbody>
               {lines.map((l) => (
                 <Table.Tr key={l.key}>
-                  <Table.Td><Badge color={COLOUR[l.stage]} variant={l.stage === 'Completed' ? 'light' : 'filled'}>{l.stage}</Badge></Table.Td>
+                  <Table.Td miw="max-content"><Badge color={COLOUR[l.stage]} variant={l.stage === 'Completed' ? 'light' : 'filled'} style={{ overflow: 'visible' }}>{l.stage}</Badge></Table.Td>
                   <Table.Td>{l.name}</Table.Td>
                   <Table.Td ta="right">{size(l.bytes)}</Table.Td>
-                  <Table.Td>{l.pdf === 'arrived' ? <Badge color="green" variant="light">Arrived</Badge> : l.pdf === 'waiting' ? <Badge color="yellow" variant="light">Not yet</Badge> : ''}</Table.Td>
+                  <Table.Td miw="max-content">{l.pdf === 'arrived' ? <Badge color="green" variant="light">Arrived</Badge> : l.pdf === 'waiting' ? <Badge color="yellow" variant="light">Not yet</Badge> : ''}</Table.Td>
                   <Table.Td miw={260}>
                     {l.progress && <Progress value={l.progress.total ? (l.progress.done / l.progress.total) * 100 : 0} mb={4} animated aria-label={`${l.progress.done} of ${l.progress.total} ${l.progress.unit}`} />}
                     {!l.progress && (l.stage === 'Processing' || l.stage === 'Making print files') && !l.stalled && <Progress value={100} animated mb={4} />}
