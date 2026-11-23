@@ -3,6 +3,7 @@ import { DEFAULT_LIMIT, MAX_LIMIT, MIN_TERM, type RecipientQuery } from './types
 
 type Raw = Record<string, unknown>;
 const text = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const validDate = (s: string): boolean => DATE.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && new Date(`${s}T00:00:00Z`).toISOString().startsWith(s);
 
@@ -20,6 +21,15 @@ export function parseRecipientQuery(raw: Raw): RecipientQuery {
   };
   const name = term('name', 'Name');
   const address = term('address', 'Address');
+  const guid = (key: string, label: string): string | null => {
+    const v = text(raw[key]);
+    if (v === null) return null;
+    const g = v.replace(/^\{|\}$/g, '').toLowerCase();
+    if (!GUID.test(g)) { errors[key] = `${label} must be a GUID like 2ce8e2ed-b620-4ce3-9ef7-f52f7b449789.`; return null; }
+    return g;
+  };
+  const jobGuid = guid('jobGuid', 'Job GUID');
+  const packGuid = guid('packGuid', 'Pack GUID');
   const reference = term('reference', 'Reference');
   const referenceKey = text(raw['referenceKey']);
   if (referenceKey && !reference) errors['reference'] = 'Enter the reference to look for.';
@@ -34,7 +44,7 @@ export function parseRecipientQuery(raw: Raw): RecipientQuery {
   if (bat !== null && !/^\d+$/.test(bat)) errors['batchId'] = 'The batch is not a number.';
   const batchId = bat && /^\d+$/.test(bat) ? Number(bat) : null;
 
-  if (!name && !address && !reference && !from && !to && batchId === null && !errors['accountId']) errors['name'] = 'Enter a name, address, reference or date range to search for.';
+  if (!name && !address && !reference && !jobGuid && !packGuid && !from && !to && batchId === null && !errors['accountId']) errors['name'] = 'Enter a name, address, reference, GUID or date range to search for.';
 
   const lim = text(raw['limit']);
   let limit = DEFAULT_LIMIT;
@@ -46,7 +56,7 @@ export function parseRecipientQuery(raw: Raw): RecipientQuery {
   let offset = 0;
   if (off) { if (!/^\d+$/.test(off)) errors['offset'] = 'Offset must be a number from 0.'; else offset = Number(off); }
   if (Object.keys(errors).length) throw new ValidationError(errors);
-  return { accountId, name, address, reference, referenceKey, from, to, batchId, limit, offset };
+  return { accountId, name, address, reference, referenceKey, jobGuid, packGuid, from, to, batchId, limit, offset };
 }
 
 /** The pattern a LIKE needs for "contains" (`%x%`), exact (`x`) or prefix (`x%`), with the wildcard characters in the text made literal. */

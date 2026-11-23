@@ -54,6 +54,8 @@ export class MssqlRecipientStore implements RecipientStore {
                           JOIN idoc.passthrough_key k ON k.passthrough_key_id = pp.passthrough_key_id
                           WHERE pp.pack_id = p.pack_id AND v.value LIKE @ref ESCAPE N'\\'${keyTest})`);
     }
+    if (q.packGuid) { req.input('packGuid', sql.UniqueIdentifier, q.packGuid); ofPack.push('p.pack_guid = @packGuid'); }
+    if (q.jobGuid) { req.input('jobGuid', sql.UniqueIdentifier, q.jobGuid); ofPack.push('EXISTS (SELECT 1 FROM idoc.source sc WHERE sc.source_id = p.source_id AND sc.source_guid = @jobGuid)'); }
     if (q.from) { req.input('from', sql.Date, q.from); ofPack.push('p.release_date >= @from'); }
     if (q.to) { req.input('to', sql.Date, q.to); ofPack.push('p.release_date < DATEADD(DAY, 1, @to)'); }
     if (q.batchId !== null) { req.input('batch', sql.BigInt, q.batchId); where.push('m.batch_id = @batch'); }
@@ -99,10 +101,10 @@ export class MssqlRecipientStore implements RecipientStore {
       }
       // the order the packs go into the envelope: the customer's pack sequence, then the order in the PDF (as the composer does)
       const r3 = this.pool.request();
-      for (const k of (await r3.query(`SELECT p.mailpiece_id, p.pack_id, p.document_sequence, p.start_page, p.page_count, CONVERT(NVARCHAR(19), p.release_date, 126) AS release_date
-                                       FROM idoc.pack p WHERE p.mailpiece_id IN (${inList(r3)}) ORDER BY p.mailpiece_id, p.document_sequence, p.start_page, p.pack_id`)).recordset as Record<string, any>[]) { // eslint-disable-line @typescript-eslint/no-explicit-any
+      for (const k of (await r3.query(`SELECT p.mailpiece_id, p.pack_id, LOWER(CONVERT(CHAR(36), p.pack_guid)) AS pack_guid, LOWER(CONVERT(CHAR(36), sc.source_guid)) AS job_guid, p.document_sequence, p.start_page, p.page_count, CONVERT(NVARCHAR(19), p.release_date, 126) AS release_date
+                                       FROM idoc.pack p JOIN idoc.source sc ON sc.source_id = p.source_id WHERE p.mailpiece_id IN (${inList(r3)}) ORDER BY p.mailpiece_id, p.document_sequence, p.start_page, p.pack_id`)).recordset as Record<string, any>[]) { // eslint-disable-line @typescript-eslint/no-explicit-any
         const list = packs.get(Number(k['mailpiece_id'])) ?? packs.set(Number(k['mailpiece_id']), []).get(Number(k['mailpiece_id']))!;
-        list.push({ packId: Number(k['pack_id']), position: list.length + 1, sequence: Number(k['document_sequence']) >= UNLISTED ? null : Number(k['document_sequence']),
+        list.push({ packId: Number(k['pack_id']), packGuid: k['pack_guid'], jobGuid: k['job_guid'], position: list.length + 1, sequence: Number(k['document_sequence']) >= UNLISTED ? null : Number(k['document_sequence']),
           startPage: Number(k['start_page']), pageCount: Number(k['page_count']), releaseDate: k['release_date'], references: refs.get(Number(k['pack_id'])) ?? {} });
       }
     }

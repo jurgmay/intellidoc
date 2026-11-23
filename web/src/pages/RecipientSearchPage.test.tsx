@@ -12,9 +12,9 @@ const hit = {
   mailpieceId: 5, sequenceNumber: 1 as number | null, batchCode: 7001, batchStatus: 'Printed', job: 'job-9', releaseDate: '2026-11-18T09:30:00', addressLines: ['Mrs A Patel', '12 Mill Lane', 'Leeds'], postcode: 'LS1 4AB', isCancelled: false,
   accountCode: 'ODEVO_HIGHLINE', accountName: 'Highline Solicitors', accountPath: 'Odevo > Highline Solicitors', invoicingCode: 'ODEVO', invoicingName: 'Odevo', brand: 'Home', priceSell: 1.05 as number | null,
   packs: [
-    { packId: 12, position: 1, sequence: 1, startPage: 3, pageCount: 2, releaseDate: '2026-11-18T09:30:00', references: { 'Tenant Reference': 'T-1001', 'Document Type': 'Bill' } },
-    { packId: 11, position: 2, sequence: 2, startPage: 1, pageCount: 2, releaseDate: '2026-11-18T09:30:00', references: { 'Tenant Reference': 'T-1001', 'Document Type': 'Arrears' } },
-    { packId: 13, position: 3, sequence: null, startPage: 5, pageCount: 1, releaseDate: '2026-11-18T09:30:00', references: { 'Document Type': 'Leaflet' } },
+    { packId: 12, packGuid: 'aaaaaaaa-0000-4000-8000-000000000012', jobGuid: 'bbbbbbbb-0000-4000-8000-000000000001', position: 1, sequence: 1, startPage: 3, pageCount: 2, releaseDate: '2026-11-18T09:30:00', references: { 'Tenant Reference': 'T-1001', 'Document Type': 'Bill' } },
+    { packId: 11, packGuid: 'aaaaaaaa-0000-4000-8000-000000000011', jobGuid: 'bbbbbbbb-0000-4000-8000-000000000001', position: 2, sequence: 2, startPage: 1, pageCount: 2, releaseDate: '2026-11-18T09:30:00', references: { 'Tenant Reference': 'T-1001', 'Document Type': 'Arrears' } },
+    { packId: 13, packGuid: 'aaaaaaaa-0000-4000-8000-000000000013', jobGuid: 'bbbbbbbb-0000-4000-8000-000000000001', position: 3, sequence: null, startPage: 5, pageCount: 1, releaseDate: '2026-11-18T09:30:00', references: { 'Document Type': 'Leaflet' } },
   ],
 };
 const price = {
@@ -35,6 +35,21 @@ afterEach(() => vi.unstubAllGlobals());
 const show = () => render(<MantineProvider theme={theme}><MemoryRouter><RecipientSearchPage /></MemoryRouter></MantineProvider>);
 
 describe('RecipientSearchPage', () => {
+  it('searches by job GUID and pack GUID, and shows the GUIDs of each letter', async () => {
+    show();
+    await waitFor(() => expect(urls).toContain('/api/recipients/scopes'));
+    await userEvent.click(screen.getByRole('combobox', { name: /Search in/ }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Odevo', hidden: true }));
+    await userEvent.type(screen.getByLabelText('Job GUID'), ' bbbbbbbb-0000-4000-8000-000000000001 ');
+    await userEvent.type(screen.getByLabelText('Pack GUID'), 'aaaaaaaa-0000-4000-8000-000000000012');
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await screen.findByText('Mrs A Patel');
+    expect(urls.find((u) => u.startsWith('/api/recipients/search'))).toBe('/api/recipients/search?accountId=1&jobGuid=bbbbbbbb-0000-4000-8000-000000000001&packGuid=aaaaaaaa-0000-4000-8000-000000000012');
+    await userEvent.click(screen.getByRole('button', { name: 'Show the letters for Mrs A Patel' }));
+    expect(screen.getByText('aaaaaaaa-0000-4000-8000-000000000012')).toBeInTheDocument();
+    expect(screen.getAllByText('job bbbbbbbb-0000-4000-8000-000000000001')).toHaveLength(3);
+  });
+
   it('keeps the account, the terms and the results when you leave the page and come back, and Clear forgets them', async () => {
     const first = show();
     await waitFor(() => expect(urls).toContain('/api/recipients/scopes'));

@@ -56,7 +56,7 @@ recipients.scopeList = [
   { id: 101, label: 'Acme Energy Ltd', isCustomer: true }, { id: 105, label: 'Northwest Bank plc', isCustomer: true },
   { id: 106, label: 'Odevo', isCustomer: true }, { id: 107, label: 'Odevo > Highline Solicitors', isCustomer: false }, { id: 108, label: 'Rendall & Rittner', isCustomer: true },
 ];
-const pk = (packId: number, position: number, sequence: number | null, startPage: number, pageCount: number, releaseDate: string, references: Record<string, string>) => ({ packId, position, sequence, startPage, pageCount, releaseDate, references });
+const pk = (packId: number, position: number, sequence: number | null, startPage: number, pageCount: number, releaseDate: string, references: Record<string, string>) => ({ packId, packGuid: `7a1c0000-0000-4000-8000-${String(packId).padStart(12, '0')}`, jobGuid: '2ce8e2ed-b620-4ce3-9ef7-f52f7b449789', position, sequence, startPage, pageCount, releaseDate, references });
 const rec = (mailpieceId: number, ancestors: number[], over: Record<string, unknown>) => recipients.recipients.push({
   mailpieceId, batchCode: 7000 + Math.floor(mailpieceId / 2), batchStatus: 'Printed', job: `job-${mailpieceId}`, releaseDate: '2026-11-18T09:30:00', isCancelled: false,
   addressLines: [], postcode: '', accountCode: '', accountName: '', accountPath: '', invoicingCode: null, invoicingName: null, brand: null, priceSell: null, packs: [], ancestors, ...over,

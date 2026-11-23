@@ -16,7 +16,7 @@ describe.skipIf(!cs)('MssqlRecipientStore', { timeout: 120_000 }, () => {
   // The ingest code has its own copy of the mssql package, so it gets its own connection (mixing the two breaks parameter types).
   let pool: sql.ConnectionPool; let ipool: Awaited<ReturnType<typeof connectIngest>>; let store: MssqlRecipientStore;
   let customer: number; let sub: number; let child: number; let other: number;
-  const q = (over: Partial<RecipientQuery>): RecipientQuery => ({ accountId: customer, name: null, address: null, reference: null, referenceKey: null, from: null, to: null, batchId: null, limit: 100, offset: 0, ...over });
+  const q = (over: Partial<RecipientQuery>): RecipientQuery => ({ accountId: customer, name: null, address: null, reference: null, referenceKey: null, jobGuid: null, packGuid: null, from: null, to: null, batchId: null, limit: 100, offset: 0, ...over });
   const names = async (over: Partial<RecipientQuery>): Promise<string[]> => (await store.search(q(over))).rows.map((r) => r.addressLines[0]!).sort();
   const person = (first: string, surname: string, extra: Partial<PackSpec> = {}): PackSpec =>
     ({ first, surname, lines: [`${first} ${surname}`, '1 High Street', 'Town', 'AB1 2CD'], ...extra });
@@ -48,6 +48,15 @@ describe.skipIf(!cs)('MssqlRecipientStore', { timeout: 120_000 }, () => {
     expect(s.find((x) => x.id === customer)).toMatchObject({ isCustomer: true });
     expect(s.find((x) => x.id === child)).toMatchObject({ isCustomer: false });
     expect(s.find((x) => x.id === child)!.label.split(' > ').length).toBe(s.find((x) => x.id === sub)!.label.split(' > ').length + 1);
+  });
+
+  it('finds mailpieces by the GUID of a pack or of the job it came from', async () => {
+    const all = (await store.search(q({ accountId: customer, address: 'high' }))).rows;
+    const pack = all.flatMap((r) => r.packs).find((k) => k.packGuid)!;
+    expect((await store.search(q({ packGuid: pack.packGuid.toUpperCase() }))).rows.flatMap((r) => r.packs.map((k) => k.packGuid))).toContain(pack.packGuid);
+    expect((await store.search(q({ packGuid: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' }))).rows).toEqual([]);
+    expect((await store.search(q({ jobGuid: pack.jobGuid }))).rows.length).toBeGreaterThan(0);
+    expect((await store.search(q({ accountId: other, jobGuid: pack.jobGuid }))).rows).toEqual([]);
   });
 
   it('covers the chosen account and everything below it, and nothing else', async () => {

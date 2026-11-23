@@ -2,6 +2,9 @@
 export interface RecipientQuery {
   /** The account to search in. The search covers this account and every account below it. */
   accountId: number;
+  /** A pack's GUID, or the GUID of the H-POD job (source) a pack came from; the mailpiece matches when one of its packs does. */
+  packGuid: string | null;
+  jobGuid: string | null;
   /** Part of the addressee (first address line). */
   name: string | null;
   /** Part of any other address line, or of the postcode. */
@@ -23,6 +26,9 @@ export interface RecipientQuery {
 /** One pack (letter) inside a mailpiece. */
 export interface RecipientPack {
   packId: number;
+  /** The pack's own GUID, and the GUID of the job (H-POD source) it came from, lower case. */
+  packGuid: string;
+  jobGuid: string;
   /** 1, 2, 3... in the order the packs go into the envelope. */
   position: number;
   /** The pack's number in the customer's pack sequence rules, or null when the pack is not listed in them (it goes after the listed ones). */

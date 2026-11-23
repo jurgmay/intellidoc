@@ -70,7 +70,7 @@ describe.skipIf(!cs)('MssqlBatchStore', { timeout: 120_000 }, () => {
 
   it('the mailpiece search lists a batch in print order, paged', async () => {
     const b = (await store.search(q())).rows[0]!;
-    const base = { accountId: customer, name: null, address: null, reference: null, referenceKey: null, from: null, to: null, batchId: b.batchId };
+    const base = { accountId: customer, name: null, address: null, reference: null, referenceKey: null, jobGuid: null, packGuid: null, from: null, to: null, batchId: b.batchId };
     const all = await mailpieces.search({ ...base, limit: 100, offset: 0 });
     expect(all.rows.map((r) => r.sequenceNumber)).toEqual([...all.rows.map((r) => r.sequenceNumber)].sort((x, y) => (x ?? 1e9) - (y ?? 1e9)));
     const page = await mailpieces.search({ ...base, limit: 1, offset: 1 });

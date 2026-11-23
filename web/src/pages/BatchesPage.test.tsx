@@ -15,7 +15,7 @@ const batch = (batchCode: number, over: Record<string, unknown> = {}) => ({
 const piece = (mailpieceId: number, name: string, sequenceNumber: number | null) => ({
   mailpieceId, sequenceNumber, batchCode: 7001, batchStatus: 'Printed', job: 'job-9', releaseDate: '2026-11-18T09:30:00', addressLines: [name, '12 Mill Lane', 'Leeds'], postcode: 'LS1 4AB', isCancelled: false,
   accountCode: 'ODEVO', accountName: 'Odevo', accountPath: 'Odevo', invoicingCode: 'ODEVO', invoicingName: 'Odevo', brand: null, priceSell: 1.25 as number | null,
-  packs: [{ packId: mailpieceId * 10, position: 1, sequence: 1, startPage: 1, pageCount: 2, releaseDate: '2026-11-18T09:30:00', references: { 'Tenant Reference': `T-${mailpieceId}` } }],
+  packs: [{ packId: mailpieceId * 10, packGuid: `aaaaaaaa-0000-4000-8000-${String(mailpieceId).padStart(12, '0')}`, jobGuid: 'bbbbbbbb-0000-4000-8000-000000000001', position: 1, sequence: 1, startPage: 1, pageCount: 2, releaseDate: '2026-11-18T09:30:00', references: { 'Tenant Reference': `T-${mailpieceId}` } }],
 });
 let urls: string[];
 let respond: (url: string) => { status: number; json: unknown };
