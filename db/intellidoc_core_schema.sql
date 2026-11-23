@@ -32,6 +32,7 @@ CREATE TABLE idoc.settings (
     machine_enclosing_max_sheets        INT           NOT NULL CONSTRAINT df_settings_mach_sheets DEFAULT (12),
     machine_enclosing_envelope_code     NVARCHAR(20)  NOT NULL CONSTRAINT df_settings_mach_env DEFAULT (N'C5'),
     hand_enclosing_max_sheets           INT           NOT NULL CONSTRAINT df_settings_hand_sheets DEFAULT (125),
+    small_batch_limit                   INT           NOT NULL CONSTRAINT df_settings_small_batch DEFAULT (20),   -- a batch of fewer mailpieces than this carries the small batch adjustment (pricing)
     -- XML-first import (the watcher reads these every minute, so a change applies without a restart)
     xml_first_enabled                   BIT           NOT NULL CONSTRAINT df_settings_xml_first DEFAULT (1),   -- import an XML without waiting for its PDF
     pdf_wait_minutes                    INT           NOT NULL CONSTRAINT df_settings_pdf_wait DEFAULT (30),   -- first "PDF missing" alert after this long
@@ -116,7 +117,7 @@ CREATE TABLE idoc.settings (
         AND mark_seq_left_mm >= 0 AND mark_seq_top_mm >= 0 AND mark_dm_left_mm >= 0 AND mark_dm_top_mm >= 0 AND mark_dot_x_mm >= 0 AND mark_dot_y_mm >= 0
         AND page_width_mm > 0 AND page_height_mm > 0 AND window_width_mm > 0 AND window_height_mm > 0 AND window_left_mm >= 0 AND window_top_mm >= 0),
     CONSTRAINT ck_settings_positive CHECK (a4_sheet_weight_g > 0 AND a4_sheet_thickness_mm > 0 AND machine_enclosing_min_mailpieces >= 0
-        AND machine_enclosing_max_sheets > 0 AND hand_enclosing_max_sheets > 0 AND pdf_wait_minutes >= 1 AND pdf_reminder_minutes >= 1)
+        AND machine_enclosing_max_sheets > 0 AND hand_enclosing_max_sheets > 0 AND small_batch_limit >= 0 AND pdf_wait_minutes >= 1 AND pdf_reminder_minutes >= 1)
 );
 GO
 

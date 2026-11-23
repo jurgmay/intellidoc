@@ -24,3 +24,11 @@ export function composedPages(mode: ColourMode, packs: PackPages[]): PackPages {
   });
   return out;
 }
+
+/**
+ * Blank pages the composer adds: every pack is printed on whole sheets, so a pack with an odd number of pages (colour + mono + blank in
+ * the incoming PDF) gets one blank page after it. They are billed as blank pages along with the ones that arrived blank.
+ */
+export function paddingPages(packs: PackPages[]): number {
+  return packs.filter((p) => (p.colour + p.mono + p.blank) % 2 === 1).length;
+}

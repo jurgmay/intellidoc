@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { composedPages } from '../src/costing/colour.js';
+import { composedPages, paddingPages } from '../src/costing/colour.js';
 
 const packs = [{ colour: 2, mono: 1, blank: 1 }, { colour: 0, mono: 3, blank: 0 }, { colour: 0, mono: 0, blank: 2 }];
 describe('composedPages', () => {
@@ -15,4 +15,16 @@ describe('composedPages', () => {
     expect(composedPages('FIRST_MAILPIECE_PAGE', mixed)).toEqual({ colour: 0, mono: 6, blank: 1 }); // the first pack is mono, so the mailpiece has no colour page
   });
   it('handles no packs', () => expect(composedPages('FIRST_PACK_PAGE', [])).toEqual({ colour: 0, mono: 0, blank: 0 }));
+});
+
+describe('paddingPages', () => {
+  const pk = (colour: number, mono: number, blank: number) => ({ colour, mono, blank });
+  it('is one blank page for each pack with an odd number of pages', () => {
+    expect(paddingPages([pk(1, 0, 0), pk(0, 2, 0), pk(1, 1, 1), pk(0, 0, 4)])).toBe(2);
+    expect(paddingPages([pk(0, 3, 0), pk(0, 3, 0)])).toBe(2);   // two 3-page packs: 6 pages printed as 8
+  });
+  it('is nothing for no packs or whole sheets', () => {
+    expect(paddingPages([])).toBe(0);
+    expect(paddingPages([pk(1, 1, 0), pk(0, 4, 0)])).toBe(0);
+  });
 });

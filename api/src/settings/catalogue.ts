@@ -64,6 +64,12 @@ export const SETTINGS: SettingDef[] = [
     appliesTo: 'Next file imported.',
   },
   {
+    key: 'smallBatchLimit', column: 'small_batch_limit', group: 'Enclosing', label: 'Small batch adjustment: batches of fewer than', type: 'integer', unit: 'mailpieces', min: 0, max: 100000,
+    description: 'A batch with fewer mailpieces than this carries the customer\'s small batch adjustment (a sell price only). 0 turns the adjustment off.',
+    usedBy: 'Pricing: each mailpiece in a small batch gets the small batch adjustment line.',
+    appliesTo: 'Mail priced from now on; mail already priced keeps its price until "Price mail again".',
+  },
+  {
     key: 'xmlFirstEnabled', column: 'xml_first_enabled', group: 'PDF and alerts', label: 'Import an XML without waiting for its PDF', type: 'boolean',
     description: 'When on, an XML is imported as soon as it arrives (the job waits as "Awaiting PDF"). When off, the watcher waits until the XML and PDF are both there.',
     usedBy: 'Folder watcher: whether a lone XML is imported, and whether a late PDF is matched to a waiting job.',
