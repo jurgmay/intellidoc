@@ -105,7 +105,7 @@ Things to know:
 
 ## Settings
 
-The mark positions are on the **Control marks** tab of the Settings page (from *Sequence number: font size* to *OCR code: box height*), in two groups, **Print production settings** and **MRDF page codes**; it shares the Save changes bar with the General tab. **Print production settings** (box positions, font size, dot, maximum pages per file). FileMaker kept these in its Settings table, which was not in the DDR, so **the starting values are placeholders** (except the dot, which FileMaker fixed in the script). Check them against a printed proof and correct them there.
+The mark positions are on the **Control marks** tab of the Settings page, in four groups: **Sequence number**, **Data Matrix** and **Pack start dot** (the print file marks) and **MRDF page codes**; the tab shares the Save changes bar with the General tab. Inside a group the fields carry no prefix (*Left*, *Top*, *Font size*), but the change log and error messages give the full name ("Sequence number: left"). **Print production settings** on the General tab holds *Make print files automatically* and *Maximum pages in one print file*. FileMaker kept these in its Settings table, which was not in the DDR, so **the starting values are placeholders** (except the dot, which FileMaker fixed in the script). Check them against a printed proof and correct them there.
 
 ## Not built, and differences from FileMaker
 

@@ -22,7 +22,7 @@ export interface SettingDef {
   appliesTo: string;
 }
 
-export const GROUPS = ['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'MRDF page codes'] as const;
+export const GROUPS = ['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'Sequence number', 'Data Matrix', 'Pack start dot', 'MRDF page codes'] as const;
 
 export const SETTINGS: SettingDef[] = [
   {
@@ -110,73 +110,73 @@ export const SETTINGS: SettingDef[] = [
     appliesTo: 'Next print file composed.',
   },
   {
-    key: 'markSeqFontPt', column: 'mark_seq_font_pt', group: 'Print production settings', label: 'Sequence number: font size', type: 'number', unit: 'pt', min: 1, max: 72, step: 0.1,
+    key: 'markSeqFontPt', column: 'mark_seq_font_pt', group: 'Sequence number', label: 'Font size', type: 'number', unit: 'pt', min: 1, max: 72, step: 0.1,
     description: 'Size of the sequence number text (OCR-B), e.g. 1042/000123.',
     usedBy: 'Print file composition: the sequence number printed on the first page of each mailpiece, for the enclosing machine camera.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markSeqLeftMm', column: 'mark_seq_left_mm', group: 'Print production settings', label: 'Sequence number: left', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
+    key: 'markSeqLeftMm', column: 'mark_seq_left_mm', group: 'Sequence number', label: 'Left', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
     description: 'Left edge of the box the sequence number is centred in. Measured from the top left of the trim box.',
     usedBy: 'Print file composition: the sequence number printed on the first page of each mailpiece, for the enclosing machine camera.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markSeqTopMm', column: 'mark_seq_top_mm', group: 'Print production settings', label: 'Sequence number: top', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
+    key: 'markSeqTopMm', column: 'mark_seq_top_mm', group: 'Sequence number', label: 'Top', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
     description: 'Top edge of the box the sequence number is centred in. Measured from the top left of the trim box.',
     usedBy: 'Print file composition: the sequence number printed on the first page of each mailpiece, for the enclosing machine camera.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markSeqWidthMm', column: 'mark_seq_width_mm', group: 'Print production settings', label: 'Sequence number: box width', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
+    key: 'markSeqWidthMm', column: 'mark_seq_width_mm', group: 'Sequence number', label: 'Box width', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
     description: 'Width of the box the sequence number is centred in.',
     usedBy: 'Print file composition: the sequence number printed on the first page of each mailpiece, for the enclosing machine camera.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markSeqHeightMm', column: 'mark_seq_height_mm', group: 'Print production settings', label: 'Sequence number: box height', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
+    key: 'markSeqHeightMm', column: 'mark_seq_height_mm', group: 'Sequence number', label: 'Box height', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
     description: 'Height of the box the sequence number is centred in.',
     usedBy: 'Print file composition: the sequence number printed on the first page of each mailpiece, for the enclosing machine camera.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markDmLeftMm', column: 'mark_dm_left_mm', group: 'Print production settings', label: 'Data Matrix: left', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
+    key: 'markDmLeftMm', column: 'mark_dm_left_mm', group: 'Data Matrix', label: 'Left', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
     description: 'Left edge of the Data Matrix. Measured from the top left of the trim box.',
     usedBy: 'Print file composition: the Data Matrix printed on the first page of each mailpiece.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markDmTopMm', column: 'mark_dm_top_mm', group: 'Print production settings', label: 'Data Matrix: top', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
+    key: 'markDmTopMm', column: 'mark_dm_top_mm', group: 'Data Matrix', label: 'Top', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
     description: 'Top edge of the Data Matrix. Measured from the top left of the trim box.',
     usedBy: 'Print file composition: the Data Matrix printed on the first page of each mailpiece.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markDmWidthMm', column: 'mark_dm_width_mm', group: 'Print production settings', label: 'Data Matrix: width', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
+    key: 'markDmWidthMm', column: 'mark_dm_width_mm', group: 'Data Matrix', label: 'Width', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
     description: 'The code is square and is fitted inside the smaller of its width and height.',
     usedBy: 'Print file composition: the Data Matrix printed on the first page of each mailpiece.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markDmHeightMm', column: 'mark_dm_height_mm', group: 'Print production settings', label: 'Data Matrix: height', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
+    key: 'markDmHeightMm', column: 'mark_dm_height_mm', group: 'Data Matrix', label: 'Height', type: 'number', unit: 'mm', min: 0.1, max: 400, step: 0.1,
     description: 'The code is square and is fitted inside the smaller of its width and height.',
     usedBy: 'Print file composition: the Data Matrix printed on the first page of each mailpiece.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markDotXMm', column: 'mark_dot_x_mm', group: 'Print production settings', label: 'Pack start dot: centre across', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
+    key: 'markDotXMm', column: 'mark_dot_x_mm', group: 'Pack start dot', label: 'Centre across', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
     description: 'Distance of the dot centre from the left of the trim box.',
     usedBy: 'Print file composition: the dot printed on the first page of each mailpiece that marks where a pack starts.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markDotYMm', column: 'mark_dot_y_mm', group: 'Print production settings', label: 'Pack start dot: centre down', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
+    key: 'markDotYMm', column: 'mark_dot_y_mm', group: 'Pack start dot', label: 'Centre down', type: 'number', unit: 'mm', min: 0, max: 400, step: 0.1,
     description: 'Distance of the dot centre from the top of the trim box.',
     usedBy: 'Print file composition: the dot printed on the first page of each mailpiece that marks where a pack starts.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
   {
-    key: 'markDotDiameterMm', column: 'mark_dot_diameter_mm', group: 'Print production settings', label: 'Pack start dot: diameter', type: 'number', unit: 'mm', min: 0.1, max: 50, step: 0.1,
+    key: 'markDotDiameterMm', column: 'mark_dot_diameter_mm', group: 'Pack start dot', label: 'Diameter', type: 'number', unit: 'mm', min: 0.1, max: 50, step: 0.1,
     description: 'Diameter of the dot. It is red, or black when the page is printed mono.',
     usedBy: 'Print file composition: the dot printed on the first page of each mailpiece that marks where a pack starts.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
@@ -237,6 +237,13 @@ export const SETTINGS: SettingDef[] = [
   },
 ];
 
+/** Groups whose settings are labelled without the group's name (the heading says it): Left under Sequence number, Left under Data Matrix. */
+const NAMED_BY_GROUP = new Set<string>(['Sequence number', 'Data Matrix', 'Pack start dot']);
+/** The setting's full name, for messages and the change log, where the heading is not there to say which "Left" it is: "Sequence number: left". */
+export function nameOf(def: SettingDef): string {
+  return NAMED_BY_GROUP.has(def.group) ? `${def.group}: ${def.label.charAt(0).toLowerCase()}${def.label.slice(1)}` : def.label;
+}
+
 export const BY_KEY = new Map(SETTINGS.map((s) => [s.key, s]));
 
 const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
@@ -249,20 +256,20 @@ export function parseEmails(text: string): string[] {
 export function validate(def: SettingDef, raw: unknown, options?: string[]): { value: SettingValue } | { error: string } {
   switch (def.type) {
     case 'boolean':
-      return typeof raw === 'boolean' ? { value: raw } : { error: `${def.label} must be on or off` };
+      return typeof raw === 'boolean' ? { value: raw } : { error: `${nameOf(def)} must be on or off` };
     case 'number':
     case 'integer': {
-      if (typeof raw !== 'number' || !Number.isFinite(raw)) return { error: `${def.label} must be a number` };
-      if (def.type === 'integer' && !Number.isInteger(raw)) return { error: `${def.label} must be a whole number` };
-      if (def.min !== undefined && raw < def.min) return { error: `${def.label} must be at least ${def.min}` };
-      if (def.max !== undefined && raw > def.max) return { error: `${def.label} must be at most ${def.max}` };
+      if (typeof raw !== 'number' || !Number.isFinite(raw)) return { error: `${nameOf(def)} must be a number` };
+      if (def.type === 'integer' && !Number.isInteger(raw)) return { error: `${nameOf(def)} must be a whole number` };
+      if (def.min !== undefined && raw < def.min) return { error: `${nameOf(def)} must be at least ${def.min}` };
+      if (def.max !== undefined && raw > def.max) return { error: `${nameOf(def)} must be at most ${def.max}` };
       return { value: raw };
     }
     case 'select':
-      if (typeof raw !== 'string') return { error: `${def.label} must be one of the listed values` };
-      return !options || options.includes(raw) ? { value: raw } : { error: `${def.label} must be one of: ${options.join(', ')}` };
+      if (typeof raw !== 'string') return { error: `${nameOf(def)} must be one of the listed values` };
+      return !options || options.includes(raw) ? { value: raw } : { error: `${nameOf(def)} must be one of: ${options.join(', ')}` };
     case 'emails': {
-      if (typeof raw !== 'string') return { error: `${def.label} must be text` };
+      if (typeof raw !== 'string') return { error: `${nameOf(def)} must be text` };
       const list = parseEmails(raw);
       const bad = list.filter((e) => !EMAIL.test(e));
       if (bad.length) return { error: `Not an e-mail address: ${bad.join(', ')}` };

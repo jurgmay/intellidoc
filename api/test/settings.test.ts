@@ -26,11 +26,11 @@ describe('GET /api/settings', () => {
     expect(w).toMatchObject({ value: 12, group: 'Enclosing' });
     expect(w.usedBy).toMatch(/machine/i);
     expect(body.settings.find((s: { key: string }) => s.key === 'machineEnclosingEnvelopeSize').options).toEqual(['C5', 'C4']);
-    expect(body.groups).toEqual(['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'MRDF page codes']);
+    expect(body.groups).toEqual(['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'Sequence number', 'Data Matrix', 'Pack start dot', 'MRDF page codes']);
     expect(body.batchCode).toEqual({ highestUsed: 1041, next: 1042 });
   });
   it('every setting names a column, a group that exists and a description', () => {
-    for (const s of SETTINGS) { expect(s.column).toMatch(/^[a-z0-9_]+$/); expect(['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'MRDF page codes']).toContain(s.group); expect(s.description.length).toBeGreaterThan(10); expect(s.usedBy.length).toBeGreaterThan(10); }
+    for (const s of SETTINGS) { expect(s.column).toMatch(/^[a-z0-9_]+$/); expect(['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'Sequence number', 'Data Matrix', 'Pack start dot', 'MRDF page codes']).toContain(s.group); expect(s.description.length).toBeGreaterThan(10); expect(s.usedBy.length).toBeGreaterThan(10); }
   });
 });
 
@@ -45,6 +45,15 @@ describe('PUT /api/settings', () => {
     expect(audit.map((a: { setting: string; oldValue: string; newValue: string }) => `${a.setting}: ${a.oldValue} -> ${a.newValue}`).sort()).toEqual([
       'Alert if the PDF has not arrived after: 30 -> 45', 'Import an XML without waiting for its PDF: on -> off']);
     expect(audit[0].changedBy).toBe('system');
+  });
+  it('names the mark settings in full in the change log and in error messages, though their labels leave out the heading', async () => {
+    expect(BY_KEY.get('markSeqLeftMm')).toMatchObject({ group: 'Sequence number', label: 'Left' });
+    expect(BY_KEY.get('markDotDiameterMm')).toMatchObject({ group: 'Pack start dot', label: 'Diameter' });
+    expect((await put({ markSeqLeftMm: 22, markDmWidthMm: 9 })).statusCode).toBe(200);
+    const audit = (await app.inject({ url: '/api/settings/audit' })).json().rows.map((a: { setting: string }) => a.setting).sort();
+    expect(audit).toEqual(['Data Matrix: width', 'Sequence number: left']);
+    const bad = await put({ markDotDiameterMm: 0 });
+    expect(bad.json().errors.markDotDiameterMm).toBe('Pack start dot: diameter must be at least 0.1');
   });
   it('rejects bad values with a message per setting and saves nothing', async () => {
     const r = await put({ pdfWaitMinutes: 0, a4SheetWeightG: 'heavy', machineEnclosingEnvelopeSize: 'A9', alertRecipients: 'not-an-email', nonsense: 1, machineEnclosingMaxSheets: 8 });
