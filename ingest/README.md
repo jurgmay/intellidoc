@@ -105,6 +105,8 @@ Alternatively copy `.env.example` to `.env`, edit it, and use `npm run db:init:e
 To wipe the scratch database and rebuild it from the current schema (deletes everything in it): `npm run db:reset` (reads `.env`).
 
 To do the whole job (reset, import the FileMaker export, assign stock codes): `npm run db:rebuild C:\idoc-import` (add `--start=N` to choose the first stock code; the folder holds the four `.mer` files). It stops at the first step that fails. Stock codes are handed out in a fixed order starting at 10001, so the same export gives the same codes, but a changed export can shift them: do not use this once codes have been printed on anything.
+
+**Keeping your Settings across a rebuild.** A rebuild resets every setting to the schema's `DEFAULT`. To keep yours: set them on the Settings page, then run `npm run settings:export` (it writes `db/local_settings.sql`, which is not in git). From then on `db:rebuild` applies that file as its last step (`npm run settings:apply` applies it on its own). Run `settings:export` again whenever you want the file to follow a change; add `-- --print` to see the SQL instead of writing it. The file is one `UPDATE idoc.settings` you can edit by hand: delete a line to keep the schema default for that setting. If a later schema change removes a column named in the file, the apply step names it and you delete that line. Change history (the change log) and the next batch code are not settings values and are not kept.
 Stop with Ctrl+C: the current file is finished first.
 
 `db:init` loads **test** reference data (placeholder stock weights, accounts `FEXCO`, `NATIONAL_GRID_PSR`). Real
