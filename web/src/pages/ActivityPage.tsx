@@ -56,18 +56,19 @@ export function ActivityPage({ refreshMs = 3000 }: { refreshMs?: number }) {
       {(
         <Paper withBorder>
           <Table highlightOnHover>
-            <Table.Thead><Table.Tr><Table.Th style={{ whiteSpace: 'nowrap' }}>Status</Table.Th><Table.Th>File</Table.Th><Table.Th ta="right" style={{ whiteSpace: 'nowrap' }}>Size</Table.Th><Table.Th style={{ whiteSpace: 'nowrap' }}>PDF</Table.Th><Table.Th>Progress</Table.Th><Table.Th style={{ whiteSpace: 'nowrap' }}>Start time</Table.Th><Table.Th style={{ whiteSpace: 'nowrap' }}>End time</Table.Th><Table.Th>Duration</Table.Th></Table.Tr></Table.Thead>
+            <Table.Thead><Table.Tr><Table.Th style={{ whiteSpace: 'nowrap' }}>Status</Table.Th><Table.Th>Account</Table.Th><Table.Th ta="right" style={{ whiteSpace: 'nowrap' }}>Size</Table.Th><Table.Th style={{ whiteSpace: 'nowrap' }}>PDF</Table.Th><Table.Th>Progress</Table.Th><Table.Th style={{ whiteSpace: 'nowrap' }}>Start time</Table.Th><Table.Th style={{ whiteSpace: 'nowrap' }}>End time</Table.Th><Table.Th>Duration</Table.Th></Table.Tr></Table.Thead>
             <Table.Tbody>
               {lines.map((l) => (
                 <Table.Tr key={l.key}>
                   <Table.Td style={{ whiteSpace: 'nowrap' }}><Badge color={COLOUR[l.stage]} variant={l.stage === 'Completed' ? 'light' : 'filled'} styles={BADGE_FULL}>{l.stage}</Badge></Table.Td>
-                  <Table.Td>{l.name}</Table.Td>
+                  <Table.Td>{l.account}</Table.Td>
                   <Table.Td ta="right" style={{ whiteSpace: 'nowrap' }}>{size(l.bytes)}</Table.Td>
                   <Table.Td style={{ whiteSpace: 'nowrap' }}>{l.pdf === 'arrived' ? <Badge color="green" variant="light" styles={BADGE_FULL}>Arrived</Badge> : l.pdf === 'waiting' ? <Badge color="yellow" variant="light" styles={BADGE_FULL}>Not yet</Badge> : ''}</Table.Td>
                   <Table.Td miw={260}>
                     {l.progress && <Progress value={l.progress.total ? (l.progress.done / l.progress.total) * 100 : 0} mb={4} animated aria-label={`${l.progress.done} of ${l.progress.total} ${l.progress.unit}`} />}
                     {!l.progress && (l.stage === 'Processing' || l.stage === 'Making print files') && !l.stalled && <Progress value={100} animated mb={4} />}
-                    <Text size="xs" c={l.stalled || l.stage === 'Failed' ? 'red' : 'dimmed'}>{l.detail}{l.stage === 'Waiting' && l.seconds !== null ? ` (about ${duration(l.seconds)})` : ''}</Text>
+                    <Text size="xs" c={l.stalled || l.stage === 'Failed' ? 'red' : 'dimmed'}>{l.detail}</Text>
+                    <Text size="sm" style={{ overflowWrap: 'anywhere' }}>{l.name}</Text>
                   </Table.Td>
                   <Table.Td style={{ whiteSpace: 'nowrap' }}>{clock(l.start)}</Table.Td>
                   <Table.Td style={{ whiteSpace: 'nowrap' }}>{clock(l.end)}</Table.Td>
