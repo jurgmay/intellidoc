@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { BY_KEY, GROUPS, SETTINGS, validate, type SettingValue } from './catalogue.js';
 import type { Change, SettingsStore } from './store.js';
+import { SecretKeyMissing } from './secret.js';
 import { marksFromValues, pageSizeFromValues, windowFromValues, type MarksPreviewer } from './preview.js';
 
 /** Who is making the change. There is no sign-in yet, so this is 'system'; Microsoft sign-in will replace this one function. */
@@ -10,7 +11,8 @@ async function payload(store: SettingsStore) {
   const [values, sizes, batchCode] = await Promise.all([store.read(), store.envelopeSizes(), store.batchCode()]);
   return {
     groups: GROUPS,
-    settings: SETTINGS.map((s) => ({ ...s, value: values[s.key], options: s.type === 'select' ? sizes : undefined })),
+    // A secret (the password) is never sent: its value is empty and `isSet` says whether one is saved.
+    settings: SETTINGS.map((s) => ({ ...s, value: s.type === 'secret' ? '' : values[s.key], isSet: s.type === 'secret' ? values[s.key] !== '' : undefined, options: s.type === 'select' ? sizes : undefined })),
     batchCode,
   };
 }
@@ -30,10 +32,11 @@ export function settingsRoutes(app: FastifyInstance, store: SettingsStore, previ
       if (!def) { errors[key] = 'Unknown setting'; continue; }
       const v = validate(def, raw, def.type === 'select' ? sizes : undefined);
       if ('error' in v) { errors[key] = v.error; continue; }
-      if (v.value !== current[key]) changes.push({ key, oldValue: current[key] as SettingValue, newValue: v.value });
+      if (def.type === 'secret' ? true : v.value !== current[key]) changes.push({ key, oldValue: current[key] as SettingValue, newValue: v.value });
     }
     if (Object.keys(errors).length) return reply.code(422).send({ errors });
-    await store.update(changes, userOf(req));
+    try { await store.update(changes, userOf(req)); }
+    catch (e) { if (e instanceof SecretKeyMissing) return reply.code(422).send({ errors: Object.fromEntries(changes.filter((c) => BY_KEY.get(c.key)?.type === 'secret').map((c) => [c.key, e.message])) }); throw e; }
     return { changed: changes.length, ...(await payload(store)) };
   });
 
@@ -59,6 +62,14 @@ export function settingsRoutes(app: FastifyInstance, store: SettingsStore, previ
     try { png = await preview(page, marksFromValues(values), windowFromValues(values), pageSizeFromValues(values)); }
     catch (e) { console.error(e); return reply.code(503).send({ error: `The preview could not be drawn: ${(e as Error).message}` }); }
     return reply.header('Content-Type', 'image/png').header('Cache-Control', 'no-store').send(Buffer.from(png));
+  });
+
+  /** Removes a saved password (the only way to clear one: an empty value in PUT is refused). */
+  app.delete('/api/settings/:key/secret', async (req, reply) => {
+    const key = (req.params as { key: string }).key;
+    if (BY_KEY.get(key)?.type !== 'secret') return reply.code(404).send({ error: 'Not a secret setting' });
+    await store.clearSecret(key, userOf(req));
+    return payload(store);
   });
 
   app.get('/api/settings/audit', async (req) => {

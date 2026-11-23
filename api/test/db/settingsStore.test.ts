@@ -9,6 +9,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import sql from 'mssql';
 import { assertScratchDatabase, resetAndSeed } from '../../../ingest/src/mssql/devDb.js';
 import { MssqlSettingsStore } from '../../src/settings/store.js';
+import { SecretBox, SecretKeyMissing } from '../../src/settings/secret.js';
 import { buildApp } from '../../src/app.js';
 
 /** Runs against the scratch database named in INTELLIDOC_TEST_DB. It DROPS and recreates the idoc schema. */
@@ -46,5 +47,19 @@ describe.skipIf(!cs)('MssqlSettingsStore', { timeout: 120_000 }, () => {
     expect(ok.json()).toEqual({ highestUsed: null, next: 5000 });
     const n = (await pool.request().query('SELECT NEXT VALUE FOR idoc.batch_code_seq AS n')).recordset[0].n;
     expect(Number(n)).toBe(5000);
+  });
+
+  it('network settings: paths are saved as text, the password is encrypted in the table and logged only as (set)', async () => {
+    const keyed = new MssqlSettingsStore(pool, new SecretBox('a passphrase long enough'));
+    await keyed.update([{ key: 'folderIn', oldValue: '', newValue: '\\\\wf01\\in' }, { key: 'networkPassword', oldValue: '', newValue: 'Tr0ub4dor&3' }], 'tester');
+    const raw = (await pool.request().query('SELECT folder_in, network_password FROM idoc.settings')).recordset[0];
+    expect(raw.folder_in).toBe('\\\\wf01\\in');
+    expect(raw.network_password).toMatch(/^v1:/); expect(raw.network_password).not.toContain('Tr0ub4dor');
+    expect(await keyed.secret('networkPassword')).toBe('Tr0ub4dor&3');
+    const log = (await pool.request().query(`SELECT setting_name, new_value FROM idoc.settings_audit WHERE setting_name LIKE N'Network access%'`)).recordset;
+    expect(log).toEqual([{ setting_name: 'Network access: password', new_value: '(set)' }]);
+    await keyed.clearSecret('networkPassword', 'tester');
+    expect(await keyed.secret('networkPassword')).toBeNull();
+    await expect(store.update([{ key: 'networkPassword', oldValue: '', newValue: 'x' }], 'tester')).rejects.toBeInstanceOf(SecretKeyMissing);
   });
 });

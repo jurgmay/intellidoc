@@ -1,4 +1,5 @@
 import sql from 'mssql';
+import { SecretBox, SecretKeyMissing } from './secret.js';
 import { BY_KEY, nameOf, SETTINGS, type SettingValue } from './catalogue.js';
 
 export interface AuditRow { id: number; changedAt: string; changedBy: string; setting: string; oldValue: string | null; newValue: string | null }
@@ -14,12 +15,27 @@ export interface SettingsStore {
   audit(limit: number): Promise<AuditRow[]>;
   batchCode(): Promise<BatchCodeInfo>;
   setNextBatchCode(next: number, by: string): Promise<void>;
+  /** A secret setting (a password) in the clear, for server code that needs it; never for a browser. Null when none is saved. */
+  secret(key: string): Promise<string | null>;
+  /** Removes a saved secret, with a change-log row. */
+  clearSecret(key: string, by: string): Promise<void>;
 }
 
 const fmt = (v: SettingValue): string => (typeof v === 'boolean' ? (v ? 'on' : 'off') : String(v));
+/** What the change log says about a secret: never the value, never the ciphertext. */
+const SET = '(set)', NOT_SET = '(not set)';
+const SECRET_KEYS = new Set(SETTINGS.filter((s) => s.type === 'secret').map((s) => s.key));
+const auditValue = (key: string, v: SettingValue): string => (SECRET_KEYS.has(key) ? (v === '' ? NOT_SET : SET) : fmt(v));
+/** The value to store: a secret is encrypted first (the key must be set), everything else is as given. */
+function toStored(box: SecretBox | null, key: string, v: SettingValue): SettingValue {
+  if (!SECRET_KEYS.has(key) || v === '') return v;
+  if (!box) throw new SecretKeyMissing();
+  return box.encrypt(v as string);
+}
 
 export class MssqlSettingsStore implements SettingsStore {
-  constructor(private readonly pool: sql.ConnectionPool) {}
+  /** `secrets` encrypts the password setting; without it a password cannot be saved (SecretKeyMissing). */
+  constructor(private readonly pool: sql.ConnectionPool, private readonly secrets: SecretBox | null = null) {}
 
   async read(): Promise<Record<string, SettingValue>> {
     const row = (await this.pool.request().query(`SELECT ${SETTINGS.map((s) => `CAST(${s.column} AS ${s.type === 'boolean' ? 'BIT' : s.type === 'number' ? 'FLOAT' : s.type === 'integer' ? 'INT' : 'NVARCHAR(1000)'}) AS ${s.column}`).join(', ')}
@@ -39,6 +55,7 @@ export class MssqlSettingsStore implements SettingsStore {
 
   async update(changes: Change[], by: string): Promise<void> {
     if (changes.length === 0) return;
+    const stored = changes.map((c) => toStored(this.secrets, c.key, c.newValue)); // before anything is written: a missing key refuses the whole save
     const tx = new sql.Transaction(this.pool);
     await tx.begin();
     try {
@@ -47,15 +64,15 @@ export class MssqlSettingsStore implements SettingsStore {
       changes.forEach((c, i) => {
         const def = BY_KEY.get(c.key)!; // column names come from the catalogue only, never from the request
         sets.push(`${def.column} = @v${i}`);
-        if (def.type === 'boolean') req.input(`v${i}`, sql.Bit, c.newValue as boolean);
-        else if (def.type === 'number') req.input(`v${i}`, sql.Decimal(8, 3), c.newValue as number);
-        else if (def.type === 'integer') req.input(`v${i}`, sql.Int, c.newValue as number);
-        else req.input(`v${i}`, sql.NVarChar(1000), c.newValue as string);
+        if (def.type === 'boolean') req.input(`v${i}`, sql.Bit, stored[i] as boolean);
+        else if (def.type === 'number') req.input(`v${i}`, sql.Decimal(8, 3), stored[i] as number);
+        else if (def.type === 'integer') req.input(`v${i}`, sql.Int, stored[i] as number);
+        else req.input(`v${i}`, sql.NVarChar(1000), stored[i] as string);
       });
       await req.query(`UPDATE idoc.settings SET ${sets.join(', ')} WHERE settings_id = 1`);
       for (const c of changes) {
         await new sql.Request(tx).input('by', sql.NVarChar(200), by).input('n', sql.NVarChar(100), nameOf(BY_KEY.get(c.key)!))
-          .input('o', sql.NVarChar(1000), fmt(c.oldValue)).input('v', sql.NVarChar(1000), fmt(c.newValue))
+          .input('o', sql.NVarChar(1000), auditValue(c.key, c.oldValue)).input('v', sql.NVarChar(1000), auditValue(c.key, c.newValue))
           .query('INSERT INTO idoc.settings_audit (changed_by, setting_name, old_value, new_value) VALUES (@by, @n, @o, @v)');
       }
       await tx.commit();
@@ -63,6 +80,23 @@ export class MssqlSettingsStore implements SettingsStore {
       try { await tx.rollback(); } catch { /* already rolled back */ }
       throw e;
     }
+  }
+
+  async secret(key: string): Promise<string | null> {
+    const def = BY_KEY.get(key);
+    if (!def || def.type !== 'secret') throw new Error(`${key} is not a secret setting`);
+    const stored = (await this.read())[key] as string;
+    if (stored === '') return null;
+    if (!this.secrets) throw new SecretKeyMissing();
+    return this.secrets.decrypt(stored);
+  }
+
+  async clearSecret(key: string, by: string): Promise<void> {
+    const def = BY_KEY.get(key);
+    if (!def || def.type !== 'secret') throw new Error(`${key} is not a secret setting`);
+    const old = (await this.read())[key] as string;
+    if (old === '') return;
+    await this.update([{ key, oldValue: old, newValue: '' }], by);
   }
 
   async audit(limit: number): Promise<AuditRow[]> {
@@ -97,6 +131,7 @@ export class MemorySettingsStore implements SettingsStore {
     autoCompose: false, maxPagesPerPdf: 10000, pageWidthMm: 210, pageHeightMm: 297, windowLeftMm: 15, windowTopMm: 25, windowWidthMm: 90, windowHeightMm: 35, markSeqFontPt: 8, markSeqLeftMm: 20, markSeqTopMm: 40, markSeqWidthMm: 45, markSeqHeightMm: 4,
     markDmLeftMm: 20, markDmTopMm: 30, markDmWidthMm: 8, markDmHeightMm: 8, markDotXMm: 205.5, markDotYMm: 269, markDotDiameterMm: 2,
     mrdfDmLeftMm: 10, mrdfDmTopMm: 10, mrdfDmWidthMm: 8, mrdfDmHeightMm: 8, mrdfOcrFontPt: 8.2, mrdfOcrLeftMm: 20, mrdfOcrTopMm: 10, mrdfOcrWidthMm: 30, mrdfOcrHeightMm: 4, mrdfOcrRotationDeg: 0,
+    networkUsername: '', networkPassword: '', workflowNetworkPath: '', workflowSharedFolder: '', folderIn: '', folderOut: '', folderHold: '', folderPrintFiles: '', folderProcessed: '', bluecrestNetworkPath: '', bluecrestInputFolder: '', bluecrestOutputFolder: '', bluecrestLockFolder: '', bluecrestSelectFolder: '', bluecrestArchiveName: '', docketsFolder: '', docketsSignedForFolder: '',
   };
   rows: AuditRow[] = [];
   highestUsed: number | null = 1041;
@@ -104,11 +139,25 @@ export class MemorySettingsStore implements SettingsStore {
   now = (): string => new Date().toISOString();
   async read(): Promise<Record<string, SettingValue>> { return { ...this.values }; }
   async envelopeSizes(): Promise<string[]> { return this.sizes; }
+  constructor(private readonly secrets: SecretBox | null = new SecretBox('memory store test key')) { /* a key by default, so a password can be saved in tests and the stub */ }
   async update(changes: Change[], by: string): Promise<void> {
-    for (const c of changes) {
-      this.values[c.key] = c.newValue;
-      this.rows.unshift({ id: this.rows.length + 1, changedAt: this.now(), changedBy: by, setting: nameOf(BY_KEY.get(c.key)!), oldValue: fmt(c.oldValue), newValue: fmt(c.newValue) });
-    }
+    const stored = changes.map((c) => toStored(this.secrets, c.key, c.newValue));
+    changes.forEach((c, i) => {
+      this.values[c.key] = stored[i]!;
+      this.rows.unshift({ id: this.rows.length + 1, changedAt: this.now(), changedBy: by, setting: nameOf(BY_KEY.get(c.key)!), oldValue: auditValue(c.key, c.oldValue), newValue: auditValue(c.key, c.newValue) });
+    });
+  }
+  async secret(key: string): Promise<string | null> {
+    if (BY_KEY.get(key)?.type !== 'secret') throw new Error(`${key} is not a secret setting`);
+    const stored = this.values[key] as string;
+    if (stored === '') return null;
+    if (!this.secrets) throw new SecretKeyMissing();
+    return this.secrets.decrypt(stored);
+  }
+  async clearSecret(key: string, by: string): Promise<void> {
+    if (BY_KEY.get(key)?.type !== 'secret') throw new Error(`${key} is not a secret setting`);
+    const old = this.values[key] as string;
+    if (old !== '') await this.update([{ key, oldValue: old, newValue: '' }], by);
   }
   async audit(limit: number): Promise<AuditRow[]> { return this.rows.slice(0, limit); }
   async batchCode(): Promise<BatchCodeInfo> { return { highestUsed: this.highestUsed, next: (this.highestUsed ?? 0) + 1 }; }
