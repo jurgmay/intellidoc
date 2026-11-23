@@ -9,6 +9,7 @@ import { Repricer } from '../../src/mssql/reprice.js';
 import { ingest } from '../../src/ingest.js';
 import { loadAlertSettings, parseRecipients } from '../../src/mssql/alertSettings.js';
 import { loadRunSheetInputs } from '../../src/runsheet/query.js';
+import { loadJobEmailSummary } from '../../src/runsheet/email.js';
 import { buildXml, FakePdf, type PackSpec } from '../helpers.js';
 
 /**
@@ -401,6 +402,14 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     const jobM = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-price-mono'`);
     await priceJob(pool, jobM);
     expect(Number((await mps(jobM))[0]!.production_sell)).toBeCloseTo(0.3, 4);
+
+    // the run sheet e-mail counts the blank the composer adds after an odd pack: a 3 page pack is printed as 4 (3 mono + 1 blank)
+    const odd = buildXml([{ ...person('Olly', 'Price'), pages: 3 }, person('Pia', 'Price')]);
+    await ingest(odd.xml, 'job-price-odd.xml', 'job-price-odd.pdf', { ref, pdf: new FakePdf(odd.pages, '', ['mono', 'mono', 'mono', 'mono', 'mono']), repo });
+    const jobO = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-price-odd'`);
+    const summary = await loadJobEmailSummary(pool, jobO);
+    expect(summary).toMatchObject({ monoPages: 5, blankPages: 1 });
+    expect(summary.batches.reduce((t, x) => t + x.pages, 0)).toBe(6);
 
     // XML first: nothing is priced until the PDF arrives
     const b = buildXml([person('Rae', 'Price')]);
