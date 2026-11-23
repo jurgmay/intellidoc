@@ -1,5 +1,5 @@
 import sql from 'mssql';
-import { composedPages, type ColourMode, type PackPages } from '../costing/colour.js';
+import { composedPages, paddingPages, type ColourMode, type PackPages } from '../costing/colour.js';
 import type { Mailer } from '../mail.js';
 import { buildRunSheet } from './data.js';
 import { loadRunSheetInputs } from './query.js';
@@ -110,7 +110,9 @@ export async function loadJobEmailSummary(pool: sql.ConnectionPool, jobId: numbe
   const per = new Map<number, PackPages>();
   let packs = 0, sheets = 0;
   for (const m of mps) {
-    const p = composedPages(m.colour_mode as ColourMode, m.packs_json ? (JSON.parse(m.packs_json) as PackPages[]) : []);
+    const packPages = m.packs_json ? (JSON.parse(m.packs_json) as PackPages[]) : [];
+    const p = composedPages(m.colour_mode as ColourMode, packPages);
+    p.blank += paddingPages(packPages);   // the blank the composer adds after an odd pack is printed too
     const t = per.get(Number(m.batch_code)) ?? { colour: 0, mono: 0, blank: 0 };
     t.colour += p.colour; t.mono += p.mono; t.blank += p.blank; per.set(Number(m.batch_code), t);
     packs += m.pack_count; sheets += m.sheet_count;
