@@ -1,14 +1,16 @@
 /** The checks behind the test buttons on Settings > Connectivity. They use the values on screen, saved or not. */
 import { SmtpMailer, type SmtpSettings } from '../../../ingest/src/mail.js';
 import { parseEmails, type SettingValue } from './catalogue.js';
+import type { HpodConfig } from '../../../ingest/src/hpod/client.js';
+import { testHpodSignIn } from '../hpod/service.js';
 
 export interface TestResult { ok: boolean; message: string }
 
 export interface Connectivity {
   /** Sends a test e-mail to these addresses through this server. Never throws: a failure is the result. */
   sendTestEmail(smtp: SmtpSettings, to: string[]): Promise<TestResult>;
-  /** Checks that the web address answers. Never throws. */
-  checkEndpoint(url: string): Promise<TestResult>;
+  /** Signs in to H-POD with POST /authenticate and these details (`missing` lists the empty ones). Never throws. */
+  testHpod(config: HpodConfig, missing: string[]): Promise<TestResult>;
 }
 
 /** `"Name" <address>`, or just the address when there is no name. Quotes and backslashes are dropped from the name. */
@@ -43,23 +45,4 @@ export async function sendTestEmail(smtp: SmtpSettings, to: string[], mailer: { 
   }
 }
 
-/**
- * Asks the web address for its home page. Any answer below 500 means the address, the network path and TLS work (a 401 or 403 is expected from
- * an API that wants a sign-in). It does not sign in: the credentials are not tested.
- */
-export async function checkEndpoint(url: string, fetchFn: typeof fetch = fetch, timeoutMs = 10_000): Promise<TestResult> {
-  const started = Date.now();
-  try {
-    const res = await fetchFn(url, { method: 'GET', redirect: 'manual', signal: AbortSignal.timeout(timeoutMs), headers: { 'User-Agent': 'IntelliDoc connectivity check' } });
-    const ms = Date.now() - started;
-    if (res.status >= 500) return { ok: false, message: `${url} answered, but with a server error (HTTP ${res.status}, ${ms} ms).` };
-    return { ok: true, message: `Reached ${url} (HTTP ${res.status}, ${ms} ms). This checks the address and network only: the sign-in details were not tested.` };
-  } catch (e) {
-    const err = e as Error & { cause?: { code?: string; message?: string } };
-    if (err.name === 'TimeoutError' || err.name === 'AbortError') return { ok: false, message: `${url} did not answer within ${Math.round(timeoutMs / 1000)} seconds.` };
-    const why = err.cause?.code ?? err.cause?.message ?? err.message;
-    return { ok: false, message: clip(`Could not reach ${url}: ${why}`) };
-  }
-}
-
-export const realConnectivity: Connectivity = { sendTestEmail: (smtp, to) => sendTestEmail(smtp, to), checkEndpoint: (url) => checkEndpoint(url) };
+export const realConnectivity: Connectivity = { sendTestEmail: (smtp, to) => sendTestEmail(smtp, to), testHpod: (config, missing) => testHpodSignIn(config, missing) };

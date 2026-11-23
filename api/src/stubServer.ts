@@ -10,6 +10,8 @@ import { MemoryPostalStore } from './postal/memoryStore.js';
 import { MemoryReferenceStore } from './reference/memoryStore.js';
 import { MemoryCustomerStore } from './customers/memoryStore.js';
 import { MemorySettingsStore } from './settings/store.js';
+import { HpodSessions } from './hpod/service.js';
+import { fakeHpodFetch } from './stubHpod.js';
 
 /** The API with in-memory data and no database, for working on the web app. */
 const store = new MemorySettingsStore();
@@ -17,6 +19,7 @@ store.rows = [
   { id: 2, changedAt: '2026-11-20T16:42:00.000Z', changedBy: 'system', setting: 'Alert if the PDF has not arrived after', oldValue: '30', newValue: '45' },
   { id: 1, changedAt: '2026-11-19T09:10:00.000Z', changedBy: 'system', setting: 'Machine enclosing: maximum sheets per letter', oldValue: '16', newValue: '12' },
 ];
+await store.update(Object.entries({ hpodEndpoint: 'https://api-uk.h-pod.co.uk', hpodInstance: 'uk', hpodAccountCode: 'latcham', hpodUsername: 'demo@latcham.example', hpodPassword: 'demo' }).map(([key, newValue]) => ({ key, oldValue: '', newValue })), 'system');
 const customers = new MemoryCustomerStore();
 const acme = customers.seed({ code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', pendingJobNumber: '24601', pendingFrom: '2026-12-01', returnAddress: 'PO Box 12, Leeds LS1 1AA', batchingKey: 'Department', packSequenceKey: 'Doc Type',
   flags: { isAddressMatching: true, isArchiveMailpieces: false, isCreateOutputFiles: true, isSso: false, isSameDayService: false, isUseMrdf: false, isTesting: false, isDeleted: false },
@@ -115,6 +118,6 @@ inbox.items = [
 ];
 const composer = new MemoryJobComposer();
 composer.result = [{ batchCode: 7031, files: ['7031_1.pdf'], mrdfFile: null, skipped: null }, { batchCode: 7032, files: ['7032_1.pdf'], mrdfFile: null, skipped: null }];
-const app = await buildApp({ settings: store, customers, costing, postal, reference: new MemoryReferenceStore(), reprice, recipients, reports, jobs: { store: jobs, composer }, activity: { store: activityStore, inbox }, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
+const app = await buildApp({ settings: store, hpod: new HpodSessions(store, { fetch: fakeHpodFetch() }), customers, costing, postal, reference: new MemoryReferenceStore(), reprice, recipients, reports, jobs: { store: jobs, composer }, activity: { store: activityStore, inbox }, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
 await app.listen({ port: Number(process.env['API_PORT'] ?? 3001), host: '127.0.0.1' });
 console.log('Stub API (no database) on http://127.0.0.1:3001');
