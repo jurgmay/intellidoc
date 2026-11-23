@@ -1,9 +1,9 @@
-import { Badge, Grid, Group, NumberInput, Select, Stack, Switch, Text, TextInput } from '@mantine/core';
+import { Badge, Button, Grid, Group, NumberInput, PasswordInput, Select, Stack, Switch, Text, TextInput } from '@mantine/core';
 import type { SettingValue, SettingView } from '../api/settings';
 
-interface Props { setting: SettingView; value: SettingValue; changed: boolean; error?: string; onChange: (v: SettingValue) => void }
+interface Props { setting: SettingView; value: SettingValue; changed: boolean; error?: string; onChange: (v: SettingValue) => void; /** For a secret that is saved: removes it. */ onRemoveSecret?: () => void }
 
-export function SettingRow({ setting: s, value, changed, error, onChange }: Props) {
+export function SettingRow({ setting: s, value, changed, error, onChange, onRemoveSecret }: Props) {
   const label = (
     <Group gap="xs">
       <span>{s.label}</span>
@@ -28,6 +28,18 @@ export function SettingRow({ setting: s, value, changed, error, onChange }: Prop
       break;
     case 'select':
       control = <Select label={label} data={s.options ?? []} value={value as string} onChange={(v) => v && onChange(v)} allowDeselect={false} error={error} />;
+      break;
+    case 'text':
+      control = <TextInput label={label} value={value as string} onChange={(e) => onChange(e.currentTarget.value)} error={error} autoComplete="off" />;
+      break;
+    case 'secret':
+      control = (
+        <Stack gap={6}>
+          <PasswordInput label={label} value={value as string} onChange={(e) => onChange(e.currentTarget.value)} error={error} autoComplete="new-password"
+            placeholder={s.isSet ? 'A password is saved. Type a new one to replace it.' : undefined} />
+          {s.isSet && onRemoveSecret && <Button variant="subtle" color="red" size="compact-sm" w="fit-content" onClick={onRemoveSecret}>Remove saved password</Button>}
+        </Stack>
+      );
       break;
     case 'emails':
       control = <TextInput label={label} value={value as string} onChange={(e) => onChange(e.currentTarget.value)} placeholder="name@latcham.co.uk, name2@latcham.co.uk" error={error} />;

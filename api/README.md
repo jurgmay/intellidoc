@@ -22,8 +22,11 @@ when a change takes effect. The Settings page is generated from that list, so th
 | `GET /api/settings` | all settings with explanations and values, and the batch code |
 | `PUT /api/settings` | `{ "values": { key: value } }`; validated; 422 with a message per setting; one change-log row per changed value |
 | `POST /api/settings/marks-preview` | `{ "page": "window" \| "mrdf", "values": { key: value } }`: a PNG of the page with the control marks and envelope window drawn from the saved settings overlaid with `values` (nothing is saved). 422 for a value that could not be saved, 503 if the picture cannot be drawn (Ghostscript missing) |
+| `DELETE /api/settings/:key/secret` | removes a saved password (the only way; an empty value in `PUT` is refused). The change log says `(set)` / `(not set)`, never the value |
 | `GET /api/settings/audit?limit=50` | the change log |
 | `PUT /api/settings/batch-code` | `{ "next": 5000 }`; only upwards, never onto a number already used |
+
+**Settings > Network** holds folder paths and one password. Nothing reads them yet. The password (`networkPassword`) is a *secret* setting: it is encrypted with AES-256-GCM before it reaches the database (`src/settings/secret.ts`), `GET /api/settings` never returns it (its `value` is empty and `isSet` says whether one is saved), and the change log never records it. The key comes from `INTELLIDOC_SECRET_KEY` in the API's `.env` (any passphrase of 16+ characters). Without it saving a password is refused with a message saying so (paths still save). If the key is lost or changed the saved password cannot be read: type it again. Server code that needs the password calls `store.secret('networkPassword')`; it is never sent to a browser. `settings:export` copies the encrypted text into `db/local_settings.sql`, which only works with the same key.
 
 ### Customers
 

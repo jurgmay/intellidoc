@@ -3,7 +3,7 @@
  * The web page is generated from this list, so the explanation shown next to a setting is the one that lives next to the code.
  */
 export type SettingValue = number | boolean | string;
-export type SettingType = 'number' | 'integer' | 'boolean' | 'select' | 'emails';
+export type SettingType = 'number' | 'integer' | 'boolean' | 'select' | 'emails' | 'text' | 'secret';
 
 export interface SettingDef {
   key: string;
@@ -24,7 +24,7 @@ export interface SettingDef {
   appliesTo: string;
 }
 
-export const GROUPS = ['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'Page size', 'Envelope window', 'Sequence number', 'Data Matrix', 'Pack start dot', 'MRDF page codes'] as const;
+export const GROUPS = ['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'Page size', 'Envelope window', 'Sequence number', 'Data Matrix', 'Pack start dot', 'MRDF page codes', 'Network access', 'Workflow server', 'IntelliDoc folders', 'Bluecrest File-Based folders', 'Postal docketing'] as const;
 
 export const SETTINGS: SettingDef[] = [
   {
@@ -279,16 +279,121 @@ export const SETTINGS: SettingDef[] = [
     usedBy: 'Print file composition: the MRDF codes printed on the front of every sheet for customers that use MRDF, read by the Bluecrest inserter.',
     appliesTo: 'Next print file composed. Files already made are not changed.',
   },
+  {
+    key: 'networkUsername', column: 'network_username', group: 'Network access', label: 'Username', type: 'text',
+    description: 'The account the app signs in to the network shares with.',
+    usedBy: 'Nothing reads it yet: it is kept here so the watcher and the app can take it from one place.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'networkPassword', column: 'network_password', group: 'Network access', label: 'Password', type: 'secret',
+    description: 'The password for the username above. It is stored encrypted and is never shown again: type a new one to replace it, or use Remove to clear it.',
+    usedBy: 'Nothing reads it yet. When something does, it reads it on the server; it is never sent to a browser.',
+    appliesTo: 'Saved immediately. Needs INTELLIDOC_SECRET_KEY in the API\'s .env file.',
+  },
+  {
+    key: 'workflowNetworkPath', column: 'workflow_network_path', group: 'Workflow server', label: 'Network path', type: 'text',
+    description: 'Network path of the workflow server, e.g. \\\\server.',
+    usedBy: 'Nothing reads it yet: it is kept here so the watcher and the app can take it from one place.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'workflowSharedFolder', column: 'workflow_shared_folder', group: 'Workflow server', label: 'Shared folder', type: 'text',
+    description: 'The shared folder on the workflow server.',
+    usedBy: 'Nothing reads it yet: it is kept here so the watcher and the app can take it from one place.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'folderIn', column: 'folder_in', group: 'IntelliDoc folders', label: '\'In\' folder', type: 'text',
+    description: 'Folder the customers\' files arrive in (XML and PDF).',
+    usedBy: 'Nothing reads it yet: it is kept here so the watcher and the app can take it from one place.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'folderOut', column: 'folder_out', group: 'IntelliDoc folders', label: '\'Out\' folder', type: 'text',
+    description: 'Folder the app writes finished output to.',
+    usedBy: 'Nothing reads it yet: it is kept here so the watcher and the app can take it from one place.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'folderHold', column: 'folder_hold', group: 'IntelliDoc folders', label: '\'Hold\' folder', type: 'text',
+    description: 'Folder files are put in when they are held back.',
+    usedBy: 'Nothing reads it yet: it is kept here so the watcher and the app can take it from one place.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'folderPrintFiles', column: 'folder_print_files', group: 'IntelliDoc folders', label: 'Print files folder', type: 'text',
+    description: 'Folder the composed print PDFs are written to.',
+    usedBy: 'Nothing reads it yet: it is kept here so the watcher and the app can take it from one place.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'folderProcessed', column: 'folder_processed', group: 'IntelliDoc folders', label: 'Processed files folder', type: 'text',
+    description: 'Folder files are moved to once they have been processed.',
+    usedBy: 'Nothing reads it yet: it is kept here so the watcher and the app can take it from one place.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'bluecrestNetworkPath', column: 'bluecrest_network_path', group: 'Bluecrest File-Based folders', label: 'Network path', type: 'text',
+    description: 'Network path of the Bluecrest file-based system.',
+    usedBy: 'Nothing reads it yet: it is kept here so the watcher and the app can take it from one place.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'bluecrestInputFolder', column: 'bluecrest_input_folder', group: 'Bluecrest File-Based folders', label: '\'Input\' folder', type: 'text',
+    description: 'The Bluecrest \'Input\' folder.',
+    usedBy: 'Nothing reads it yet: it is kept here so the watcher and the app can take it from one place.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'bluecrestOutputFolder', column: 'bluecrest_output_folder', group: 'Bluecrest File-Based folders', label: '\'Output\' folder', type: 'text',
+    description: 'The Bluecrest \'Output\' folder.',
+    usedBy: 'Nothing reads it yet: it is kept here so the watcher and the app can take it from one place.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'bluecrestLockFolder', column: 'bluecrest_lock_folder', group: 'Bluecrest File-Based folders', label: '\'Lock\' folder', type: 'text',
+    description: 'The Bluecrest \'Lock\' folder.',
+    usedBy: 'Nothing reads it yet: it is kept here so the watcher and the app can take it from one place.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'bluecrestSelectFolder', column: 'bluecrest_select_folder', group: 'Bluecrest File-Based folders', label: '\'Select\' folder', type: 'text',
+    description: 'The Bluecrest \'Select\' folder.',
+    usedBy: 'Nothing reads it yet: it is kept here so the watcher and the app can take it from one place.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'bluecrestArchiveName', column: 'bluecrest_archive_name', group: 'Bluecrest File-Based folders', label: 'Archive name', type: 'text',
+    description: 'Name of the Bluecrest archive.',
+    usedBy: 'Nothing reads it yet: it is kept here so the watcher and the app can take it from one place.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'docketsFolder', column: 'dockets_folder', group: 'Postal docketing', label: 'Postal dockets folder', type: 'text',
+    description: 'Folder the postal dockets are kept in.',
+    usedBy: 'Nothing reads it yet: it is kept here so the watcher and the app can take it from one place.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
+  {
+    key: 'docketsSignedForFolder', column: 'dockets_signed_for_folder', group: 'Postal docketing', label: '\'Signed for\' data folder', type: 'text',
+    description: 'Folder the \'Signed for\' data is kept in.',
+    usedBy: 'Nothing reads it yet: it is kept here so the watcher and the app can take it from one place.',
+    appliesTo: 'Saved immediately. Nothing changes until a part of the app starts reading it.',
+  },
 ];
 
 /** Groups whose settings are labelled without the group's name (the heading says it): Width under Page size, Left under Envelope window, Left under Sequence number, Left under Data Matrix. */
-const NAMED_BY_GROUP = new Set<string>(['Page size', 'Envelope window', 'Sequence number', 'Data Matrix', 'Pack start dot']);
+const NAMED_BY_GROUP = new Set<string>(['Network access', 'Workflow server', 'Bluecrest File-Based folders', 'Page size', 'Envelope window', 'Sequence number', 'Data Matrix', 'Pack start dot']);
 /** The setting's full name, for messages and the change log, where the heading is not there to say which "Left" it is: "Sequence number: left". */
 export function nameOf(def: SettingDef): string {
   return NAMED_BY_GROUP.has(def.group) ? `${def.group}: ${def.label.charAt(0).toLowerCase()}${def.label.slice(1)}` : def.label;
 }
 
 export const BY_KEY = new Map(SETTINGS.map((s) => [s.key, s]));
+
+/** Longest folder path or name, and longest password. */
+const MAX_TEXT = 500, MAX_SECRET = 200;
 
 const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 
@@ -313,6 +418,18 @@ export function validate(def: SettingDef, raw: unknown, options?: string[]): { v
     case 'select':
       if (typeof raw !== 'string') return { error: `${nameOf(def)} must be one of the listed values` };
       return !options || options.includes(raw) ? { value: raw } : { error: `${nameOf(def)} must be one of: ${options.join(', ')}` };
+    case 'text': {
+      if (typeof raw !== 'string') return { error: `${nameOf(def)} must be text` };
+      const t = raw.trim();
+      if (t.length > MAX_TEXT) return { error: `${nameOf(def)} must be at most ${MAX_TEXT} characters` };
+      if (/[\u0000-\u001f]/.test(t)) return { error: `${nameOf(def)} cannot contain line breaks or control characters` };
+      return { value: t };
+    }
+    case 'secret': {
+      if (typeof raw !== 'string' || raw === '') return { error: `${nameOf(def)} must be text (use Remove to clear it)` };
+      if (raw.length > MAX_SECRET) return { error: `${nameOf(def)} must be at most ${MAX_SECRET} characters` };
+      return { value: raw };
+    }
     case 'emails': {
       if (typeof raw !== 'string') return { error: `${nameOf(def)} must be text` };
       const list = parseEmails(raw);
