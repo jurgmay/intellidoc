@@ -33,8 +33,9 @@ export async function loadRunSheetInputs(pool: sql.ConnectionPool, jobId: number
 
   const out: RunSheetInput[] = [];
   for (const [idx, b] of batches.entries()) {
-    const mps = (await pool.request().input('b', sql.BigInt, b.batch_id).query<{ page_count: number; max_weight_g: number | null }>(`
-      SELECT m.page_count, r.max_weight_g
+    const mps = (await pool.request().input('b', sql.BigInt, b.batch_id).query<{ page_count: number; padding: number; max_weight_g: number | null }>(`
+      SELECT m.page_count, r.max_weight_g,
+             (SELECT COUNT(*) FROM idoc.pack AS k WHERE k.mailpiece_id = m.mailpiece_id AND k.page_count % 2 = 1) AS padding
       FROM idoc.mailpiece AS m LEFT JOIN idoc.postal_rate AS r ON r.postal_rate_id = m.postal_rate_id
       WHERE m.batch_id = @b AND m.is_cancelled = 0`)).recordset;
     const inserts = (await pool.request().input('b', sql.BigInt, b.batch_id).query<{ stock_code: string | null; description: string; quantity: number }>(`
@@ -50,7 +51,7 @@ export async function loadRunSheetInputs(pool: sql.ConnectionPool, jobId: number
       isDuplex: Boolean(b.is_duplex),
       colour: b.colour ?? '',
       mailpieces: mps.length,
-      pages: mps.reduce((n, m) => n + m.page_count, 0),
+      pages: mps.reduce((n, m) => n + m.page_count + m.padding, 0),   // with the blank the composer adds after an odd pack
       department: b.department,
       envelopeCode: b.envelope_code ?? '',
       envelopeDescription: b.envelope_description,

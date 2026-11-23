@@ -410,6 +410,8 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     const summary = await loadJobEmailSummary(pool, jobO);
     expect(summary).toMatchObject({ monoPages: 5, blankPages: 1 });
     expect(summary.batches.reduce((t, x) => t + x.pages, 0)).toBe(6);
+    // and the run sheet PDF shows the same total
+    expect((await loadRunSheetInputs(pool, jobO)).reduce((t, i) => t + i.pages, 0)).toBe(6);
 
     // XML first: nothing is priced until the PDF arrives
     const b = buildXml([person('Rae', 'Price')]);
