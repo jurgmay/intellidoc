@@ -24,13 +24,13 @@ describe('buildLines', () => {
       recent: [act(5, { state: 'Failed', detail: 'Bad XML', label: 'bad.xml' })],
     });
     const l = buildLines(d, NOW);
-    expect(l.map((x) => `${x.stage}:${x.name}`)).toEqual(['Making print files:Job 7: j7.pdf', 'Processing:a.xml', 'Waiting:small.xml', 'Waiting:big.xml', 'Awaiting PDF:j2.pdf',
+    expect(l.map((x) => `${x.stage}:${x.name}`)).toEqual(['Making print files:j7.pdf', 'Processing:a.xml', 'Waiting:small.xml', 'Waiting:big.xml', 'Awaiting PDF:j2.pdf',
       'Failed:bad.xml', 'Failed:j4.pdf', 'Completed:j3.pdf', 'Completed:j1.pdf']);
     expect(l[0]!.progress).toEqual({ done: 120, total: 5000, unit: 'mailpieces' });
     expect(l[2]).toMatchObject({ pdf: 'arrived', bytes: 10 });
     expect(l[3]).toMatchObject({ pdf: 'waiting' });
-    expect(l[7]!.detail).toMatch(/ready; print files not made yet/);
-    expect(l[8]!.detail).toMatch(/print files made/);
+    expect(l[7]!.detail).toMatch(/^Ready; print files not made yet for:/);
+    expect(l[8]!.detail).toMatch(/^Print files made for:/);
   });
   it('does not list a file twice while it is being imported, and drops old failures', () => {
     const d = data({ running: [act(1, { state: 'Running', label: 'a.xml' })], inbox: [{ stem: 'a', xmlName: 'a.xml', xmlBytes: 1, pdfName: 'a.pdf', pdfBytes: 1, modifiedAt: '2026-11-22T21:00:00.000Z' }],
@@ -58,7 +58,7 @@ describe('times', () => {
     const job1 = l.find((x) => x.name === 'done.pdf')!;
     expect(job1).toMatchObject({ start: '2026-11-22T21:00:00.000Z', end: '2026-11-22T21:02:40.000Z' });
     expect(durationText(job1, NOW)).toBe('2m 40s');
-    const print = l.find((x) => x.name === 'Job 1: done.pdf')!;
+    const print = l.find((x) => x.detail?.startsWith('Print files:'))!;
     expect(print).toMatchObject({ stage: 'Completed' }); expect(durationText(print, NOW)).toBe('30s');
   });
   it('shows Start time, End time and Duration columns instead of Time', async () => {
@@ -80,6 +80,31 @@ describe('automatic print files warning', () => {
     current = data({ autoCompose: true });
     show(); await screen.findByText('Nothing in the inbox and nothing running.');
     expect(screen.queryByText('Print files are not made automatically')).toBeNull();
+  });
+});
+
+describe('accounts and file names', () => {
+  it('shows the account where it is known, and puts the status before the file name without job numbers', () => {
+    const l = buildLines(data({
+      running: [act(9, { kind: 'Print files', state: 'Running', label: 'Job 3: j3.pdf', jobId: 3, detail: 'Batch 70 (1 of 4): file 2 of 3 built', done: 1, total: 9 })],
+      inbox: [{ stem: 'new', xmlName: 'new.xml', xmlBytes: 1, pdfName: null, pdfBytes: null, modifiedAt: '2026-11-22T21:00:00.000Z' }],
+      jobs: [job(1, { customerName: 'Uinsure' }), job(2, { status: 'Awaiting PDF', composedBatchCount: 0, customerName: 'Zurich' }), job(3, { customerName: 'Acme', composedBatchCount: 0 }), job(5, { composedBatchCount: 1, customerName: 'Aviva' })],
+    }), NOW);
+    const by = (n: string) => l.find((x) => x.name === n)!;
+    expect(by('j3.pdf')).toMatchObject({ stage: 'Making print files', account: 'Acme' });
+    expect(by('new.xml').account).toBeNull();
+    expect(by('j2.pdf')).toMatchObject({ account: 'Zurich', detail: 'XML imported; waiting for the PDF for:' });
+    expect(by('j1.pdf')).toMatchObject({ account: 'Uinsure', detail: 'Print files made for:' });
+    expect(by('j5.pdf').detail).toBe('Print files made for 1 of 2 batches of:');
+    expect(l.map((x) => x.detail).join('|')).not.toMatch(/Job \d|Acme|Zurich|Uinsure/);
+  });
+  it('shows the account column, with the file name under the status in the Progress column', async () => {
+    current = data({ jobs: [job(1, { customerName: 'Uinsure', pdfFileName: 'statements.pdf' })] });
+    show();
+    await screen.findByText('statements.pdf');
+    const row = screen.getAllByRole('row').find((r) => within(r).queryByText('statements.pdf'))!;
+    expect(within(row).getByText('Uinsure')).toBeInTheDocument();
+    expect(within(row).getByText('Print files made for:')).toBeInTheDocument();
   });
 });
 
@@ -116,7 +141,7 @@ describe('ActivityPage while loading', () => {
     let release!: () => void;
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>((resolve) => { release = () => resolve(new Response(JSON.stringify(data()), { status: 200 })); })));
     show(1000);
-    expect(screen.getByRole('columnheader', { name: 'File' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Account' })).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent('Loading…');
     expect(screen.queryByText('Nothing in the inbox and nothing running.')).toBeNull();
     release();
