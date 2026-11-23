@@ -56,7 +56,7 @@ How it works: the watcher and the composer write what they are doing to `idoc.ac
 
 ## What it does
 
-* One PDF per batch, named as the run sheet's *File name* row says, as FileMaker did: `<job no> - IntelliDoc - <customer> - <batch code> - Batch <n> of <m>.pdf`. A batch that needs several files has ` - Segment <x> of <y>` before the `.pdf`. (Print files made before this change keep their old `<batchCode>_<segment>.pdf` names until they are made again; the old files are removed then.) A file is closed after the mailpiece that takes it past **Most pages in one print file** (Settings, default 10 000; the run sheet and padding count), so a file can run over by one mailpiece. The rest of the batch continues in the next file.
+* One PDF per batch, named as the run sheet's *File name* row says, as FileMaker did: `<job no> - IntelliDoc - <customer> - <batch code> - Batch <n> of <m>.pdf`. A batch that needs several files has ` - Segment <x> of <y>` before the `.pdf`. (Print files made before this change keep their old `<batchCode>_<segment>.pdf` names until they are made again; the old files are removed then.) A file is closed after the mailpiece that takes it past **Maximum pages in one print file** (Settings, default 10 000; the run sheet and padding count), so a file can run over by one mailpiece. The rest of the batch continues in the next file.
 * Segment 1 starts with the batch's run sheet, plus a blank page when the run sheet has an odd number of pages.
 * Mailpieces are in **sequence order**. Sequence numbers (`mailpiece.sequence_number`, 1..n per batch) are given the first time a batch is composed: lightest weight band first, then source PDF order; mailpieces with an unknown band go last. They are never renumbered; a mailpiece added later gets the next number. Cancelled mailpieces are left out and get none.
 * Packs in a mailpiece: with address matching, by document sequence; otherwise by submitting account, release date, then source order.
@@ -105,7 +105,7 @@ Things to know:
 
 ## Settings
 
-The Settings page has two groups, **Print file marks** and **MRDF page codes**. **Print file marks** (box positions, font size, dot, most pages per file). FileMaker kept these in its Settings table, which was not in the DDR, so **the starting values are placeholders** (except the dot, which FileMaker fixed in the script). Check them against a printed proof and correct them there.
+The Settings page has two groups, **Print file marks** and **MRDF page codes**. **Print file marks** (box positions, font size, dot, maximum pages per file). FileMaker kept these in its Settings table, which was not in the DDR, so **the starting values are placeholders** (except the dot, which FileMaker fixed in the script). Check them against a printed proof and correct them there.
 
 ## Not built, and differences from FileMaker
 

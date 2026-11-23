@@ -15,7 +15,7 @@ import { MemorySettingsStore } from './settings/store.js';
 const store = new MemorySettingsStore();
 store.rows = [
   { id: 2, changedAt: '2026-11-20T16:42:00.000Z', changedBy: 'system', setting: 'Alert if the PDF has not arrived after', oldValue: '30', newValue: '45' },
-  { id: 1, changedAt: '2026-11-19T09:10:00.000Z', changedBy: 'system', setting: 'Machine enclosing: most sheets per letter', oldValue: '16', newValue: '12' },
+  { id: 1, changedAt: '2026-11-19T09:10:00.000Z', changedBy: 'system', setting: 'Machine enclosing: maximum sheets per letter', oldValue: '16', newValue: '12' },
 ];
 const customers = new MemoryCustomerStore();
 const acme = customers.seed({ code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', pendingJobNumber: '24601', pendingFrom: '2026-12-01', returnAddress: 'PO Box 12, Leeds LS1 1AA', batchingKey: 'Department', packSequenceKey: 'Doc Type',

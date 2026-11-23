@@ -44,7 +44,7 @@ export const SETTINGS: SettingDef[] = [
     appliesTo: 'Next file imported.',
   },
   {
-    key: 'machineEnclosingMaxSheets', column: 'machine_enclosing_max_sheets', group: 'Enclosing', label: 'Machine enclosing: most sheets per letter', type: 'integer', unit: 'sheets', min: 1, max: 500,
+    key: 'machineEnclosingMaxSheets', column: 'machine_enclosing_max_sheets', group: 'Enclosing', label: 'Machine enclosing: maximum sheets per letter', type: 'integer', unit: 'sheets', min: 1, max: 500,
     description: 'The machine can enclose letters of up to this many sheets. Longer letters are enclosed by hand whatever the batch size.',
     usedBy: 'Import: a mailpiece with more sheets than this can never be in a machine batch.',
     appliesTo: 'Next file imported.',
@@ -56,7 +56,7 @@ export const SETTINGS: SettingDef[] = [
     appliesTo: 'Next file imported.',
   },
   {
-    key: 'handEnclosingMaxSheets', column: 'hand_enclosing_max_sheets', group: 'Enclosing', label: 'Hand enclosing: most sheets per letter', type: 'integer', unit: 'sheets', min: 1, max: 5000,
+    key: 'handEnclosingMaxSheets', column: 'hand_enclosing_max_sheets', group: 'Enclosing', label: 'Hand enclosing: maximum sheets per letter', type: 'integer', unit: 'sheets', min: 1, max: 5000,
     description: 'Letters with more sheets than this go to Reception instead of the enclosing departments.',
     usedBy: 'Import: sets the Reception route; Reception batches never merge with other work.',
     appliesTo: 'Next file imported.',
@@ -104,7 +104,7 @@ export const SETTINGS: SettingDef[] = [
     appliesTo: 'The watcher re-reads this every minute; no restart needed. Print files already made are not changed.',
   },
   {
-    key: 'maxPagesPerPdf', column: 'max_pages_per_pdf', group: 'Print file marks', label: 'Most pages in one print file', type: 'integer', unit: 'pages', min: 2, max: 1000000,
+    key: 'maxPagesPerPdf', column: 'max_pages_per_pdf', group: 'Print file marks', label: 'Maximum pages in one print file', type: 'integer', unit: 'pages', min: 2, max: 1000000,
     description: 'A batch is printed from one PDF. When a file passes this many pages it is closed after the mailpiece that took it over, and the batch continues in a new file, so a file can run over by up to one mailpiece. The run sheet and blank padding pages count.',
     usedBy: 'Print file composition: where a batch is split into files.',
     appliesTo: 'Next print file composed.',
