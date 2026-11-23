@@ -67,8 +67,8 @@ export function ActivityPage({ refreshMs = 3000 }: { refreshMs?: number }) {
                   <Table.Td miw={260}>
                     {l.progress && <Progress value={l.progress.total ? (l.progress.done / l.progress.total) * 100 : 0} mb={4} animated aria-label={`${l.progress.done} of ${l.progress.total} ${l.progress.unit}`} />}
                     {!l.progress && (l.stage === 'Processing' || l.stage === 'Making print files') && !l.stalled && <Progress value={100} animated mb={4} />}
-                    <Text size="xs" c={l.stalled || l.stage === 'Failed' ? 'red' : 'dimmed'}>{l.detail}</Text>
-                    <Text size="sm" style={{ overflowWrap: 'anywhere' }}>{l.name}</Text>
+                    <Text size="sm" c={l.stalled || l.stage === 'Failed' ? 'red' : undefined}>{l.detail}</Text>
+                    <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{l.name}</Text>
                   </Table.Td>
                   <Table.Td style={{ whiteSpace: 'nowrap' }}>{clock(l.start)}</Table.Td>
                   <Table.Td style={{ whiteSpace: 'nowrap' }}>{clock(l.end)}</Table.Td>
