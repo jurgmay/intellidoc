@@ -25,11 +25,17 @@ It reads the customer's PDF from the watcher's `processed` folder, so a job is c
 
 **Activity** in the web app is a live list (it refreshes every 3 seconds), in the order the work happens:
 
-1. **Making print files** and **Processing**: what the watcher or the API is doing now. Print files show a bar (batches done of batches to do) and the step ("Batch 81899 (2 of 5): file 3 of 13 built"); an import or PDF check shows how long it has been running.
+1. **Making print files** and **Processing**: what the watcher or the API is doing now. Print files show a bar counting **mailpieces** (so a batch of thousands takes as much of the bar as it should, and the bar keeps moving while a big batch is built) and the step ("1 of 5 batches. Batch 81899 (2 of 5): file 3 of 13 built"); an import or PDF check shows how long it has been running.
 2. **Waiting**: the XML files in the watcher's `inbox`, in the order the watcher takes them (smallest XML first), each with **PDF: Arrived / Not yet**. A PDF with no XML shows as waiting for its XML.
 3. **Awaiting PDF**: jobs whose XML is imported but whose PDF has not arrived (XML-first).
 4. **Failed**: imports and PDF checks that failed in the last 6 hours, and jobs whose PDF was rejected, with the reason.
 5. **Completed**: the newest jobs, newest first, with whether their print files are made.
+
+**Times.** Each line has **Start time**, **End time** and **Duration**. Running work has a start and a running duration (with "about N left" when it can be estimated); waiting files show how long they have been waiting; finished work shows both times and how long it took. A finished job's times are those of its import and PDF check (matched by file name); making its print files is listed as its own Completed line with its own times.
+
+**Making print files, step by step.** Within a batch the bar moves as the PDF's colour is checked (first 20%), colour pages are converted to grey (to 30%, one step that cannot show progress), and the files are built (in proportion to each file's mailpieces, adding the marks about every 200 ms); the batch's last 10% is writing the files, saving to the database and writing the MRDF file, each shown in the text. When every batch is made and "E-mail run sheets" is on, the job shows **E-mailing the run sheets** (checking the settings, loading, each run sheet, joining, sending) with the bar full, before it is marked Done. This was the pause after the last batch: the run sheets were drawn a second time for the e-mail. They are now reused from the ones drawn for the batches.
+
+**Warning.** If "Make print files automatically" (Settings, Print file marks) is off, a yellow warning at the top says jobs wait for **Make print files** on the Jobs screen, with a link to Settings.
 
 **PDF check progress.** An import that reads a PDF, and a PDF check, show a bar of pages checked and what they are on ("Checking the colour of page 1,200 of 54,000"): reading the PDF, then counting its pages, then looking at the colour of each page, which is where a big PDF spends its time. The colour check now hands control back about every 200 ms, so the watcher's timers and database updates keep running while a very large PDF is being read (before, they waited until it finished). Opening a very large PDF is still one step that cannot show progress.
 

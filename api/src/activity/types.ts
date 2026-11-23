@@ -36,10 +36,12 @@ export interface InboxReader {
   unavailable(): string | null;
   list(): Promise<InboxItem[]>;
 }
-export interface ActivityDeps { store: ActivityStore; inbox: InboxReader; jobs: { list(q: { search: null; status: null; limit: number }): Promise<JobRow[]> } }
+export interface ActivityDeps { store: ActivityStore; inbox: InboxReader; settings: { read(): Promise<Record<string, unknown>> }; jobs: { list(q: { search: null; status: null; limit: number }): Promise<JobRow[]> } }
 export interface ActivityResponse {
   inbox: InboxItem[]; inboxUnavailable: string | null;
   running: ActivityRow[]; recent: ActivityRow[]; jobs: JobRow[];
   queue: QueueEstimate;
+  /** The "Make print files automatically" setting; when off, nothing makes print files until someone presses the button. */
+  autoCompose: boolean;
 }
 export const STALLED_AFTER_MS = 10 * 60_000;

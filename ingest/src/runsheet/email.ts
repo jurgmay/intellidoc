@@ -127,18 +127,26 @@ export async function loadJobEmailSummary(pool: sql.ConnectionPool, jobId: numbe
 }
 
 /** The run sheets of every batch of a job as one PDF, in batch order (the same pages that start each print file). */
-export async function jobRunSheetsPdf(pool: sql.ConnectionPool, jobId: number, logo?: Uint8Array): Promise<Uint8Array> {
+/** `ready` holds run sheets already drawn (by batch code), which are used as they are; `onStep` hears what is being done. */
+export interface RunSheetReuse { ready?: ReadonlyMap<number, Uint8Array>; onStep?: (detail: string) => void }
+
+export async function jobRunSheetsPdf(pool: sql.ConnectionPool, jobId: number, logo?: Uint8Array, reuse: RunSheetReuse = {}): Promise<Uint8Array> {
+  reuse.onStep?.('loading the run sheet details');
   const inputs = await loadRunSheetInputs(pool, jobId);
   if (!inputs.length) throw new Error(`Job ${jobId} has no batches`);
   const parts: Uint8Array[] = [];
-  for (const i of inputs) parts.push(await renderRunSheet(buildRunSheet(i), logo));
+  for (const [n, i] of inputs.entries()) {
+    reuse.onStep?.(`run sheet ${n + 1} of ${inputs.length}`);
+    parts.push(reuse.ready?.get(Number(i.batchCode)) ?? await renderRunSheet(buildRunSheet(i), logo));
+  }
+  reuse.onStep?.('joining the run sheets');
   return mergePdfs(parts);
 }
 
 /** E-mails the job's run sheets and, when they have gone, stamps the job. Does not look at the on/off setting: the caller decides. */
-export function emailRunSheets(pool: sql.ConnectionPool, jobId: number, mailer: Mailer, logo?: Uint8Array): Promise<RunSheetEmailResult> {
+export function emailRunSheets(pool: sql.ConnectionPool, jobId: number, mailer: Mailer, logo?: Uint8Array, reuse: RunSheetReuse = {}): Promise<RunSheetEmailResult> {
   return sendRunSheetEmail({
-    mailer, summary: () => loadJobEmailSummary(pool, jobId), settings: () => loadEmailSettings(pool), pdf: () => jobRunSheetsPdf(pool, jobId, logo),
+    mailer, summary: () => loadJobEmailSummary(pool, jobId), settings: () => loadEmailSettings(pool), pdf: async () => { const r = await jobRunSheetsPdf(pool, jobId, logo, reuse); reuse.onStep?.('sending the e-mail'); return r; },
     sent: async () => { await pool.request().input('j', sql.BigInt, jobId).query('UPDATE idoc.job SET run_sheets_emailed_at = SYSUTCDATETIME() WHERE job_id = @j'); },
   });
 }

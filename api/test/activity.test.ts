@@ -18,12 +18,12 @@ import { MemoryReportStore } from '../src/reports/memoryStore.js';
 import { MemoryRepriceStore } from '../src/reprice/memoryStore.js';
 import { MemorySettingsStore } from '../src/settings/store.js';
 
-let app: FastifyInstance; let store: MemoryActivityStore; let inbox: MemoryInboxReader; let jobs: MemoryJobStore;
+let app: FastifyInstance; let settings: MemorySettingsStore; let store: MemoryActivityStore; let inbox: MemoryInboxReader; let jobs: MemoryJobStore;
 const row = (id: number, o: Partial<ActivityRow> = {}): ActivityRow => ({ id, kind: 'Import' as const, label: `f${id}.xml`, jobId: null, state: 'Done' as const, detail: 'Imported', done: null, total: null, startedAt: '2026-11-22T21:00:00.000Z', updatedAt: '2026-11-22T21:00:20.000Z', finishedAt: '2026-11-22T21:00:20.000Z', stalled: false, bytes: null, withPdf: false, ...o });
 
 beforeEach(async () => {
   store = new MemoryActivityStore(); inbox = new MemoryInboxReader(); jobs = new MemoryJobStore();
-  app = await buildApp({ settings: new MemorySettingsStore(), customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(),
+  app = await buildApp({ settings: (settings = new MemorySettingsStore()), customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(),
     recipients: new MemoryRecipientStore(), reports: new MemoryReportStore(), reference: new MemoryReferenceStore(), jobs: { store: jobs, composer: new MemoryJobComposer() }, activity: { store, inbox } });
 });
 
@@ -37,6 +37,11 @@ describe('GET /api/activity', () => {
     expect(r.running.map((x: { id: number }) => x.id)).toEqual([2]);
     expect(r.recent.map((x: { id: number }) => x.id)).toEqual([3, 1]);   // newest first, running excluded
     expect(r.jobs).toEqual([]);
+  });
+  it('says whether "Make print files automatically" is on', async () => {
+    expect((await app.inject({ method: 'GET', url: '/api/activity' })).json().autoCompose).toBe(false);
+    settings.values.autoCompose = true;
+    expect((await app.inject({ method: 'GET', url: '/api/activity' })).json().autoCompose).toBe(true);
   });
   it('says why the inbox is missing when WATCH_DIR is not set', async () => {
     inbox.reason = 'WATCH_DIR is not set on the API server';
