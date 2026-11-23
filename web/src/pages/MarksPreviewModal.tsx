@@ -30,7 +30,7 @@ export function MarksPreviewModal({ opened, onClose, values }: Props) {
         <SegmentedControl value={page} onChange={(v) => setPage(v as MarksPreviewPage)} data={[
           { value: 'window', label: 'First page of a mailpiece' }, { value: 'mrdf', label: 'MRDF page codes' }]} />
         <Text size="xs" c="dimmed">
-          Drawn from the values on screen, including changes you have not saved. To check a change, close this window, edit, and open it again. The blue box is the envelope window; the orange dashes are the boxes the marks are fitted in. The grid is every 10 mm from the top left of the page.
+          Drawn from the values on screen, including changes you have not saved. To check a change, close this window, edit, and open it again. The blue box is the envelope window; the orange dashes are the boxes the marks are fitted in (the solid edge of the OCR box is where its text starts, so you can see a 180° turn). The grid is every 10 mm from the top left of the page.
         </Text>
         {error && <Alert color="red" icon={<IconAlertCircle />} title="Could not draw the preview">{error}</Alert>}
         {!error && !url && <Center h={300}><Loader /></Center>}
