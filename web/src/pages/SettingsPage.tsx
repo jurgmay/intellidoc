@@ -52,16 +52,16 @@ export function SettingsPage() {
         <Title order={2}>Settings</Title>
         <Text c="dimmed" size="sm">What each setting does and where the app uses it. Changes are recorded in the change log.</Text>
       </div>
-      <Tabs defaultValue="settings" onChange={(v) => { if (v) setSeen((x) => new Set(x).add(v)); }}>
+      <Tabs defaultValue="general" onChange={(v) => { if (v) setSeen((x) => new Set(x).add(v)); }}>
         <Tabs.List>
-          <Tabs.Tab value="settings">Settings</Tabs.Tab>
+          <Tabs.Tab value="general">General</Tabs.Tab>
           <Tabs.Tab value="postal">Postal rates</Tabs.Tab>
           <Tabs.Tab value="formats">Postal formats</Tabs.Tab>
           <Tabs.Tab value="papers">Paper</Tabs.Tab>
           <Tabs.Tab value="anonymous">Anonymous addressees</Tabs.Tab>
           <Tabs.Tab value="log">Change log</Tabs.Tab>
         </Tabs.List>
-        <Tabs.Panel value="settings" pt="lg">
+        <Tabs.Panel value="general" pt="lg">
           <Stack gap="xl">
             {data.groups.map((g) => (
               <Paper key={g} withBorder p="lg">
