@@ -5,19 +5,19 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActivityData } from '../api/activity';
 import { theme } from '../theme';
-import { ActivityPage, buildLines, duration, elapsed, size } from './ActivityPage';
+import { ActivityPage, buildLines, duration, durationText, elapsed, size } from './ActivityPage';
 
 const job = (id: number, over: object = {}) => ({ id, customerCode: 'ACME', customerName: 'Acme', baseName: `j${id}`, pdfFileName: `j${id}.pdf`, receivedAt: `2026-11-22T10:0${id}:00.000Z`, status: 'Received',
   packCount: 1, pageCount: 2, pdfError: null, batchCount: 2, composedBatchCount: 2, runSheetsEmailedAt: null, ...over });
 const act = (id: number, over: object = {}) => ({ id, kind: 'Import', label: `f${id}.xml`, jobId: null, state: 'Done', detail: 'Imported', done: null, total: null,
   startedAt: '2026-11-22T21:00:00.000Z', updatedAt: '2026-11-22T21:00:20.000Z', finishedAt: '2026-11-22T21:00:20.000Z', stalled: false, ...over });
-const data = (o: { inbox?: unknown[]; inboxUnavailable?: string | null; running?: unknown[]; recent?: unknown[]; jobs?: unknown[]; queue?: unknown } = {}): ActivityData => ({ inbox: [], inboxUnavailable: null, running: [], recent: [], jobs: [], queue: { basedOn: 0, seconds: null, partial: false }, ...o } as ActivityData);
+const data = (o: { inbox?: unknown[]; inboxUnavailable?: string | null; running?: unknown[]; recent?: unknown[]; jobs?: unknown[]; queue?: unknown; autoCompose?: boolean } = {}): ActivityData => ({ inbox: [], inboxUnavailable: null, running: [], recent: [], jobs: [], queue: { basedOn: 0, seconds: null, partial: false }, autoCompose: true, ...o } as ActivityData);
 const NOW = Date.parse('2026-11-22T21:05:00.000Z');
 
 describe('buildLines', () => {
   it('lists running work first, then the inbox in order, jobs awaiting a PDF, failures, and finished jobs newest first at the bottom', () => {
     const d = data({
-      running: [act(9, { kind: 'Print files', state: 'Running', label: 'Job 7: j7.pdf', detail: 'Batch 81899 (2 of 5): file 3 of 13 built', done: 1, total: 5 }), act(10, { state: 'Running', label: 'a.xml', detail: null })],
+      running: [act(9, { kind: 'Print files', state: 'Running', label: 'Job 7: j7.pdf', detail: 'Batch 81899 (2 of 5): file 3 of 13 built', done: 120, total: 5000 }), act(10, { state: 'Running', label: 'a.xml', detail: null })],
       inbox: [{ stem: 'small', xmlName: 'small.xml', xmlBytes: 10, pdfName: 'small.pdf', pdfBytes: 5, modifiedAt: '2026-11-22T21:04:00.000Z' }, { stem: 'big', xmlName: 'big.xml', xmlBytes: 900, pdfName: null, pdfBytes: null, modifiedAt: '2026-11-22T21:04:30.000Z' }],
       jobs: [job(1), job(2, { status: 'Awaiting PDF', composedBatchCount: 0 }), job(3, { composedBatchCount: 0 }), job(4, { status: 'PDF Rejected', pdfError: 'Pack 12 is past the end', composedBatchCount: 0 })],
       recent: [act(5, { state: 'Failed', detail: 'Bad XML', label: 'bad.xml' })],
@@ -25,7 +25,7 @@ describe('buildLines', () => {
     const l = buildLines(d, NOW);
     expect(l.map((x) => `${x.stage}:${x.name}`)).toEqual(['Making print files:Job 7: j7.pdf', 'Processing:a.xml', 'Waiting:small.xml', 'Waiting:big.xml', 'Awaiting PDF:j2.pdf',
       'Failed:bad.xml', 'Failed:j4.pdf', 'Completed:j3.pdf', 'Completed:j1.pdf']);
-    expect(l[0]!.progress).toEqual({ done: 1, total: 5, unit: 'batches' });
+    expect(l[0]!.progress).toEqual({ done: 120, total: 5000, unit: 'mailpieces' });
     expect(l[2]).toMatchObject({ pdf: 'arrived', bytes: 10 });
     expect(l[3]).toMatchObject({ pdf: 'waiting' });
     expect(l[7]!.detail).toMatch(/ready; print files not made yet/);
@@ -39,6 +39,46 @@ describe('buildLines', () => {
   it('flags work that has stopped moving', () => {
     const l = buildLines(data({ running: [act(1, { state: 'Running', stalled: true })] }), NOW);
     expect(l[0]).toMatchObject({ stalled: true }); expect(l[0]!.detail).toMatch(/may have stopped/);
+  });
+});
+
+describe('times', () => {
+  it('gives each line a start, an end and a duration', () => {
+    const l = buildLines(data({
+      running: [act(1, { state: 'Running', label: 'run.xml', startedAt: '2026-11-22T21:03:00.000Z', finishedAt: null, remainingSeconds: 120 })],
+      inbox: [{ stem: 'w', xmlName: 'w.xml', xmlBytes: 1, pdfName: null, pdfBytes: null, modifiedAt: '2026-11-22T21:04:30.000Z' }],
+      jobs: [job(1, { baseName: 'done', pdfFileName: 'done.pdf' })],
+      recent: [act(2, { label: 'done.xml', startedAt: '2026-11-22T21:00:00.000Z', finishedAt: '2026-11-22T21:00:10.000Z' }), act(3, { kind: 'PDF check', label: 'DONE.pdf', startedAt: '2026-11-22T21:00:10.000Z', finishedAt: '2026-11-22T21:02:40.000Z' }),
+        act(4, { kind: 'Print files', label: 'Job 1: done.pdf', startedAt: '2026-11-22T21:01:00.000Z', finishedAt: '2026-11-22T21:01:30.000Z', detail: '2 of 2 batches made' })],
+    }), NOW);
+    expect(durationText(l[0]!, NOW)).toBe('2m 0s, about 2 min left');
+    expect(l[0]).toMatchObject({ start: '2026-11-22T21:03:00.000Z', end: null });
+    expect(durationText(l[1]!, NOW)).toBe('waiting 30s'); expect(l[1]).toMatchObject({ start: null, end: null });
+    const job1 = l.find((x) => x.name === 'done.pdf')!;
+    expect(job1).toMatchObject({ start: '2026-11-22T21:00:00.000Z', end: '2026-11-22T21:02:40.000Z' });
+    expect(durationText(job1, NOW)).toBe('2m 40s');
+    const print = l.find((x) => x.name === 'Job 1: done.pdf')!;
+    expect(print).toMatchObject({ stage: 'Completed' }); expect(durationText(print, NOW)).toBe('30s');
+  });
+  it('shows Start time, End time and Duration columns instead of Time', async () => {
+    show();
+    expect(await screen.findByRole('columnheader', { name: 'Start time' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'End time' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Duration' })).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: 'Time' })).toBeNull();
+  });
+});
+
+describe('automatic print files warning', () => {
+  it('warns, with a link to Settings, when "Make print files automatically" is off, and not when it is on', async () => {
+    current = data({ autoCompose: false });
+    const { unmount } = show();
+    expect(await screen.findByText('Print files are not made automatically')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/settings');
+    unmount();
+    current = data({ autoCompose: true });
+    show(); await screen.findByText('Nothing in the inbox and nothing running.');
+    expect(screen.queryByText('Print files are not made automatically')).toBeNull();
   });
 });
 
@@ -124,7 +164,7 @@ describe('ActivityPage estimates', () => {
 describe('ActivityPage', () => {
   it('shows the inbox with whether each PDF has arrived, and print file progress', async () => {
     current = data({ inbox: [{ stem: 'a', xmlName: 'a.xml', xmlBytes: 2048, pdfName: 'a.pdf', pdfBytes: 5, modifiedAt: new Date().toISOString() }, { stem: 'b', xmlName: 'b.xml', xmlBytes: 9000, pdfName: null, pdfBytes: null, modifiedAt: new Date().toISOString() }],
-      running: [act(1, { kind: 'Print files', state: 'Running', label: 'Job 3: j3.pdf', detail: 'Batch 70 (1 of 4): file 2 of 3 built', done: 0, total: 4 })] });
+      running: [act(1, { kind: 'Print files', state: 'Running', label: 'Job 3: j3.pdf', detail: '0 of 4 batches. Batch 70 (1 of 4): file 2 of 3 built', done: 300, total: 9000 })] });
     show();
     await screen.findByText('a.xml');   // the table is there from the start; wait for its first rows
     const ra = (await screen.findAllByRole('row')).find((r) => within(r).queryByText('a.xml'))!;
@@ -132,6 +172,7 @@ describe('ActivityPage', () => {
     const rb = (await screen.findAllByRole('row')).find((r) => within(r).queryByText('b.xml'))!;
     expect(within(rb).getByText('Not yet')).toBeInTheDocument();
     expect(await screen.findByText(/0 of 4 batches\. Batch 70 \(1 of 4\): file 2 of 3 built/)).toBeInTheDocument();
+    expect(screen.getByRole('progressbar', { name: '300 of 9000 mailpieces' })).toBeInTheDocument();
   });
   it('refreshes itself and shows a file moving to completed', async () => {
     current = data({ inbox: [{ stem: 'a', xmlName: 'a.xml', xmlBytes: 1, pdfName: 'a.pdf', pdfBytes: 1, modifiedAt: new Date().toISOString() }] });

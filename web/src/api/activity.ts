@@ -8,5 +8,5 @@ export interface ActivityRow {
   bytes: number | null; withPdf: boolean; remainingSeconds?: number | null;
 }
 export interface QueueEstimate { basedOn: number; seconds: number | null; partial: boolean }
-export interface ActivityData { inbox: InboxItem[]; inboxUnavailable: string | null; running: ActivityRow[]; recent: ActivityRow[]; jobs: JobRow[]; queue: QueueEstimate }
+export interface ActivityData { inbox: InboxItem[]; inboxUnavailable: string | null; running: ActivityRow[]; recent: ActivityRow[]; jobs: JobRow[]; queue: QueueEstimate; /** The "Make print files automatically" setting. */ autoCompose: boolean }
 export const getActivity = (): Promise<ActivityData> => api('/api/activity');

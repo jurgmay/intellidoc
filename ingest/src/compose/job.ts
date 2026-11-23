@@ -39,6 +39,17 @@ export interface ComposeJobOptions {
   /** Told what happened to the e-mail (only when one was attempted). */
   onRunSheetEmail?: (r: RunSheetEmailResult) => void;
 }
+/** Turns a stream of fine-grained progress into at most one database write a second (always writing when `force`). */
+function throttledSteps(log: ActivityLog, act: number | null, total: number) {
+  let last = 0;
+  return async (done: number, detail: string, force = false): Promise<void> => {
+    const now = Date.now();
+    if (!force && now - last < 1000) return;
+    last = now;
+    await log.step(act, Math.min(total, Math.round(done)), total, detail);
+  };
+}
+
 export interface ComposedBatch { batchCode: number; files: string[]; mrdfFile?: string; skipped?: string }
 
 /** The newest file in `dir` named `name`, or `name` with the watcher's clash prefix (yyyymmddhhmmss, optionally -n, then an underscore). */
@@ -64,15 +75,17 @@ export async function composeJob(o: ComposeJobOptions): Promise<ComposedBatch[]>
   const log = o.activity ?? noActivity;
   const job = await loadJobToCompose(o.pool, o.jobId);
   const todo = job.batches.filter((b) => b.status === 'Created').length;
-  const act = await log.start('Print files', `Job ${o.jobId}: ${job.pdfFileName}`, o.jobId, todo);
+  // The bar counts mailpieces, so a batch of thousands is as long as it should be next to one of a few.
+  const pieces = job.batches.filter((b) => b.status === 'Created').reduce((t, b) => t + b.mailpieces.length, 0);
+  const act = await log.start('Print files', `Job ${o.jobId}: ${job.pdfFileName}`, o.jobId, Math.max(1, pieces));
   try {
-    const result = await composeJobBatches(o, job, act, log, todo);
+    const result = await composeJobBatches(o, job, act, log, todo, Math.max(1, pieces));
     await log.finish(act, 'Done', `${result.filter((r) => r.files.length > 0).length} of ${todo} batches made`);
     return result;
   } catch (e) { await log.finish(act, 'Failed', (e as Error).message); throw e; }
 }
 
-async function composeJobBatches(o: ComposeJobOptions, job: Awaited<ReturnType<typeof loadJobToCompose>>, act: number | null, log: ActivityLog, todo: number): Promise<ComposedBatch[]> {
+async function composeJobBatches(o: ComposeJobOptions, job: Awaited<ReturnType<typeof loadJobToCompose>>, act: number | null, log: ActivityLog, todo: number, pieces: number): Promise<ComposedBatch[]> {
   if (job.status !== 'Received') throw new Error(`Job ${o.jobId} is "${job.status}"; only a Received job (its PDF checked) can be composed`);
   const source = new Uint8Array(await readFile(await findSourcePdf(o.pdfDir, job.pdfFileName)));
   const settings = await loadComposeSettings(o.pool);
@@ -81,47 +94,56 @@ async function composeJobBatches(o: ComposeJobOptions, job: Awaited<ReturnType<t
   await mkdir(o.outDir, { recursive: true });
 
   const result: ComposedBatch[] = [];
-  let batchNo = 0;
+  let batchNo = 0, piecesDone = 0;
+  const step = throttledSteps(log, act, pieces);
+  const rendered = new Map<number, Uint8Array>();
   for (const b of job.batches) {
     if (b.status !== 'Created') { result.push({ batchCode: b.batchCode, files: [], skipped: `the batch is ${b.status}` }); continue; }
-    if (o.onlyNew && (await recordedFiles(o.pool, b.batchId)).length > 0) { result.push({ batchCode: b.batchCode, files: [], skipped: 'already composed' }); continue; }
+    if (o.onlyNew && (await recordedFiles(o.pool, b.batchId)).length > 0) { piecesDone += b.mailpieces.length; result.push({ batchCode: b.batchCode, files: [], skipped: 'already composed' }); continue; }
     batchNo++;
-    const at = `Batch ${b.batchCode} (${batchNo} of ${todo})`;
-    await log.step(act, batchNo - 1, todo, `${at}: preparing`);
+    const at = `${batchNo - 1} of ${todo} batches. Batch ${b.batchCode} (${batchNo} of ${todo})`;
+    const size = b.mailpieces.length;
+    await step(piecesDone, `${at}: preparing`, true);
     const input = runInputs.find((r) => Number(r.batchCode) === b.batchCode);
     if (!input) throw new Error(`No run sheet data for batch ${b.batchCode}`);
     const runData = buildRunSheet(input);
     const runSheet = await renderRunSheet(runData, o.logo);
+    rendered.set(b.batchCode, runSheet);
     const runPages = (await PDFDocument.load(runSheet)).getPageCount();
     const plan = planBatch(b.mailpieces, { maxPagesPerPdf: settings.maxPagesPerPdf, runSheetPages: runPages + (runPages % 2) });
-    if (!plan.segments.length) { result.push({ batchCode: b.batchCode, files: [], skipped: 'no mailpieces to print' }); continue; }
+    if (!plan.segments.length) { piecesDone += size; result.push({ batchCode: b.batchCode, files: [], skipped: 'no mailpieces to print' }); continue; }
 
     const kw = batchKeywords({ archive: b.archive, edgeToEdge: !!b.paperName && paperFacts(b.paperName).edgeToEdge });
     const files = await composeBatch({
       batchCode: b.batchCode, source, runSheet, plan, marks: settings.marks, grey: o.grey, fileName: (n, total) => printFileName(runData.fileName, n, total),
       keywords: kw ? [kw] : undefined, mrdf: b.mrdf !== null,
-      onFile: (n, total) => { void log.step(act, batchNo - 1, todo, `${at}: file ${n} of ${total} built`); },
+      // Building the files is 90% of a batch; writing, saving and the MRDF file take the rest.
+      onProgress: (f, what) => { void step(piecesDone + size * 0.9 * f, `${at}: ${what}`); },
     });
-    await log.step(act, batchNo - 1, todo, `${at}: saving`);
+    await step(piecesDone + size * 0.9, `${at}: writing the files`, true);
     const old = await recordedFiles(o.pool, b.batchId);
     for (const f of files) await writeFile(join(o.outDir, f.fileName), f.bytes);
+    await step(piecesDone + size * 0.94, `${at}: saving to the database`, true);
     await saveComposition(o.pool, b.batchId, plan, files);
     for (const name of old) if (!files.some((f) => f.fileName === name)) await rm(join(o.outDir, name), { force: true });
     let mrdfFile: string | undefined;
+    if (b.mrdf && o.mrdfDir) await step(piecesDone + size * 0.98, `${at}: writing the MRDF file`, true);
     if (b.mrdf && o.mrdfDir) mrdfFile = await writeMrdfFile(o.pool, o.mrdfDir, b, plan);
     result.push({ batchCode: b.batchCode, files: files.map((f) => join(o.outDir, f.fileName)), ...(mrdfFile ? { mrdfFile } : {}) });
-    await log.step(act, batchNo, todo, `${at}: done`);
+    piecesDone += size;
+    await step(piecesDone, `${batchNo} of ${todo} batches. Batch ${b.batchCode}: done`, true);
   }
-  if (o.mailer && result.some((r) => r.files.length > 0)) await maybeEmailRunSheets(o);
+  if (o.mailer && result.some((r) => r.files.length > 0)) await maybeEmailRunSheets(o, (d) => step(pieces, `All ${todo} batches made. E-mailing the run sheets: ${d}`, true), rendered);
   return result;
 }
 
-async function maybeEmailRunSheets(o: ComposeJobOptions): Promise<void> {
+async function maybeEmailRunSheets(o: ComposeJobOptions, say: (detail: string) => Promise<void>, ready: ReadonlyMap<number, Uint8Array>): Promise<void> {
   try {
+    await say('checking the settings');
     if (!(await loadEmailSettings(o.pool)).enabled) return;
     const sent = (await o.pool.request().input('j', sql.BigInt, o.jobId).query<{ at: Date | null }>('SELECT run_sheets_emailed_at AS at FROM idoc.job WHERE job_id = @j')).recordset[0]?.at;
     if (sent) return;
-    o.onRunSheetEmail?.(await emailRunSheets(o.pool, o.jobId, o.mailer!, o.logo));
+    o.onRunSheetEmail?.(await emailRunSheets(o.pool, o.jobId, o.mailer!, o.logo, { ready, onStep: (d) => void say(d) }));
   } catch (e) {
     o.onRunSheetEmail?.({ sent: false, to: [], cc: [], testMode: false, attachment: null, error: (e as Error).message });
   }

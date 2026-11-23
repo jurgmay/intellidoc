@@ -137,6 +137,17 @@ describe('composeBatch', () => {
     await composeBatch({ batchCode: 1, source: await sourcePdf(['black', 'black', 'black', 'black', 'black', 'black']), runSheet: null, plan, marks, grey: null, fileName: (n) => `${n}.pdf`, onFile: (d, t) => seen.push([d, t]) });
     expect(seen).toEqual([[1, 2], [2, 2]]);
   });
+  it('reports steady progress from 0 to 1, weighted by the files\' mailpieces', async () => {
+    const mps = [mp(1, [pack(1, 1, 3)]), mp(2, [pack(2, 4, 6)])];
+    const plan = planBatch(mps, { maxPagesPerPdf: 3, runSheetPages: 0 });
+    const seen: [number, string][] = [];
+    await composeBatch({ batchCode: 1, source: await sourcePdf(['black', 'black', 'black', 'black', 'black', 'black']), runSheet: null, plan, marks, grey: null, fileName: (n) => `${n}.pdf`, onProgress: (f, d) => seen.push([f, d]) });
+    const fractions = seen.map(([f]) => f);
+    expect(fractions[0]).toBe(0);
+    expect(fractions.at(-1)).toBeCloseTo(1, 5);
+    expect([...fractions].sort((x, y) => x - y)).toEqual(fractions); // never goes backwards
+    expect(seen.some(([, d]) => /file 2 of 2/.test(d))).toBe(true);
+  });
   it('carries the metadata, the Control marks layer and one bookmark per mailpiece', async () => {
     const [f] = await run(new FakeGrey());
     const doc = await PDFDocument.load(f!.bytes);

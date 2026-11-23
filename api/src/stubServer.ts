@@ -104,7 +104,7 @@ jobs.jobs.push(job(3, 'Received', 0), job(2, 'Received', 2), job(1, 'PDF Rejecte
 const activityStore = new MemoryActivityStore();
 const ago = (s: number): string => new Date(Date.now() - s * 1000).toISOString();
 activityStore.rows = [
-  { id: 3, kind: 'Print files', label: 'Job 3: ACME_statements_3.pdf', jobId: 3, state: 'Running', detail: 'Batch 7031 (1 of 2): file 4 of 13 built', done: 0, total: 2, startedAt: ago(40), updatedAt: ago(2), finishedAt: null, stalled: false, bytes: null, withPdf: false },
+  { id: 3, kind: 'Print files', label: 'Job 3: ACME_statements_3.pdf', jobId: 3, state: 'Running', detail: '0 of 2 batches. Batch 7031 (1 of 2): file 4 of 13 built', done: 2400, total: 9500, startedAt: ago(40), updatedAt: ago(2), finishedAt: null, stalled: false, bytes: null, withPdf: false },
   { id: 2, kind: 'Import', label: 'bad-export.xml', jobId: null, state: 'Failed', detail: 'The XML is not valid', done: null, total: null, startedAt: ago(300), updatedAt: ago(290), finishedAt: ago(290), stalled: false, bytes: null, withPdf: false },
 ];
 activityStore.sampleRows = [{ withPdf: true, bytes: 10_000_000, seconds: 20 }, { withPdf: true, bytes: 30_000_000, seconds: 60 }, { withPdf: true, bytes: 20_000_000, seconds: 40 }, { withPdf: false, bytes: 9_000, seconds: 2 }, { withPdf: false, bytes: 4_000, seconds: 1 }, { withPdf: false, bytes: 6_000, seconds: 3 }];
