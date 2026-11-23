@@ -10,6 +10,7 @@ IntelliDoc_fmp12.xml
 ddr/
 
 # Local settings and watcher working folders
+db/local_settings.sql
 .env
 *.env
 !.env.example
