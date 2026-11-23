@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Badge, Group, Loader, Modal, SimpleGrid, Stack, Table, Text } from '@mantine/core';
 import { IconAlertCircle } from '@tabler/icons-react';
 import { getMailpiecePrice, type MailpiecePrice } from '../api/recipients';
+import { ukDateTime } from '../dates';
 
 const gbp = (n: number): string => `£${n.toFixed(4)}`;
 const gbp2 = (n: number): string => `£${n.toFixed(2)}`;
@@ -26,7 +27,7 @@ export function MailpiecePriceModal({ mailpieceId, onClose }: { mailpieceId: num
           <Group gap="xs">
             <Badge variant="light">{p.model?.name ?? 'No model'}</Badge>
             <Text size="sm" c="dimmed">
-              {p.packs} pack{p.packs === 1 ? '' : 's'}: {p.colourPages} colour, {p.monoPages} mono and {p.blankPages} blank page{p.colourPages + p.monoPages + p.blankPages === 1 ? '' : 's'}. Priced {p.pricedAt?.slice(0, 16).replace('T', ' ')}.
+              {p.packs} pack{p.packs === 1 ? '' : 's'}: {p.colourPages} colour, {p.monoPages} mono and {p.blankPages} blank page{p.colourPages + p.monoPages + p.blankPages === 1 ? '' : 's'}. Priced {p.pricedAt ? ukDateTime(p.pricedAt) : ''}.
             </Text>
           </Group>
           {p.warnings && <Alert color="yellow" icon={<IconAlertCircle size={16} />} title="The price is incomplete">{p.warnings}</Alert>}

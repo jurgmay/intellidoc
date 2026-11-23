@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 import { Alert, Badge, Box, Button, Group, Loader, Paper, Select, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { IconAlertCircle, IconChevronRight, IconSearch } from '@tabler/icons-react';
 import { ApiError } from '../api/client';
+import { ukDate } from '../dates';
 import { MailpiecePriceModal } from './MailpiecePriceModal';
 import { EMPTY_FORM, getRecipientSearchSession, saveRecipientSearchSession } from './recipientSearchSession';
 import { listScopes, searchRecipients, type RecipientResult, type SearchScope } from '../api/recipients';
 
 const EMPTY = EMPTY_FORM;
-const day = (iso: string): string => iso.slice(0, 10);
 /** The address under the name, in one line: the lines after the addressee, then the postcode (unless the lines already end with it). */
 const addressLine = (lines: string[], postcode: string): string => [...lines.slice(1), ...(postcode && !lines.includes(postcode) ? [postcode] : [])].join(', ');
 
@@ -103,7 +103,7 @@ export function RecipientSearchPage() {
                 </div>
                 <Group gap="xl" align="flex-start" wrap="wrap" style={{ flex: '2 1 24rem' }}>
                   <Field label="Letters">{r.packs.length}</Field>
-                  <Field label="Released">{day(r.releaseDate)}</Field>
+                  <Field label="Released">{ukDate(r.releaseDate)}</Field>
                   <Field label="Job">{r.job}</Field>
                   <Field label="Batch">{r.batchCode !== null ? <Group gap={6}><span>{r.batchCode}</span><Badge size="xs" variant="light">{r.batchStatus}</Badge></Group> : <Text size="sm" c="dimmed">Not in a batch</Text>}</Field>
                   <Field label="Sent from">{r.accountPath}{r.brand && <Text size="xs" c="dimmed">{r.brand}</Text>}</Field>
@@ -123,7 +123,7 @@ export function RecipientSearchPage() {
                         <Table.Td><Badge size="sm" variant="outline" aria-label={`Letter ${k.position}`}>{k.position}</Badge></Table.Td>
                         <Table.Td>{k.sequence === null ? <Text size="sm" c="dimmed">Not in the sequence</Text> : k.sequence}</Table.Td>
                         <Table.Td>{k.pageCount} {k.pageCount === 1 ? 'page' : 'pages'}<Text size="xs" c="dimmed">from page {k.startPage}</Text></Table.Td>
-                        <Table.Td>{day(k.releaseDate)}</Table.Td>
+                        <Table.Td>{ukDate(k.releaseDate)}</Table.Td>
                         <Table.Td>{Object.keys(k.references).length === 0 ? <Text size="sm" c="dimmed">None</Text> : Object.entries(k.references).map(([key, v]) => <div key={key}><Text span size="xs" c="dimmed">{key}: </Text>{v}</div>)}</Table.Td>
                       </Table.Tr>
                     ))}
