@@ -74,6 +74,12 @@ describe('PostalFormatsTab', () => {
     expect(within(letter).getByText('240 mm')).toBeInTheDocument();
     expect(within(letter).getByText('165 mm')).toBeInTheDocument();
   });
+  it('heads the limit columns "Maximum …"', async () => {
+    wrap(<PostalFormatsTab />);
+    await screen.findByText('Large Letter');
+    for (const h of ['Maximum weight', 'Maximum thickness', 'Maximum sheets', 'Maximum length', 'Maximum width']) expect(screen.getByRole('columnheader', { name: h })).toBeInTheDocument();
+    expect(screen.queryByRole('columnheader', { name: /^Most / })).toBeNull();
+  });
   it('saves changed limits, and an emptied one becomes null', async () => {
     wrap(<PostalFormatsTab />);
     await userEvent.click(within((await screen.findByText('Letter')).closest('tr')!).getByRole('button', { name: 'Edit' }));
