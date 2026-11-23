@@ -8,8 +8,13 @@ import { RecipientSearchPage } from './RecipientSearchPage';
 
 const scopes = [{ id: 1, label: 'Odevo', isCustomer: true }, { id: 2, label: 'Odevo > Highline Solicitors', isCustomer: false }];
 const hit = {
-  packId: 9, mailpieceId: 5, batchCode: 7001, batchStatus: 'Printed', job: 'job-9', releaseDate: '2026-11-18T09:30:00', addressLines: ['Mrs A Patel', '12 Mill Lane', 'Leeds'], postcode: 'LS1 4AB',
-  accountCode: 'ODEVO_HIGHLINE', accountName: 'Highline Solicitors', accountPath: 'Odevo > Highline Solicitors', invoicingCode: 'ODEVO', invoicingName: 'Odevo', brand: 'Home', priceSell: 1.05 as number | null, references: { 'Tenant Reference': 'T-1001' },
+  mailpieceId: 5, batchCode: 7001, batchStatus: 'Printed', job: 'job-9', releaseDate: '2026-11-18T09:30:00', addressLines: ['Mrs A Patel', '12 Mill Lane', 'Leeds'], postcode: 'LS1 4AB', isCancelled: false,
+  accountCode: 'ODEVO_HIGHLINE', accountName: 'Highline Solicitors', accountPath: 'Odevo > Highline Solicitors', invoicingCode: 'ODEVO', invoicingName: 'Odevo', brand: 'Home', priceSell: 1.05 as number | null,
+  packs: [
+    { packId: 12, position: 1, sequence: 1, startPage: 3, pageCount: 2, releaseDate: '2026-11-18T09:30:00', references: { 'Tenant Reference': 'T-1001', 'Document Type': 'Bill' } },
+    { packId: 11, position: 2, sequence: 2, startPage: 1, pageCount: 2, releaseDate: '2026-11-18T09:30:00', references: { 'Tenant Reference': 'T-1001', 'Document Type': 'Arrears' } },
+    { packId: 13, position: 3, sequence: null, startPage: 5, pageCount: 1, releaseDate: '2026-11-18T09:30:00', references: { 'Document Type': 'Leaflet' } },
+  ],
 };
 const price = {
   mailpieceId: 5, batchCode: 7001, priced: true, reason: null as string | null, pricedAt: '2026-11-18T09:31:00', model: { id: 2, name: '2026 prices' }, packs: 1, colourPages: 1, monoPages: 3, blankPages: 0,
@@ -49,10 +54,36 @@ describe('RecipientSearchPage', () => {
     expect(new URLSearchParams(search.split('?')[1])).toEqual(new URLSearchParams({ accountId: '1', name: 'patel', reference: 'T-10*' }));
     const tr = row.closest('tr')!;
     expect(within(tr).getByText('Odevo > Highline Solicitors')).toBeInTheDocument();
-    expect(within(tr).getByText('LS1 4AB')).toBeInTheDocument(); // the postcode is shown under the address lines
     expect(within(tr).getByText('7001')).toBeInTheDocument();
-    expect(within(tr).getByText('T-1001')).toBeInTheDocument();
     expect(screen.getByText(/1 found in Odevo and below/)).toBeInTheDocument();
+  });
+
+  it('shows the address in one comma separated line under the name', async () => {
+    await searchFor();
+    const tr = screen.getByText('Mrs A Patel').closest('tr')!;
+    expect(within(tr).getByText('12 Mill Lane, Leeds, LS1 4AB')).toBeInTheDocument();
+    expect(within(tr).queryByText('LS1 4AB')).not.toBeInTheDocument();
+  });
+
+  it('does not repeat a postcode that is already an address line, and flags a cancelled mailpiece', async () => {
+    respond = (url) => url.startsWith('/api/recipients/scopes') ? { status: 200, json: { rows: scopes } } : { status: 200, json: { scope: { id: 1, label: 'Odevo' }, truncated: false, rows: [{ ...hit, addressLines: ['Mrs A Patel', '12 Mill Lane', 'LS1 4AB'], isCancelled: true }] } };
+    await searchFor();
+    const tr = screen.getByText('Mrs A Patel').closest('tr')!;
+    expect(within(tr).getByText('12 Mill Lane, LS1 4AB')).toBeInTheDocument();
+    expect(within(tr).getByText('Cancelled')).toBeInTheDocument();
+  });
+
+  it('lists the letters in the envelope in order, each with its pages, sequence and fields', async () => {
+    await searchFor();
+    const packs = screen.getAllByTestId('pack');
+    expect(packs).toHaveLength(3);
+    expect(packs.map((p) => within(p).getByLabelText(/Letter \d/).getAttribute('aria-label'))).toEqual(['Letter 1', 'Letter 2', 'Letter 3']);
+    expect(packs[0]).toHaveTextContent('2 pages, sequence 1');
+    expect(packs[0]).toHaveTextContent('Tenant Reference: T-1001');
+    expect(packs[0]).toHaveTextContent('Document Type: Bill');
+    expect(packs[1]).toHaveTextContent('Document Type: Arrears');
+    expect(packs[2]).toHaveTextContent('1 page, not in the sequence');
+    expect(packs[2]).toHaveTextContent('Document Type: Leaflet');
   });
 
   it('shows the server\'s message next to the field, and says when there are more results', async () => {

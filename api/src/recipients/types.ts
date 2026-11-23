@@ -6,35 +6,52 @@ export interface RecipientQuery {
   name: string | null;
   /** Part of any other address line, or of the postcode. */
   address: string | null;
-  /** A passthrough value, matched exactly, or by prefix when the text ends with `*`. */
+  /** A passthrough value of any of the mailpiece's packs, matched exactly, or by prefix when the text ends with `*`. */
   reference: string | null;
   /** Limits `reference` to one passthrough key, e.g. "Tenant Reference". */
   referenceKey: string | null;
-  /** Release date range, inclusive, as YYYY-MM-DD. */
+  /** Release date range of any of the mailpiece's packs, inclusive, as YYYY-MM-DD. */
   from: string | null;
   to: string | null;
   limit: number;
 }
 
-export interface RecipientRow {
+/** One pack (letter) inside a mailpiece. */
+export interface RecipientPack {
   packId: number;
-  mailpieceId: number | null;
+  /** 1, 2, 3... in the order the packs go into the envelope. */
+  position: number;
+  /** The pack's number in the customer's pack sequence rules, or null when the pack is not listed in them (it goes after the listed ones). */
+  sequence: number | null;
+  startPage: number;
+  pageCount: number;
+  releaseDate: string;
+  /** Everything the customer sent with this letter (the passthrough fields), in name order. */
+  references: Record<string, string>;
+}
+
+/** One mailpiece (one envelope to one recipient) with the packs enclosed in it, in envelope order. A search always returns mailpieces. */
+export interface RecipientRow {
+  mailpieceId: number;
   batchCode: number | null;
   batchStatus: string | null;
   job: string;
+  /** The latest release date of its packs. */
   releaseDate: string;
+  /** The address lines as stored: the addressee first. The postcode is separate. */
   addressLines: string[];
   postcode: string;
-  /** The sub-account, as at production when the pack was mailed. */
+  isCancelled: boolean;
+  /** The sub-account, as at production when the mailpiece was made. */
   accountCode: string;
   accountName: string;
   accountPath: string;
   invoicingCode: string | null;
   invoicingName: string | null;
   brand: string | null;
-  references: Record<string, string>;
   /** What the customer pays for the mailpiece (production and postage), or null when it has not been priced. */
   priceSell: number | null;
+  packs: RecipientPack[];
 }
 
 export interface PriceLineView { code: string; label: string; quantity: number; unitCost: number; unitSell: number; cost: number; sell: number }
