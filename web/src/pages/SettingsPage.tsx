@@ -10,12 +10,16 @@ import { ChangeLog } from './ChangeLog';
 import { PostalRatesTab } from './PostalRatesTab';
 import { AnonymousTab, PaperTab, PostalFormatsTab } from './ReferenceTabs';
 
+/** The settings on the Control marks tab: where the marks go on the page (sequence number, Data Matrix, pack start dot) and the MRDF page codes (Data Matrix, OCR code). */
+const CONTROL_MARK = /^(markSeq|markDm|markDot|mrdfDm|mrdfOcr)/;
+
 export function SettingsPage() {
   const [data, setData] = useState<SettingsPayload | null>(null);
   const [draft, setDraft] = useState<Record<string, SettingValue>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState('general');
   const [logVersion, setLogVersion] = useState(0);
   /** The other tabs fetch their data only once they have been opened. */
   const [seen, setSeen] = useState<ReadonlySet<string>>(new Set());
@@ -46,36 +50,23 @@ export function SettingsPage() {
     } finally { setSaving(false); }
   };
 
-  return (
-    <Stack gap="lg" maw={1100}>
-      <div>
-        <Title order={2}>Settings</Title>
-        <Text c="dimmed" size="sm">What each setting does and where the app uses it. Changes are recorded in the change log.</Text>
-      </div>
-      <Tabs defaultValue="general" onChange={(v) => { if (v) setSeen((x) => new Set(x).add(v)); }}>
-        <Tabs.List>
-          <Tabs.Tab value="general">General</Tabs.Tab>
-          <Tabs.Tab value="postal">Postal rates</Tabs.Tab>
-          <Tabs.Tab value="formats">Postal formats</Tabs.Tab>
-          <Tabs.Tab value="papers">Paper</Tabs.Tab>
-          <Tabs.Tab value="anonymous">Anonymous addressees</Tabs.Tab>
-          <Tabs.Tab value="log">Change log</Tabs.Tab>
-        </Tabs.List>
-        <Tabs.Panel value="general" pt="lg">
-          <Stack gap="xl">
-            {data.groups.map((g) => (
-              <Paper key={g} withBorder p="lg">
-                <Title order={4} mb="md" c="brand.6">{g}</Title>
-                <Stack gap="xl">
-                  {data.settings.filter((s) => s.group === g).map((s) => (
-                    <SettingRow key={s.key} setting={s} value={draft[s.key]!} changed={dirty.includes(s.key)} error={errors[s.key]}
-                      onChange={(v) => setDraft((d) => ({ ...d, [s.key]: v }))} />
-                  ))}
-                </Stack>
-              </Paper>
-            ))}
-            <BatchCodeCard info={data.batchCode} onChanged={(b) => { setData({ ...data, batchCode: b }); setLogVersion((v) => v + 1); }} />
-          </Stack>
+  /** The settings of each group that pass `keep`, as cards; a group with none left is not shown. */
+  const groups = (keep: (s: SettingsPayload['settings'][number]) => boolean) => data.groups.map((g) => {
+    const rows = data.settings.filter((s) => s.group === g && keep(s));
+    if (!rows.length) return null;
+    return (
+      <Paper key={g} withBorder p="lg">
+        <Title order={4} mb="md" c="brand.6">{g}</Title>
+        <Stack gap="xl">
+          {rows.map((s) => (
+            <SettingRow key={s.key} setting={s} value={draft[s.key]!} changed={dirty.includes(s.key)} error={errors[s.key]}
+              onChange={(v) => setDraft((d) => ({ ...d, [s.key]: v }))} />
+          ))}
+        </Stack>
+      </Paper>
+    );
+  });
+  const saveBar = (
           <Paper withBorder p="md" mt="lg" pos="sticky" bottom={0} style={{ zIndex: 5 }}>
             <Group justify="space-between">
               <Text size="sm" c={dirty.length ? undefined : 'dimmed'}>{dirty.length ? `${dirty.length} unsaved change${dirty.length === 1 ? '' : 's'}` : 'No unsaved changes'}</Text>
@@ -85,6 +76,32 @@ export function SettingsPage() {
               </Group>
             </Group>
           </Paper>
+  );
+
+  return (
+    <Stack gap="lg" maw={1100}>
+      <div>
+        <Title order={2}>Settings</Title>
+        <Text c="dimmed" size="sm">What each setting does and where the app uses it. Changes are recorded in the change log.</Text>
+      </div>
+      <Tabs value={tab} onChange={(v) => { if (v) { setTab(v); setSeen((x) => new Set(x).add(v)); } }}>
+        <Tabs.List>
+          <Tabs.Tab value="general">General</Tabs.Tab>
+          <Tabs.Tab value="marks">Control marks</Tabs.Tab>
+          <Tabs.Tab value="postal">Postal rates</Tabs.Tab>
+          <Tabs.Tab value="formats">Postal formats</Tabs.Tab>
+          <Tabs.Tab value="papers">Paper</Tabs.Tab>
+          <Tabs.Tab value="anonymous">Anonymous addressees</Tabs.Tab>
+          <Tabs.Tab value="log">Change log</Tabs.Tab>
+        </Tabs.List>
+        <Tabs.Panel value="general" pt="lg">
+          <Stack gap="xl">
+            {groups((s) => !CONTROL_MARK.test(s.key))}
+            <BatchCodeCard info={data.batchCode} onChanged={(b) => { setData({ ...data, batchCode: b }); setLogVersion((v) => v + 1); }} />
+          </Stack>
+        </Tabs.Panel>
+        <Tabs.Panel value="marks" pt="lg">
+          <Stack gap="xl">{groups((s) => CONTROL_MARK.test(s.key))}</Stack>
         </Tabs.Panel>
         <Tabs.Panel value="postal" pt="lg">{seen.has('postal') && <PostalRatesTab />}</Tabs.Panel>
         <Tabs.Panel value="formats" pt="lg">{seen.has('formats') && <PostalFormatsTab />}</Tabs.Panel>
@@ -92,6 +109,7 @@ export function SettingsPage() {
         <Tabs.Panel value="anonymous" pt="lg">{seen.has('anonymous') && <AnonymousTab />}</Tabs.Panel>
         <Tabs.Panel value="log" pt="lg"><ChangeLog version={logVersion} /></Tabs.Panel>
       </Tabs>
+      {(tab === 'general' || tab === 'marks') && saveBar}
     </Stack>
   );
 }

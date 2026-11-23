@@ -105,7 +105,7 @@ Things to know:
 
 ## Settings
 
-The Settings page has two groups, **Print file marks** and **MRDF page codes**. **Print file marks** (box positions, font size, dot, maximum pages per file). FileMaker kept these in its Settings table, which was not in the DDR, so **the starting values are placeholders** (except the dot, which FileMaker fixed in the script). Check them against a printed proof and correct them there.
+The mark positions are on the **Control marks** tab of the Settings page (from *Sequence number: font size* to *OCR code: box height*), in two groups, **Print file marks** and **MRDF page codes**; it shares the Save changes bar with the General tab. **Print file marks** (box positions, font size, dot, maximum pages per file). FileMaker kept these in its Settings table, which was not in the DDR, so **the starting values are placeholders** (except the dot, which FileMaker fixed in the script). Check them against a printed proof and correct them there.
 
 ## Not built, and differences from FileMaker
 
