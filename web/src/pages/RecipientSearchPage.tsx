@@ -7,6 +7,8 @@ import { listScopes, searchRecipients, type RecipientResult, type SearchScope } 
 
 const EMPTY = { name: '', address: '', reference: '', referenceKey: '', from: '', to: '' };
 const day = (iso: string): string => iso.slice(0, 10);
+/** The address under the name, in one line: the lines after the addressee, then the postcode (unless the lines already end with it). */
+const addressLine = (lines: string[], postcode: string): string => [...lines.slice(1), ...(postcode && !lines.includes(postcode) ? [postcode] : [])].join(', ');
 
 /** Finds where a person's letters went. A search always covers one account and the accounts below it, never the whole system. */
 export function RecipientSearchPage() {
@@ -73,19 +75,33 @@ export function RecipientSearchPage() {
           {result.rows.length > 0 && (
             <Table striped withTableBorder>
               <Table.Thead>
-                <Table.Tr><Table.Th>Recipient</Table.Th><Table.Th>Sent from</Table.Th><Table.Th>Invoiced to</Table.Th><Table.Th>Released</Table.Th><Table.Th>Batch</Table.Th><Table.Th>References</Table.Th><Table.Th ta="right">Price</Table.Th></Table.Tr>
+                <Table.Tr><Table.Th>Recipient</Table.Th><Table.Th>Sent from</Table.Th><Table.Th>Invoiced to</Table.Th><Table.Th>Released</Table.Th><Table.Th>Batch</Table.Th><Table.Th>Letters in the envelope</Table.Th><Table.Th ta="right">Price</Table.Th></Table.Tr>
               </Table.Thead>
               <Table.Tbody>
                 {result.rows.map((r) => (
-                  <Table.Tr key={r.packId}>
-                    <Table.Td>{r.addressLines.map((l, i) => <div key={i} style={i === 0 ? { fontWeight: 600 } : undefined}>{l}</div>)}{r.postcode && !r.addressLines.includes(r.postcode) && <div>{r.postcode}</div>}</Table.Td>
+                  <Table.Tr key={r.mailpieceId}>
+                    <Table.Td>
+                      <Group gap="xs" wrap="nowrap"><Text fw={600}>{r.addressLines[0]}</Text>{r.isCancelled && <Badge size="xs" color="red" variant="light">Cancelled</Badge>}</Group>
+                      <Text size="sm" c="dimmed">{addressLine(r.addressLines, r.postcode)}</Text>
+                    </Table.Td>
                     <Table.Td><div>{r.accountPath}</div>{r.brand && <Text size="xs" c="dimmed">{r.brand}</Text>}</Table.Td>
                     <Table.Td>{r.invoicingName ?? '–'}</Table.Td>
                     <Table.Td>{day(r.releaseDate)}<Text size="xs" c="dimmed">{r.job}</Text></Table.Td>
                     <Table.Td>{r.batchCode !== null ? <><div>{r.batchCode}</div><Badge size="xs" variant="light">{r.batchStatus}</Badge></> : <Text size="xs" c="dimmed">Not in a batch</Text>}</Table.Td>
-                    <Table.Td>{Object.entries(r.references).map(([k, v]) => <div key={k}><Text span size="xs" c="dimmed">{k}: </Text>{v}</div>)}</Table.Td>
-                    <Table.Td ta="right">{r.mailpieceId === null ? <Text size="xs" c="dimmed">–</Text>
-                      : <Button size="compact-sm" variant="subtle" aria-label={`Price of the mailpiece to ${r.addressLines[0] ?? 'this recipient'}`} onClick={() => setPriceOf(r.mailpieceId)}>{r.priceSell == null ? 'Not priced' : `£${r.priceSell.toFixed(2)}`}</Button>}</Table.Td>
+                    <Table.Td>
+                      <Stack gap={4}>
+                        {r.packs.map((k) => (
+                          <div key={k.packId} data-testid="pack">
+                            <Group gap={6} wrap="nowrap" align="baseline">
+                              <Badge size="sm" variant="outline" aria-label={`Letter ${k.position}`}>{k.position}</Badge>
+                              <Text size="xs" c="dimmed">{k.pageCount} {k.pageCount === 1 ? 'page' : 'pages'}{k.sequence === null ? ', not in the sequence' : `, sequence ${k.sequence}`}</Text>
+                            </Group>
+                            <div>{Object.entries(k.references).map(([key, v]) => <div key={key}><Text span size="xs" c="dimmed">{key}: </Text>{v}</div>)}</div>
+                          </div>
+                        ))}
+                      </Stack>
+                    </Table.Td>
+                    <Table.Td ta="right">{<Button size="compact-sm" variant="subtle" aria-label={`Price of the mailpiece to ${r.addressLines[0] ?? 'this recipient'}`} onClick={() => setPriceOf(r.mailpieceId)}>{r.priceSell == null ? 'Not priced' : `£${r.priceSell.toFixed(2)}`}</Button>}</Table.Td>
                   </Table.Tr>
                 ))}
               </Table.Tbody>

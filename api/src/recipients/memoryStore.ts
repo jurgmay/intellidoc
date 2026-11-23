@@ -2,11 +2,11 @@ import { NotFoundError } from '../errors.js';
 import type { MailpiecePrice, RecipientQuery, RecipientResult, RecipientRow, RecipientStore, SearchScope } from './types.js';
 
 export interface MemoryRecipient extends RecipientRow {
-  /** The submitting account and every account above it. A search in any of these accounts finds the row. */
+  /** The submitting account and every account above it. A search in any of these accounts finds the mailpiece. */
   ancestors: number[];
 }
 
-/** In-memory search for the stub server and the tests. It follows the same rules as the SQL: contains for names and addresses, exact or prefix for references. */
+/** In-memory search for the stub server and the tests. It follows the same rules as the SQL: contains for names and addresses, exact or prefix for references; the rows are mailpieces. */
 export class MemoryRecipientStore implements RecipientStore {
   scopeList: SearchScope[] = [];
   recipients: MemoryRecipient[] = [];
@@ -27,10 +27,11 @@ export class MemoryRecipientStore implements RecipientStore {
       .filter((r) => r.ancestors.includes(q.accountId))
       .filter((r) => !q.name || has(r.addressLines[0] ?? '', q.name))
       .filter((r) => !q.address || r.addressLines.slice(1).some((l) => has(l, q.address!)) || has(r.postcode, q.address))
-      .filter((r) => !q.reference || Object.entries(r.references).some(([k, v]) => (!q.referenceKey || k.toLowerCase() === q.referenceKey.toLowerCase()) && refOk(v, q.reference!)))
-      .filter((r) => !q.from || r.releaseDate.slice(0, 10) >= q.from)
-      .filter((r) => !q.to || r.releaseDate.slice(0, 10) <= q.to)
-      .sort((a, b) => b.releaseDate.localeCompare(a.releaseDate) || b.packId - a.packId);
+      // a reference and a date match when one pack of the mailpiece has them (both on the same pack)
+      .filter((r) => r.packs.some((k) =>
+        (!q.reference || Object.entries(k.references).some(([key, v]) => (!q.referenceKey || key.toLowerCase() === q.referenceKey.toLowerCase()) && refOk(v, q.reference!)))
+        && (!q.from || k.releaseDate.slice(0, 10) >= q.from) && (!q.to || k.releaseDate.slice(0, 10) <= q.to)))
+      .sort((a, b) => b.releaseDate.localeCompare(a.releaseDate) || b.mailpieceId - a.mailpieceId);
     const rows = hits.slice(0, q.limit).map(({ ancestors: _a, ...row }) => row);
     return { scope: { id: scope.id, label: scope.label }, rows, truncated: hits.length > q.limit };
   }

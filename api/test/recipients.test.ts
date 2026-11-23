@@ -8,16 +8,20 @@ import { MemoryRepriceStore } from '../src/reprice/memoryStore.js';
 import { MemoryPostalStore } from '../src/postal/memoryStore.js';
 import { MemoryCostingStore } from '../src/costing/memoryStore.js';
 import { MemoryRecipientStore, type MemoryRecipient } from '../src/recipients/memoryStore.js';
+import type { RecipientPack } from '../src/recipients/types.js';
 import { containsPattern, referencePattern } from '../src/recipients/validate.js';
 import { MemorySettingsStore } from '../src/settings/store.js';
 
 let app: FastifyInstance;
 let store: MemoryRecipientStore;
 
-const row = (packId: number, ancestors: number[], over: Partial<MemoryRecipient>): MemoryRecipient => ({
-  packId, mailpieceId: packId, batchCode: 9000 + packId, batchStatus: 'Printed', job: `job-${packId}`, releaseDate: '2026-11-18T09:00:00',
+const pack = (packId: number, position: number, over: Partial<RecipientPack> = {}): RecipientPack => ({
+  packId, position, sequence: position, startPage: 1 + (position - 1) * 2, pageCount: 2, releaseDate: '2026-11-18T09:00:00', references: {}, ...over,
+});
+const row = (mailpieceId: number, ancestors: number[], over: Partial<MemoryRecipient>): MemoryRecipient => ({
+  mailpieceId, batchCode: 9000 + mailpieceId, batchStatus: 'Printed', job: `job-${mailpieceId}`, releaseDate: '2026-11-18T09:00:00', isCancelled: false,
   addressLines: ['Ann Lee', '1 High Street', 'Town'], postcode: 'AB1 2CD', accountCode: 'X', accountName: 'X', accountPath: 'X', invoicingCode: 'X', invoicingName: 'X', brand: null,
-  references: {}, priceSell: null, ancestors, ...over,
+  priceSell: null, packs: [pack(mailpieceId * 10, 1)], ancestors, ...over,
 });
 
 beforeEach(async () => {
@@ -25,15 +29,20 @@ beforeEach(async () => {
   // 1 Parent customer > 2 Child sub-account, 3 Other customer
   store.scopeList = [{ id: 1, label: 'Parent', isCustomer: true }, { id: 2, label: 'Parent > Child', isCustomer: false }, { id: 3, label: 'Other', isCustomer: true }];
   store.recipients = [
-    row(1, [1], { addressLines: ['Mrs Anne Patel', '12 Mill Lane', 'Leeds'], postcode: 'LS1 4AB', releaseDate: '2026-11-10T09:00:00', references: { 'Tenant Reference': 'T-1001', 'Document Type': 'Statement' } }),
-    row(2, [1, 2], { addressLines: ['Mr Joe Patel', '3 High Street', 'York'], postcode: 'YO1 7HH', releaseDate: '2026-11-15T09:00:00', references: { 'Tenant Reference': 'T-2040', 'Property Reference': 'T-1001' } }),
-    row(3, [3], { addressLines: ['Mr Joe Patel', '3 High Street', 'York'], postcode: 'YO1 7HH', references: { 'Tenant Reference': 'T-1001' } }),
+    // mailpiece 1 is two letters in one envelope; the statement is the second letter in the file but goes in first
+    row(1, [1], { addressLines: ['Mrs Anne Patel', '12 Mill Lane', 'Leeds'], postcode: 'LS1 4AB', releaseDate: '2026-11-10T09:00:00', packs: [
+      pack(12, 1, { sequence: 1, startPage: 3, releaseDate: '2026-11-10T09:00:00', references: { 'Tenant Reference': 'T-1001', 'Document Type': 'Statement' } }),
+      pack(11, 2, { sequence: 2, startPage: 1, releaseDate: '2026-11-09T09:00:00', references: { 'Tenant Reference': 'T-1001', 'Document Type': 'Notice' } }),
+      pack(13, 3, { sequence: null, startPage: 5, releaseDate: '2026-11-09T09:00:00', references: { 'Tenant Reference': 'T-1001', 'Document Type': 'Leaflet' } }),
+    ] }),
+    row(2, [1, 2], { addressLines: ['Mr Joe Patel', '3 High Street', 'York'], postcode: 'YO1 7HH', releaseDate: '2026-11-15T09:00:00', packs: [pack(20, 1, { releaseDate: '2026-11-15T09:00:00', references: { 'Tenant Reference': 'T-2040', 'Property Reference': 'T-1001' } })] }),
+    row(3, [3], { addressLines: ['Mr Joe Patel', '3 High Street', 'York'], postcode: 'YO1 7HH', packs: [pack(30, 1, { references: { 'Tenant Reference': 'T-1001' } })] }),
   ];
   app = await buildApp({ settings: new MemorySettingsStore(), customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: store, reports: new MemoryReportStore(), reference: new MemoryReferenceStore() });
 });
 
 const get = (qs: string) => app.inject({ method: 'GET', url: `/api/recipients/search?${qs}` });
-const packs = async (qs: string): Promise<number[]> => ((await get(qs)).json().rows as { packId: number }[]).map((r) => r.packId);
+const packs = async (qs: string): Promise<number[]> => ((await get(qs)).json().rows as { mailpieceId: number }[]).map((r) => r.mailpieceId);
 
 describe('recipient search: scope', () => {
   it('refuses a search without an account, however specific it is', async () => {
@@ -44,7 +53,7 @@ describe('recipient search: scope', () => {
     expect((await get('accountId=0&name=patel')).statusCode).toBe(422);
   });
   it('covers the account and everything below it, never other customers', async () => {
-    expect(await packs('accountId=1&name=patel')).toEqual([2, 1]); // newest first; the other customer's pack 3 is not found
+    expect(await packs('accountId=1&name=patel')).toEqual([2, 1]); // newest first; the other customer's mailpiece 3 is not found
     expect(await packs('accountId=2&name=patel')).toEqual([2]); // a sub-account sees only itself and below
     expect(await packs('accountId=3&name=patel')).toEqual([3]);
   });
@@ -53,6 +62,20 @@ describe('recipient search: scope', () => {
   });
   it('lists the accounts that can be chosen', async () => {
     expect((await app.inject({ method: 'GET', url: '/api/recipients/scopes' })).json().rows).toHaveLength(3);
+  });
+});
+
+describe('recipient search: the result is mailpieces', () => {
+  it('has one row for each mailpiece, with all its packs in envelope order and their fields, wherever the search matched', async () => {
+    const rows = (await get('accountId=1&reference=Leaflet')).json().rows;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ mailpieceId: 1, addressLines: ['Mrs Anne Patel', '12 Mill Lane', 'Leeds'], postcode: 'LS1 4AB', isCancelled: false });
+    expect(rows[0].packs.map((k: RecipientPack) => [k.position, k.packId, k.sequence])).toEqual([[1, 12, 1], [2, 11, 2], [3, 13, null]]);
+    expect(rows[0].packs[0].references).toEqual({ 'Tenant Reference': 'T-1001', 'Document Type': 'Statement' });
+    expect(rows[0].packs[0]).not.toHaveProperty('ancestors');
+    expect(rows[0]).not.toHaveProperty('packId');
+    expect(rows[0]).not.toHaveProperty('references');
+    expect(rows[0]).not.toHaveProperty('ancestors');
   });
 });
 
@@ -78,10 +101,16 @@ describe('recipient search: matching', () => {
     expect(await packs(`accountId=1&reference=T-1001&referenceKey=${encodeURIComponent('Tenant Reference')}`)).toEqual([1]);
     expect((await get('accountId=1&referenceKey=Tenant')).json().errors.reference).toBeDefined();
   });
-  it('date range is inclusive of both days', async () => {
+  it('date range is inclusive of both days, and is the release date of any pack in the mailpiece', async () => {
     expect(await packs('accountId=1&name=patel&from=2026-11-15')).toEqual([2]);
     expect(await packs('accountId=1&name=patel&to=2026-11-10')).toEqual([1]);
     expect(await packs('accountId=1&from=2026-11-10&to=2026-11-15')).toEqual([2, 1]);
+    expect(await packs('accountId=1&name=patel&to=2026-11-09')).toEqual([1]); // two of its packs were released on the 9th
+  });
+  it('a reference on one pack finds the whole mailpiece, and a reference and a date have to be on the same pack', async () => {
+    expect(await packs('accountId=1&reference=Leaflet')).toEqual([1]);
+    expect(await packs('accountId=1&reference=Statement&to=2026-11-09')).toEqual([]); // the statement was released on the 10th
+    expect(await packs('accountId=1&reference=Notice&to=2026-11-09')).toEqual([1]);
   });
   it('checks the inputs', async () => {
     expect((await get('accountId=1&name=a')).json().errors.name).toMatch(/at least 2/);

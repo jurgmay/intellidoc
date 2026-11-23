@@ -55,14 +55,19 @@ recipients.scopeList = [
   { id: 101, label: 'Acme Energy Ltd', isCustomer: true }, { id: 105, label: 'Northwest Bank plc', isCustomer: true },
   { id: 106, label: 'Odevo', isCustomer: true }, { id: 107, label: 'Odevo > Highline Solicitors', isCustomer: false }, { id: 108, label: 'Rendall & Rittner', isCustomer: true },
 ];
-const rec = (packId: number, ancestors: number[], over: Record<string, unknown>) => recipients.recipients.push({
-  packId, mailpieceId: packId + 500, batchCode: 7000 + Math.floor(packId / 2), batchStatus: 'Printed', job: `job-${packId}`, releaseDate: '2026-11-18T09:30:00',
-  addressLines: [], postcode: '', accountCode: '', accountName: '', accountPath: '', invoicingCode: null, invoicingName: null, brand: null, references: {}, priceSell: null, ancestors, ...over,
+const pk = (packId: number, position: number, sequence: number | null, startPage: number, pageCount: number, releaseDate: string, references: Record<string, string>) => ({ packId, position, sequence, startPage, pageCount, releaseDate, references });
+const rec = (mailpieceId: number, ancestors: number[], over: Record<string, unknown>) => recipients.recipients.push({
+  mailpieceId, batchCode: 7000 + Math.floor(mailpieceId / 2), batchStatus: 'Printed', job: `job-${mailpieceId}`, releaseDate: '2026-11-18T09:30:00', isCancelled: false,
+  addressLines: [], postcode: '', accountCode: '', accountName: '', accountPath: '', invoicingCode: null, invoicingName: null, brand: null, priceSell: null, packs: [], ancestors, ...over,
 } as never);
-rec(1, [101], { addressLines: ['Mrs A Patel', '12 Mill Lane', 'Leeds'], postcode: 'LS1 4AB', accountCode: 'ACME', accountName: 'Acme Energy Ltd', accountPath: 'Acme Energy Ltd', invoicingCode: 'ACME', invoicingName: 'Acme Energy Ltd', brand: 'Acme Home', references: { 'Tenant Reference': 'T-1001', 'Document Type': 'Statement' } });
-rec(2, [101], { releaseDate: '2026-11-19T10:00:00', addressLines: ['Mr J Patel', '3 High Street', 'York'], postcode: 'YO1 7HH', accountCode: 'ACME', accountName: 'Acme Energy Ltd', accountPath: 'Acme Energy Ltd', invoicingCode: 'ACME', invoicingName: 'Acme Energy Ltd', brand: 'Acme Home', references: { 'Tenant Reference': 'T-2040' } });
-rec(3, [106, 107], { releaseDate: '2026-11-20T08:15:00', batchStatus: 'Created', addressLines: ['Ms R Okafor', 'Flat 4, Quay House', 'London'], postcode: 'E14 5AB', accountCode: 'ODEVO_HIGHLINE', accountName: 'Highline Solicitors', accountPath: 'Odevo > Highline Solicitors', invoicingCode: 'ODEVO', invoicingName: 'Odevo', references: { 'Property Reference': 'P-77-A', 'Document Type': 'Notice' } });
-rec(4, [106, 108], { addressLines: ['Mr T Brown', '9 Park Road', 'Bristol'], postcode: 'BS1 2CD', accountCode: 'ODEVO_R_AND_R', accountName: 'Rendall & Rittner', accountPath: 'Rendall & Rittner', invoicingCode: 'ODEVO', invoicingName: 'Odevo', references: { 'Property Reference': 'P-90-B' } });
+rec(501, [101], { addressLines: ['Mrs A Patel', '12 Mill Lane', 'Leeds'], postcode: 'LS1 4AB', accountCode: 'ACME', accountName: 'Acme Energy Ltd', accountPath: 'Acme Energy Ltd', invoicingCode: 'ACME', invoicingName: 'Acme Energy Ltd', brand: 'Acme Home',
+  packs: [pk(1, 1, 1, 1, 2, '2026-11-18T09:30:00', { 'Tenant Reference': 'T-1001', 'Document Type': 'Bill' }), pk(2, 2, 2, 3, 2, '2026-11-18T09:30:00', { 'Tenant Reference': 'T-1001', 'Document Type': 'Arrears' }), pk(3, 3, null, 5, 1, '2026-11-18T09:30:00', { 'Tenant Reference': 'T-1001', 'Document Type': 'Leaflet' })] });
+rec(502, [101], { releaseDate: '2026-11-19T10:00:00', addressLines: ['Mr J Patel', '3 High Street', 'York'], postcode: 'YO1 7HH', accountCode: 'ACME', accountName: 'Acme Energy Ltd', accountPath: 'Acme Energy Ltd', invoicingCode: 'ACME', invoicingName: 'Acme Energy Ltd', brand: 'Acme Home',
+  packs: [pk(4, 1, 1, 6, 2, '2026-11-19T10:00:00', { 'Tenant Reference': 'T-2040', 'Document Type': 'Bill' })] });
+rec(503, [106, 107], { releaseDate: '2026-11-20T08:15:00', batchStatus: 'Created', addressLines: ['Ms R Okafor', 'Flat 4, Quay House', 'London'], postcode: 'E14 5AB', accountCode: 'ODEVO_HIGHLINE', accountName: 'Highline Solicitors', accountPath: 'Odevo > Highline Solicitors', invoicingCode: 'ODEVO', invoicingName: 'Odevo',
+  packs: [pk(5, 1, null, 1, 2, '2026-11-20T08:15:00', { 'Property Reference': 'P-77-A', 'Document Type': 'Notice' })] });
+rec(504, [106, 108], { addressLines: ['Mr T Brown', '9 Park Road', 'Bristol'], postcode: 'BS1 2CD', accountCode: 'ODEVO_R_AND_R', accountName: 'Rendall & Rittner', accountPath: 'Rendall & Rittner', invoicingCode: 'ODEVO', invoicingName: 'Odevo',
+  packs: [pk(6, 1, null, 3, 2, '2026-11-18T09:30:00', { 'Property Reference': 'P-90-B' })] });
 const line = (code: string, label: string, quantity: number, unitCost: number, unitSell: number) => ({ code, label, quantity, unitCost, unitSell, cost: Math.round(unitCost * quantity * 1e4) / 1e4, sell: Math.round(unitSell * quantity * 1e4) / 1e4 });
 recipients.prices.set(501, {
   mailpieceId: 501, batchCode: 7000, priced: true, reason: null, pricedAt: '2026-11-18T09:31:00', model: { id: 2, name: '2026 prices' }, packs: 1, colourPages: 1, monoPages: 3, blankPages: 0,

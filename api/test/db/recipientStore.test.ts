@@ -79,7 +79,9 @@ describe.skipIf(!cs)('MssqlRecipientStore', { timeout: 120_000 }, () => {
     const r = (await store.search(q({ name: 'ann patel' }))).rows[0]!;
     expect(r).toMatchObject({ accountCode: 'FEXCO', postcode: 'AB1 2CD', brand: 'Remus', batchStatus: 'Created', job: 'job-search' });
     expect(r.addressLines).toEqual(['Ann Patel', '1 High Street', 'Town']); // the postcode is stored apart from the lines
-    expect(r.references).toEqual({ 'Tenant Reference': 'T-1001', 'Document Type': 'Statement', Brand: 'Remus' });
+    expect(r.packs).toHaveLength(1);
+    expect(r.packs[0]).toMatchObject({ position: 1, sequence: null, startPage: 1, pageCount: 2, references: { 'Tenant Reference': 'T-1001', 'Document Type': 'Statement', Brand: 'Remus' } });
+    expect(r.isCancelled).toBe(false);
     expect(r.batchCode).toBeGreaterThan(0);
     expect(r.invoicingCode).toBeTruthy();
     expect(r.accountPath).toContain('>');
@@ -92,6 +94,26 @@ describe.skipIf(!cs)('MssqlRecipientStore', { timeout: 120_000 }, () => {
     const r = await store.search(q({ name: 'patel', limit: 1 }));
     expect(r.rows).toHaveLength(1);
     expect(r.truncated).toBe(true);
+  });
+
+  it('returns mailpieces: every pack in the envelope, in the customer\'s sequence, whichever pack matched', async () => {
+    const repo = new MssqlRepository(ipool); const ref = await loadReferenceData(ipool);
+    const two = buildXml([person('Mia', 'Merge', { passthrough: { 'Tenant Reference': 'M-1', 'Document Type': 'Leaflet' } }), person('Mia', 'Merge', { passthrough: { 'Tenant Reference': 'M-2', 'Document Type': 'Statement' } })]);
+    await ingest(two.xml, 'job-merge.xml', 'job-merge.pdf', { ref, pdf: new FakePdf(two.pages), repo });
+    // put both letters in one envelope (the matching rules of the customer do this at import; here it is done directly): the second letter in the file goes in first
+    const [first, second] = (await pool.request().query(`SELECT m.mailpiece_id AS id FROM idoc.mailpiece m JOIN idoc.job j ON j.job_id = m.job_id WHERE j.base_name = N'job-merge' ORDER BY m.mailpiece_id`)).recordset.map((r) => r.id as number);
+    await pool.request().query(`
+      UPDATE idoc.pack SET mailpiece_id = ${first} WHERE mailpiece_id = ${second};
+      DELETE FROM idoc.mailpiece WHERE mailpiece_id = ${second};
+      UPDATE idoc.mailpiece SET pack_count = 2 WHERE mailpiece_id = ${first};
+      UPDATE p SET document_sequence = 2 FROM idoc.pack p JOIN idoc.pack_passthrough pp ON pp.pack_id = p.pack_id JOIN idoc.passthrough_value v ON v.passthrough_value_id = pp.passthrough_value_id WHERE p.mailpiece_id = ${first} AND v.value = N'M-2'`);
+    for (const search of [{ name: 'mia merge' }, { reference: 'M-1' }, { reference: 'M-2' }]) {
+      const rows = (await store.search(q(search))).rows;
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.mailpieceId).toBe(first);
+      expect(rows[0]!.packs.map((k) => [k.position, k.sequence, k.references['Tenant Reference']])).toEqual([[1, 2, 'M-2'], [2, null, 'M-1']]);
+      expect(rows[0]!.packs[0]!.references['Document Type']).toBe('Statement');
+    }
   });
 
   it('the price of a mailpiece: its lines and totals once priced, and the reason when it has none', async () => {
