@@ -65,10 +65,12 @@ export async function loadReferenceData(pool: sql.ConnectionPool): Promise<Refer
     const k = `${r.setting}|${r.account_id}`; const l = sourcesOf.get(k); if (l) l.push(r.source_account_id); else sourcesOf.set(k, [r.source_account_id]);
   }
   // The whole tree (deleted accounts too), for the root of each account and for invoicing account codes.
-  const tree = await q<{ account_id: number; account_code: string; parent_account_id: number | null }>('SELECT account_id, account_code, parent_account_id FROM idoc.account');
+  const tree = await q<{ account_id: number; account_code: string; parent_account_id: number | null; inherits_settings: boolean }>('SELECT account_id, account_code, parent_account_id, inherits_settings FROM idoc.account');
   const codeOf = new Map(tree.map((a) => [a.account_id, a.account_code]));
   const parentOf = new Map(tree.map((a) => [a.account_id, a.parent_account_id]));
-  const rootOf = (id: number): number => { let cur = id; for (let i = 0; i < 100; i++) { const p = parentOf.get(cur); if (p === null || p === undefined) break; cur = p; } return cur; };
+  const inheritsOf = new Map(tree.map((a) => [a.account_id, Boolean(a.inherits_settings)]));
+  /** The account that holds the settings: the account itself, or the nearest ancestor above it that does not inherit (idoc.v_account_owner). A job, its batches and mailpieces belong to it. */
+  const holderOf = (id: number): number => { let cur = id; for (let i = 0; i < 100 && inheritsOf.get(cur); i++) { const p = parentOf.get(cur); if (p === null || p === undefined) break; cur = p; } return cur; };
 
   const brands = await q<{ account_id: number; name: string }>('SELECT account_id, name FROM idoc.brand');
   const rules = await q<{ account_id: number; is_include: boolean; key_name: string; passthrough_value: string | null }>(`
@@ -112,7 +114,7 @@ export async function loadReferenceData(pool: sql.ConnectionPool): Promise<Refer
     for (const id of from('brands')) for (const b of brands.filter((x) => x.account_id === id)) if (!brandNames.some((n) => n.toLowerCase() === b.name.toLowerCase())) brandNames.push(b.name);
     out.set(a.account_code, {
       code: a.account_code,
-      customerCode: codeOf.get(rootOf(a.account_id)) ?? a.account_code,
+      customerCode: codeOf.get(holderOf(a.account_id)) ?? a.account_code,
       invoicingCode: codeOf.get(a.invoicing_account_id) ?? a.account_code,
       brands: brandNames,
       batchingKey: nearest('matching')?.batching_key ?? null,

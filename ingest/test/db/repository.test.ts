@@ -191,6 +191,19 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     expect((await repo.batchEvents(batchId)).map((e) => e.type)).toEqual(['Created', 'Printed', 'Enclosed', 'Cancelled']);
   });
 
+  it('a job belongs to the account that holds the settings: itself, or the nearest ancestor that does not inherit', async () => {
+    const add = async (code: string, parent: string | null, inherits: number): Promise<void> => {
+      await pool.request().query(`INSERT INTO idoc.account (account_code, name, parent_account_id, inherits_settings)
+        VALUES (N'${code}', N'${code}', ${parent ? `(SELECT account_id FROM idoc.account WHERE account_code = N'${parent}')` : 'NULL'}, ${inherits})`);
+    };
+    await add('HOLD_TOP', null, 0); await add('HOLD_MID', 'HOLD_TOP', 0); await add('HOLD_LEAF', 'HOLD_MID', 1); await add('HOLD_LEAF2', 'HOLD_LEAF', 1);
+    const ref = await loadReferenceData(pool);
+    expect(ref.accounts.get('HOLD_TOP')!.customerCode).toBe('HOLD_TOP');
+    expect(ref.accounts.get('HOLD_MID')!.customerCode).toBe('HOLD_MID');     // its own settings: not the top of the tree
+    expect(ref.accounts.get('HOLD_LEAF')!.customerCode).toBe('HOLD_MID');    // inherits: the nearest account above with its own settings
+    expect(ref.accounts.get('HOLD_LEAF2')!.customerCode).toBe('HOLD_MID');   // through two levels of inheriting
+  });
+
   it('costing models: the one in force on the day, inherited by sub-accounts, with its rates', async () => {
     const acct = async (code: string, parent: string | null, extra = ''): Promise<number> => scalar(`
       INSERT INTO idoc.account (account_code, name, parent_account_id${extra ? ', ' + extra.split('=')[0] : ''}) OUTPUT INSERTED.account_id AS n

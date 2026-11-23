@@ -41,7 +41,7 @@ export interface EnvelopeOption {
 export interface AccountConfig {
   /** Submitting account code (XML OwnerAccount). */
   code: string;
-  /** Customer code: the root of the account tree, which is the batching boundary. Equals code for a root account. */
+  /** The account that holds this account's settings (itself, or the nearest ancestor that does not inherit): the account its jobs, batches and mailpieces belong to, and the batching boundary. Equals code for an account with its own settings. */
   customerCode: string;
   /** The account invoiced for this account's mail (itself, or an ancestor). */
   invoicingCode: string;
