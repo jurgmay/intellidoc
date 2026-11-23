@@ -40,6 +40,12 @@ export interface PricingInput {
   /** Packs merged into the mailpiece. */
   packs: number;
   colourPages: number; monoPages: number; blankPages: number;
+  /**
+   * Sheets the mailpiece prints on: the mailpiece's own sheet count, the one that decided its weight and envelope. Each pack is
+   * printed on whole sheets (the composer pads an odd pack with a blank page), and a pack that is not duplex takes a sheet a page, so
+   * this is not simply half the pages.
+   */
+  sheets: number;
   inserts: number;
   enclosing: 'Machine' | 'Hand';
   isOversticker: boolean;

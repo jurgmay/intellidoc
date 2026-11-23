@@ -8,8 +8,8 @@ const label = (code: ChargeCode): string => CHARGES.find((c) => c.code === code)
 
 /**
  * Prices one mailpiece from a costing model. Production lines add up to the production cost and sell price; postage is
- * kept apart. Unit sell price = the charge's sell price + its adjustment. Page counts are for the whole mailpiece, and
- * a sheet is two pages. Every line is rounded to four decimal places before it is added, so totals are the sum of the
+ * kept apart. Unit sell price = the charge's sell price + its adjustment. Page counts are for the whole mailpiece; sheets
+ * come from the mailpiece (see PricingInput.sheets), because a pack is printed on whole sheets. Every line is rounded to four decimal places before it is added, so totals are the sum of the
  * lines shown.
  */
 export function priceMailpiece(model: CostingModel, input: PricingInput): Pricing {
@@ -24,8 +24,7 @@ export function priceMailpiece(model: CostingModel, input: PricingInput): Pricin
   };
   const charge = (code: ChargeCode, quantity: number, sellOnly = false): void => add(code, label(code), quantity, rate(code), sellOnly);
 
-  const pages = input.colourPages + input.monoPages + input.blankPages;
-  const sheets = Math.ceil(pages / 2);
+  const sheets = input.sheets;
 
   charge('HPOD', 1);
   charge('PROCESSING', 1);

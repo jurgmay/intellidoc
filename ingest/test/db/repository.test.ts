@@ -348,14 +348,16 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
       const customer = await scalar(`SELECT account_id AS n FROM idoc.job WHERE job_id = ${jobId}`);
       const id = await scalar(`INSERT INTO idoc.costing_model (account_id, name, valid_from) OUTPUT INSERTED.costing_model_id AS n VALUES (${customer}, N'Test prices', '2000-01-01')`);
       await pool.request().query(`INSERT INTO idoc.costing_model_rate (costing_model_id, charge_code, cost, sell_price, adjustment) VALUES
-        (${id}, N'HPOD', 0.1, 0.2, 0), (${id}, N'MONO_PAGE', 0.02, 0.04, 0.01), (${id}, N'COLOUR_PAGE', 0.08, 0.12, 0)`);
+        (${id}, N'HPOD', 0.1, 0.2, 0), (${id}, N'MONO_PAGE', 0.02, 0.04, 0.01), (${id}, N'COLOUR_PAGE', 0.08, 0.12, 0), (${id}, N'PAPER_SHEET', 0, 0, 0)`);
       return id;
     };
     const mps = async (jobId: number) => (await pool.request().query(
       `SELECT mailpiece_id, costing_model_id, production_cost, production_sell, postage_cost, priced_at, price_warnings,
               (SELECT SUM(sell) FROM idoc.mailpiece_price_line l WHERE l.mailpiece_id = m.mailpiece_id) AS line_sell,
               (SELECT SUM(cost) FROM idoc.mailpiece_price_line l WHERE l.mailpiece_id = m.mailpiece_id) AS line_cost,
-              (SELECT SUM(quantity) FROM idoc.mailpiece_price_line l WHERE l.mailpiece_id = m.mailpiece_id AND l.charge_code = N'MONO_PAGE') AS mono_qty
+              (SELECT SUM(quantity) FROM idoc.mailpiece_price_line l WHERE l.mailpiece_id = m.mailpiece_id AND l.charge_code = N'MONO_PAGE') AS mono_qty,
+              (SELECT SUM(quantity) FROM idoc.mailpiece_price_line l WHERE l.mailpiece_id = m.mailpiece_id AND l.charge_code = N'PAPER_SHEET') AS paper_qty,
+              m.sheet_count
        FROM idoc.mailpiece m WHERE job_id = ${jobId} ORDER BY mailpiece_id`)).recordset;
 
     // no costing model yet: the job is saved and its mailpieces stay unpriced
@@ -372,6 +374,7 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
       expect(m.costing_model_id).toBe(m1);
       expect(Number(m.production_sell)).toBeCloseTo(Number(m.line_sell), 4);
       expect(Number(m.production_cost)).toBeCloseTo(Number(m.line_cost), 4);
+      expect(Number(m.paper_qty)).toBe(Number(m.sheet_count)); // paper is billed on the sheets the mailpiece was counted as, as the composer prints them
     }
     // pack 1 is two mono pages: 0.20 + 2 x (0.04 + 0.01); pack 2 is a colour and a mono page: 0.20 + 0.12 + 0.05
     expect(Number(priced[0]!.production_sell)).toBeCloseTo(0.3, 4);

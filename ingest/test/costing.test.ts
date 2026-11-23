@@ -14,10 +14,12 @@ const model = (): CostingModel => ({
   envelopes: new Map([[7, r(0.04, 0.08, 0.01)]]),
   postageAdjustments: new Map([[3, 0.05]]),
 });
-const input = (over: Partial<PricingInput> = {}): PricingInput => ({
-  packs: 1, colourPages: 0, monoPages: 2, blankPages: 0, inserts: 0, enclosing: 'Hand', isOversticker: false, batchMailpieces: 50, postalFormat: 'Letter',
-  isAddressMatching: false, envelopeStockItemId: 7, postageRate: { id: 3, cost: 0.55, sellPrice: 0.70 }, ...over,
-});
+/** `sheets` is the mailpiece's own count; unless a test says otherwise it is one sheet to two pages in one pack. */
+const input = (over: Partial<PricingInput> = {}): PricingInput => {
+  const base = { packs: 1, colourPages: 0, monoPages: 2, blankPages: 0, inserts: 0, enclosing: 'Hand' as const, isOversticker: false, batchMailpieces: 50, postalFormat: 'Letter',
+    isAddressMatching: false, envelopeStockItemId: 7 as number | null, postageRate: { id: 3, cost: 0.55, sellPrice: 0.70 } as PricingInput['postageRate'], ...over };
+  return { sheets: Math.ceil((base.colourPages + base.monoPages + base.blankPages) / 2), ...base };
+};
 const line = (p: ReturnType<typeof priceMailpiece>, code: string) => p.lines.find((l) => l.code === code);
 
 describe('priceMailpiece', () => {
@@ -80,5 +82,17 @@ describe('priceMailpiece', () => {
     const p = priceMailpiece(m, input({ monoPages: 3 }));
     expect(line(p, 'MONO_PAGE')).toMatchObject({ unitCost: 0.0123, cost: 0.037, sell: 0.1 });
     expect(p.productionSell).toBe(Math.round(p.lines.reduce((t, l) => t + l.sell, 0) * 10_000) / 10_000);
+  });
+
+  it('bills the sheets the mailpiece prints on, not half its pages: each pack is printed on whole sheets', () => {
+    // two packs of 3 pages: 6 pages, but 2 + 2 = 4 sheets, because the composer pads each odd pack with a blank page
+    const p = priceMailpiece(model(), input({ packs: 2, monoPages: 6, sheets: 4 }));
+    expect(line(p, 'PAPER_SHEET')).toMatchObject({ quantity: 4, cost: 0.04, sell: 0.08 });
+    expect(line(p, 'HAND_ENCLOSING_SHEET')).toMatchObject({ quantity: 3 });   // every sheet after the first
+    expect(line(p, 'MONO_PAGE')).toMatchObject({ quantity: 6 });               // the padding blank is not a charged page
+    expect(line(p, 'BLANK_PAGE')).toBeUndefined();
+  });
+  it('bills a sheet a page for a pack that is not duplex', () => {
+    expect(line(priceMailpiece(model(), input({ monoPages: 3, sheets: 3 })), 'PAPER_SHEET')).toMatchObject({ quantity: 3 });
   });
 });

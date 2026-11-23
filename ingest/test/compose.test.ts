@@ -57,6 +57,20 @@ describe('planBatch', () => {
     expect(s!.packs).toEqual([{ packId: 3, outputStart: 3, outputEnd: 4 }, { packId: 1, outputStart: 5, outputEnd: 8 }, { packId: 2, outputStart: 9, outputEnd: 10 }]);
     expect(s!.pages.filter((p) => p.mailpieceStart).map((p) => p.sourcePage)).toEqual([5, 1]);
   });
+  it('prints each mailpiece on the sheets the import counted (a duplex pack is ceil(pages / 2) sheets), which is what pricing bills', () => {
+    // mailpieces of one to three packs of one to five pages; the import's sheet_count is the sum of ceil(pages / 2) over the packs
+    const shapes = [[1], [2], [3], [3, 3], [1, 2, 5], [4, 1], [5, 5, 5]];
+    let source = 1;
+    const mps = shapes.map((sizes, i) => mp(i + 1, sizes.map((n, j) => { const p = pack(i * 10 + j + 1, source, source + n - 1); source += n; return p; })));
+    const plan = planBatch(mps, { maxPagesPerPdf: 1000, runSheetPages: 0 });
+    const [s] = plan.segments;
+    const starts = s!.mailpieces.map((m) => m.outputPage).concat(s!.pages.length + 1);
+    shapes.forEach((sizes, i) => {
+      const at = s!.mailpieces.findIndex((m) => m.mailpieceId === i + 1);
+      const printedPages = starts[at + 1]! - starts[at]!;
+      expect(printedPages / 2, `mailpiece ${i + 1}`).toBe(sizes.reduce((t, n) => t + Math.ceil(n / 2), 0));
+    });
+  });
   it('closes a file after the mailpiece that takes it past the limit', () => {
     const mps = [1, 2, 3, 4].map((i) => mp(i, [pack(i, i * 2 - 1, i * 2)], { weightBandG: i })); // 2 pages each
     const plan = planBatch(mps, { maxPagesPerPdf: 5, runSheetPages: 0 });

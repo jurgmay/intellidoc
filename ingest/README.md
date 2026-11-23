@@ -204,7 +204,7 @@ Every batch gets a `Created` row in `idoc.batch_event` when it is made. `MssqlRe
 
 ## Costing models
 
-`idoc.costing_model` (named price list, per customer, between two dates) with its rates, envelope prices and postage adjustments. `findCostingModel(pool, accountId, day)` (src/mssql/costing.ts) returns the model in force for an account, following the account's `costing_mode` (OWN or INHERIT). `priceMailpiece(model, input)` (src/costing) returns the price line by line. Nothing prices mailpieces at production yet. Rebuild the scratch DB after pulling this (`npm run db:rebuild <folder>`).
+`idoc.costing_model` (named price list, per customer, between two dates) with its rates, envelope prices and postage adjustments. `findCostingModel(pool, accountId, day)` (src/mssql/costing.ts) returns the model in force for an account, following the account's `costing_mode` (OWN or INHERIT). `priceMailpiece(model, input)` (src/costing) returns the price line by line. See "Price at production" below for when it is used.
 
 ## Page colour analysis
 
@@ -212,7 +212,7 @@ Each PDF page is classed as blank, mono or colour (`src/pdfInk.ts`) and the coun
 
 ## Price at production
 
-When a job is Received, `priceJob` (`src/mssql/pricing.ts`) prices each mailpiece from the customer's costing model and stores the totals and the lines on the mailpiece. A mailpiece with no model that day, or with unknown page colours, stays unpriced. The schema changed: reset the scratch database (`npm run db:rebuild <folder>`), then run `npm run test:db`. See docs/account-structure.md.
+When a job is Received, `priceJob` (`src/mssql/pricing.ts`) prices each mailpiece from the customer's costing model and stores the totals and the lines on the mailpiece. A mailpiece with no model that day, or with unknown page colours, stays unpriced. Paper and the extra-sheet enclosing charges use the mailpiece's own sheet count (each pack is printed on whole sheets, as the composer lays it out), not half the pages; mail priced earlier keeps its price until "Price mail again". The last change needs no schema change or rebuild; run `npm run test:db` to check it. See docs/account-structure.md.
 
 ## Production gate
 
