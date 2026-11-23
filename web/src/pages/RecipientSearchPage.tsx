@@ -3,9 +3,10 @@ import { Alert, Badge, Button, Group, Loader, Paper, Select, Stack, Table, Text,
 import { IconAlertCircle, IconSearch } from '@tabler/icons-react';
 import { ApiError } from '../api/client';
 import { MailpiecePriceModal } from './MailpiecePriceModal';
+import { EMPTY_FORM, getRecipientSearchSession, saveRecipientSearchSession } from './recipientSearchSession';
 import { listScopes, searchRecipients, type RecipientResult, type SearchScope } from '../api/recipients';
 
-const EMPTY = { name: '', address: '', reference: '', referenceKey: '', from: '', to: '' };
+const EMPTY = EMPTY_FORM;
 const day = (iso: string): string => iso.slice(0, 10);
 /** The address under the name, in one line: the lines after the addressee, then the postcode (unless the lines already end with it). */
 const addressLine = (lines: string[], postcode: string): string => [...lines.slice(1), ...(postcode && !lines.includes(postcode) ? [postcode] : [])].join(', ');
@@ -13,14 +14,18 @@ const addressLine = (lines: string[], postcode: string): string => [...lines.sli
 /** Finds where a person's letters went. A search always covers one account and the accounts below it, never the whole system. */
 export function RecipientSearchPage() {
   const [scopes, setScopes] = useState<SearchScope[] | null>(null);
-  const [account, setAccount] = useState<string | null>(null);
-  const [form, setForm] = useState(EMPTY);
+  const kept = getRecipientSearchSession();
+  const [account, setAccount] = useState<string | null>(kept.account);
+  const [form, setForm] = useState(kept.form);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [result, setResult] = useState<RecipientResult | null>(null);
+  const [result, setResult] = useState<RecipientResult | null>(kept.result);
+  const [searchedAt, setSearchedAt] = useState<string | null>(kept.searchedAt);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [priceOf, setPriceOf] = useState<number | null>(null);
 
+  // keep what is on the page, so it is still there after going to another page and coming back
+  useEffect(() => { saveRecipientSearchSession({ account, form, result, searchedAt }); }, [account, form, result, searchedAt]);
   useEffect(() => { listScopes().then((r) => setScopes(r.rows)).catch((e: Error) => setError(e.message)); }, []);
   const set = (k: keyof typeof EMPTY) => (e: { currentTarget: { value: string } }) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, [k]: v })); };
 
@@ -29,7 +34,7 @@ export function RecipientSearchPage() {
     setError(null); setErrors({});
     if (!account) { setErrors({ accountId: 'Choose the account to search in. A search covers that account and the accounts below it.' }); return; }
     setBusy(true);
-    try { setResult(await searchRecipients({ accountId: Number(account), ...form })); }
+    try { setResult(await searchRecipients({ accountId: Number(account), ...form })); setSearchedAt(new Date().toISOString()); }
     catch (err) {
       setResult(null);
       if (err instanceof ApiError && err.fieldErrors) setErrors(err.fieldErrors); else setError((err as Error).message);
@@ -57,7 +62,7 @@ export function RecipientSearchPage() {
             {errors['limit'] && <Text c="red" size="sm">{errors['limit']}</Text>}
             <Group>
               <Button type="submit" leftSection={<IconSearch size={16} />} loading={busy}>Search</Button>
-              <Button variant="default" onClick={() => { setForm(EMPTY); setErrors({}); setResult(null); }}>Clear</Button>
+              <Button variant="default" onClick={() => { setForm(EMPTY); setErrors({}); setResult(null); setSearchedAt(null); }}>Clear</Button>
             </Group>
           </Stack>
         </form>
@@ -71,6 +76,7 @@ export function RecipientSearchPage() {
           <Text size="sm" c="dimmed">
             {result.rows.length === 0 ? 'Nothing found' : `${result.rows.length} found`} in {result.scope.label} and below.
             {result.truncated && ' There are more than this. Narrow the search to see the rest.'}
+            {searchedAt && <> Searched at {new Date(searchedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}; search again to refresh.</>}
           </Text>
           {result.rows.length > 0 && (
             <Table striped withTableBorder>
