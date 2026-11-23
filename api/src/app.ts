@@ -12,6 +12,8 @@ import type { CostingStore } from './costing/types.js';
 import { customerRoutes } from './customers/routes.js';
 import type { CustomerStore } from './customers/types.js';
 import { ConflictError, NotFoundError, ValidationError } from './errors.js';
+import { batchRoutes } from './batches/routes.js';
+import type { BatchStore } from './batches/types.js';
 import { recipientRoutes } from './recipients/routes.js';
 import type { RecipientStore } from './recipients/types.js';
 import { jobRoutes } from './jobs/routes.js';
@@ -28,7 +30,7 @@ import { hpodErrorStatus, hpodRoutes } from './hpod/routes.js';
 import type { HpodService } from './hpod/service.js';
 import { HpodError } from '../../ingest/src/hpod/client.js';
 
-export interface AppDeps { activity?: Omit<ActivityDeps, 'jobs' | 'settings'>; settings: SettingsStore; customers: CustomerStore; costing: CostingStore; postal: PostalStore; reference: ReferenceStore; reprice: RepriceStore; recipients: RecipientStore; reports: ReportStore; /** Jobs and making their print files. Optional so a server without print folders can still start. */ jobs?: JobDeps; /** The H-POD module (sign-in session, submissions, tracking, every API call). Optional so a test can leave it out. */ hpod?: HpodService; /** The checks behind the test buttons on Settings > Connectivity (sending an e-mail, signing in to H-POD); tests pass fakes. */ connectivity?: Connectivity; /** Draws the marks preview (needs Ghostscript); tests pass a fake. */ marksPreview?: MarksPreviewer; /** Folder with the built web app, served at / when it exists. */ webDir?: string }
+export interface AppDeps { activity?: Omit<ActivityDeps, 'jobs' | 'settings'>; settings: SettingsStore; customers: CustomerStore; costing: CostingStore; postal: PostalStore; reference: ReferenceStore; reprice: RepriceStore; recipients: RecipientStore; /** The Batches page. Optional so a test can leave it out. */ batches?: BatchStore; reports: ReportStore; /** Jobs and making their print files. Optional so a server without print folders can still start. */ jobs?: JobDeps; /** The H-POD module (sign-in session, submissions, tracking, every API call). Optional so a test can leave it out. */ hpod?: HpodService; /** The checks behind the test buttons on Settings > Connectivity (sending an e-mail, signing in to H-POD); tests pass fakes. */ connectivity?: Connectivity; /** Draws the marks preview (needs Ghostscript); tests pass a fake. */ marksPreview?: MarksPreviewer; /** Folder with the built web app, served at / when it exists. */ webDir?: string }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
@@ -40,6 +42,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   referenceRoutes(app, deps.reference);
   repriceRoutes(app, deps.reprice);
   recipientRoutes(app, deps.recipients);
+  if (deps.batches) batchRoutes(app, deps.batches);
   reportRoutes(app, deps.reports);
   if (deps.hpod) hpodRoutes(app, deps.hpod);
   if (deps.jobs) jobRoutes(app, deps.jobs);

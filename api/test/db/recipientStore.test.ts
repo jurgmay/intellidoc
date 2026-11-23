@@ -16,7 +16,7 @@ describe.skipIf(!cs)('MssqlRecipientStore', { timeout: 120_000 }, () => {
   // The ingest code has its own copy of the mssql package, so it gets its own connection (mixing the two breaks parameter types).
   let pool: sql.ConnectionPool; let ipool: Awaited<ReturnType<typeof connectIngest>>; let store: MssqlRecipientStore;
   let customer: number; let sub: number; let child: number; let other: number;
-  const q = (over: Partial<RecipientQuery>): RecipientQuery => ({ accountId: customer, name: null, address: null, reference: null, referenceKey: null, from: null, to: null, limit: 100, ...over });
+  const q = (over: Partial<RecipientQuery>): RecipientQuery => ({ accountId: customer, name: null, address: null, reference: null, referenceKey: null, from: null, to: null, batchId: null, limit: 100, offset: 0, ...over });
   const names = async (over: Partial<RecipientQuery>): Promise<string[]> => (await store.search(q(over))).rows.map((r) => r.addressLines[0]!).sort();
   const person = (first: string, surname: string, extra: Partial<PackSpec> = {}): PackSpec =>
     ({ first, surname, lines: [`${first} ${surname}`, '1 High Street', 'Town', 'AB1 2CD'], ...extra });

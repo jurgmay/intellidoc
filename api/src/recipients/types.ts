@@ -13,7 +13,11 @@ export interface RecipientQuery {
   /** Release date range of any of the mailpiece's packs, inclusive, as YYYY-MM-DD. */
   from: string | null;
   to: string | null;
+  /** Only the mailpieces of this batch (the Batches page opens a batch this way); then no search term is needed and they come in print order. */
+  batchId: number | null;
   limit: number;
+  /** How many rows to skip, to read a long list in pages. */
+  offset: number;
 }
 
 /** One pack (letter) inside a mailpiece. */
@@ -33,6 +37,8 @@ export interface RecipientPack {
 /** One mailpiece (one envelope to one recipient) with the packs enclosed in it, in envelope order. A search always returns mailpieces. */
 export interface RecipientRow {
   mailpieceId: number;
+  /** Its place in the batch, in print order, once the batch has been composed. */
+  sequenceNumber: number | null;
   batchCode: number | null;
   batchStatus: string | null;
   job: string;

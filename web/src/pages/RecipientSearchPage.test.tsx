@@ -9,7 +9,7 @@ import { resetRecipientSearchSession } from './recipientSearchSession';
 
 const scopes = [{ id: 1, label: 'Odevo', isCustomer: true }, { id: 2, label: 'Odevo > Highline Solicitors', isCustomer: false }];
 const hit = {
-  mailpieceId: 5, batchCode: 7001, batchStatus: 'Printed', job: 'job-9', releaseDate: '2026-11-18T09:30:00', addressLines: ['Mrs A Patel', '12 Mill Lane', 'Leeds'], postcode: 'LS1 4AB', isCancelled: false,
+  mailpieceId: 5, sequenceNumber: 1 as number | null, batchCode: 7001, batchStatus: 'Printed', job: 'job-9', releaseDate: '2026-11-18T09:30:00', addressLines: ['Mrs A Patel', '12 Mill Lane', 'Leeds'], postcode: 'LS1 4AB', isCancelled: false,
   accountCode: 'ODEVO_HIGHLINE', accountName: 'Highline Solicitors', accountPath: 'Odevo > Highline Solicitors', invoicingCode: 'ODEVO', invoicingName: 'Odevo', brand: 'Home', priceSell: 1.05 as number | null,
   packs: [
     { packId: 12, position: 1, sequence: 1, startPage: 3, pageCount: 2, releaseDate: '2026-11-18T09:30:00', references: { 'Tenant Reference': 'T-1001', 'Document Type': 'Bill' } },
