@@ -7,14 +7,14 @@ import { theme } from '../theme';
 import { SettingsPage } from './SettingsPage';
 
 const payload = {
-  groups: ['Enclosing', 'PDF and alerts', 'Print production settings', 'MRDF page codes'],
+  groups: ['Enclosing', 'PDF and alerts', 'Print production settings', 'Sequence number', 'MRDF page codes'],
   settings: [
     { key: 'machineEnclosingMaxSheets', group: 'Enclosing', label: 'Machine enclosing: maximum sheets per letter', type: 'integer', unit: 'sheets', min: 1, max: 500,
       description: 'The machine can enclose letters of up to this many sheets.', usedBy: 'Import: routes mailpieces.', appliesTo: 'Next file imported.', value: 12 },
     { key: 'xmlFirstEnabled', group: 'PDF and alerts', label: 'Import an XML without waiting for its PDF', type: 'boolean',
       description: 'When on, an XML is imported as soon as it arrives.', usedBy: 'Folder watcher.', appliesTo: 'No restart needed.', value: true },
     { key: 'autoCompose', group: 'Print production settings', label: 'Make print files automatically', type: 'boolean', description: 'Make the print files as soon as a job is ready.', usedBy: 'Folder watcher.', appliesTo: 'No restart needed.', value: false },
-    { key: 'markSeqFontPt', group: 'Print production settings', label: 'Sequence number: font size', type: 'number', unit: 'pt', min: 1, max: 72, description: 'Size of the sequence number.', usedBy: 'Print files.', appliesTo: 'Next print files.', value: 8 },
+    { key: 'markSeqFontPt', group: 'Sequence number', label: 'Font size', type: 'number', unit: 'pt', min: 1, max: 72, description: 'Size of the sequence number.', usedBy: 'Print files.', appliesTo: 'Next print files.', value: 8 },
     { key: 'mrdfOcrHeightMm', group: 'MRDF page codes', label: 'OCR code: box height', type: 'number', unit: 'mm', min: 0.1, max: 400, description: 'Height of the OCR code box.', usedBy: 'MRDF.', appliesTo: 'Next print files.', value: 4 },
   ],
   batchCode: { highestUsed: 1041, next: 1042 },
@@ -56,11 +56,12 @@ describe('SettingsPage', () => {
     let panel = within(screen.getByRole('tabpanel'));
     expect(panel.getByText('Machine enclosing: maximum sheets per letter')).toBeInTheDocument();
     expect(panel.getByText('Make print files automatically')).toBeInTheDocument();
-    expect(panel.queryByText('Sequence number: font size')).toBeNull();
+    expect(panel.queryByText('Font size')).toBeNull();
     expect(screen.getAllByText('No unsaved changes')).toHaveLength(1);
     await userEvent.click(screen.getByRole('tab', { name: 'Control marks' }));
     panel = within(screen.getByRole('tabpanel'));
-    expect(panel.getByText('Sequence number: font size')).toBeInTheDocument();
+    expect(panel.getByRole('heading', { name: 'Sequence number' })).toBeInTheDocument();
+    expect(panel.getByText('Font size')).toBeInTheDocument();
     expect(panel.getByText('OCR code: box height')).toBeInTheDocument();
     expect(panel.queryByText('Make print files automatically')).toBeNull();
     expect(screen.getByText('No unsaved changes')).toBeInTheDocument();

@@ -1,5 +1,5 @@
 import sql from 'mssql';
-import { BY_KEY, SETTINGS, type SettingValue } from './catalogue.js';
+import { BY_KEY, nameOf, SETTINGS, type SettingValue } from './catalogue.js';
 
 export interface AuditRow { id: number; changedAt: string; changedBy: string; setting: string; oldValue: string | null; newValue: string | null }
 export interface Change { key: string; oldValue: SettingValue; newValue: SettingValue }
@@ -54,7 +54,7 @@ export class MssqlSettingsStore implements SettingsStore {
       });
       await req.query(`UPDATE idoc.settings SET ${sets.join(', ')} WHERE settings_id = 1`);
       for (const c of changes) {
-        await new sql.Request(tx).input('by', sql.NVarChar(200), by).input('n', sql.NVarChar(100), BY_KEY.get(c.key)!.label)
+        await new sql.Request(tx).input('by', sql.NVarChar(200), by).input('n', sql.NVarChar(100), nameOf(BY_KEY.get(c.key)!))
           .input('o', sql.NVarChar(1000), fmt(c.oldValue)).input('v', sql.NVarChar(1000), fmt(c.newValue))
           .query('INSERT INTO idoc.settings_audit (changed_by, setting_name, old_value, new_value) VALUES (@by, @n, @o, @v)');
       }
@@ -107,7 +107,7 @@ export class MemorySettingsStore implements SettingsStore {
   async update(changes: Change[], by: string): Promise<void> {
     for (const c of changes) {
       this.values[c.key] = c.newValue;
-      this.rows.unshift({ id: this.rows.length + 1, changedAt: this.now(), changedBy: by, setting: BY_KEY.get(c.key)!.label, oldValue: fmt(c.oldValue), newValue: fmt(c.newValue) });
+      this.rows.unshift({ id: this.rows.length + 1, changedAt: this.now(), changedBy: by, setting: nameOf(BY_KEY.get(c.key)!), oldValue: fmt(c.oldValue), newValue: fmt(c.newValue) });
     }
   }
   async audit(limit: number): Promise<AuditRow[]> { return this.rows.slice(0, limit); }
