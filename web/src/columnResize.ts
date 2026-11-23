@@ -1,10 +1,31 @@
 /**
  * Lets the user drag the right edge of any table column header to resize that column, in every table of the app, without each page doing anything.
  * A watcher adds a drag handle to every header cell of every table (including tables that appear later, such as when data arrives or a tab opens).
- * The first drag fixes every column at its current width, so the others stay where they are and a table wider than its box scrolls sideways.
+ * The table keeps its width: widening a column takes the space from the columns to its right (nearest first, none below the minimum), and narrowing
+ * one gives the space to the next column, so nothing is ever pushed out of the table. The last column has no handle, as its left neighbour's handle
+ * moves the same boundary.
  */
 export const MIN_COLUMN_PX = 40;
 const DONE = 'data-col-resize';
+
+/**
+ * The widths after moving the right edge of column `i` by `delta` px, with the total unchanged: a wider column takes space from the columns to its
+ * right, nearest first, never taking one below the minimum (so the drag stops when they are all at the minimum); a narrower one gives its space to
+ * the next column, and never goes below the minimum itself.
+ */
+export function resizeColumns(widths: number[], i: number, delta: number): number[] {
+  const out = [...widths];
+  if (i >= widths.length - 1) return out;
+  if (delta >= 0) {
+    let want = Math.min(delta, widths.slice(i + 1).reduce((t, w) => t + Math.max(0, w - MIN_COLUMN_PX), 0));
+    out[i] = widths[i]! + want;
+    for (let j = i + 1; j < widths.length && want > 0; j++) { const take = Math.min(want, Math.max(0, widths[j]! - MIN_COLUMN_PX)); out[j] = widths[j]! - take; want -= take; }
+  } else {
+    const give = Math.min(-delta, Math.max(0, widths[i]! - MIN_COLUMN_PX));
+    out[i] = widths[i]! - give; out[i + 1] = widths[i + 1]! + give;
+  }
+  return out;
+}
 
 /** Adds the drag handles to the headers of `table` (once). Returns false when it has nothing to resize. */
 export function enhanceTable(table: HTMLTableElement): boolean {
@@ -18,20 +39,16 @@ export function enhanceTable(table: HTMLTableElement): boolean {
     if (frozen) return;
     frozen = true;
     const widths = cells.map((c) => c.getBoundingClientRect().width);
-    const box = table.parentElement;
-    // The table may now be wider than the space it sits in: let that box scroll rather than spill out.
-    if (box && getComputedStyle(box).overflowX === 'visible') box.style.overflowX = 'auto';
-    cells.forEach((c, i) => { c.style.width = `${widths[i]}px`; c.style.minWidth = `${widths[i]}px`; });
+    cells.forEach((c, i) => { c.style.width = `${widths[i]}px`; c.style.minWidth = '0'; });
     table.style.tableLayout = 'fixed';
-    table.style.width = `${widths.reduce((a, b) => a + b, 0)}px`;
-    table.style.maxWidth = 'none';
+    table.style.width = `${table.getBoundingClientRect().width}px`;
     table.setAttribute('data-col-fixed', '');
   };
-  cells.forEach((cell) => {
-    if (cell.colSpan > 1) return;
+  cells.forEach((cell, i) => {
+    if (cell.colSpan > 1 || i === cells.length - 1) return;
     cell.style.position = 'relative';
-    const handle = document.createElement('span');
     let dragging = false;
+    const handle = document.createElement('span');
     handle.setAttribute('data-col-handle', '');
     handle.setAttribute('role', 'separator');
     handle.setAttribute('aria-orientation', 'vertical');
@@ -43,14 +60,13 @@ export function enhanceTable(table: HTMLTableElement): boolean {
     handle.addEventListener('pointerdown', (e) => {
       e.preventDefault(); e.stopPropagation();
       freeze(); dragging = true;
-      const startX = e.clientX, startWidth = cell.getBoundingClientRect().width, startTable = table.getBoundingClientRect().width;
+      const startX = e.clientX, start = cells.map((c) => c.getBoundingClientRect().width);
       try { handle.setPointerCapture(e.pointerId); } catch { /* not supported: the document listeners below still follow the pointer */ }
       const move = (m: PointerEvent) => {
-        const w = Math.max(MIN_COLUMN_PX, startWidth + (m.clientX - startX));
-        cell.style.width = `${w}px`; cell.style.minWidth = `${w}px`;
-        table.style.width = `${startTable + (w - startWidth)}px`;
+        const next = resizeColumns(start, i, m.clientX - startX);
+        cells.forEach((c, k) => { c.style.width = `${next[k]}px`; });
       };
-      const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); dragging = false; handle.style.borderRightColor = 'transparent'; };
+      const up = () => { dragging = false; handle.style.borderRightColor = 'transparent'; document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
       document.addEventListener('pointermove', move); document.addEventListener('pointerup', up);
     });
     cell.appendChild(handle);
