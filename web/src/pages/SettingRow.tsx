@@ -17,7 +17,10 @@ export function SettingRow({ setting: s, value, changed, error, onChange }: Prop
       break;
     case 'number':
     case 'integer':
-      control = (
+      control = s.allowed ? (
+        <Select label={label} data={s.allowed.map((n) => ({ value: String(n), label: `${n}${s.unit ?? ''}` }))} value={String(value)} onChange={(v) => v !== null && onChange(Number(v))}
+          allowDeselect={false} error={error} />
+      ) : (
         <NumberInput label={label} value={value as number} onChange={(v) => onChange(v as number)} min={s.min} max={s.max} step={s.step ?? 1}
           decimalScale={s.type === 'integer' ? 0 : 3} rightSection={<Text size="xs" c="dimmed" pr="xs">{s.unit}</Text>} rightSectionWidth={s.unit ? 80 : undefined}
           error={error} allowNegative={false} />

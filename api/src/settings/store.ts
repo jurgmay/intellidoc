@@ -96,7 +96,7 @@ export class MemorySettingsStore implements SettingsStore {
     handEnclosingMaxSheets: 125, xmlFirstEnabled: true, pdfWaitMinutes: 30, pdfReminderMinutes: 30, alertRecipients: '', emailRunSheets: false, runSheetRecipients: '',
     autoCompose: false, maxPagesPerPdf: 10000, pageWidthMm: 210, pageHeightMm: 297, windowLeftMm: 15, windowTopMm: 25, windowWidthMm: 90, windowHeightMm: 35, markSeqFontPt: 8, markSeqLeftMm: 20, markSeqTopMm: 40, markSeqWidthMm: 45, markSeqHeightMm: 4,
     markDmLeftMm: 20, markDmTopMm: 30, markDmWidthMm: 8, markDmHeightMm: 8, markDotXMm: 205.5, markDotYMm: 269, markDotDiameterMm: 2,
-    mrdfDmLeftMm: 10, mrdfDmTopMm: 10, mrdfDmWidthMm: 8, mrdfDmHeightMm: 8, mrdfOcrFontPt: 8.2, mrdfOcrLeftMm: 20, mrdfOcrTopMm: 10, mrdfOcrWidthMm: 30, mrdfOcrHeightMm: 4,
+    mrdfDmLeftMm: 10, mrdfDmTopMm: 10, mrdfDmWidthMm: 8, mrdfDmHeightMm: 8, mrdfOcrFontPt: 8.2, mrdfOcrLeftMm: 20, mrdfOcrTopMm: 10, mrdfOcrWidthMm: 30, mrdfOcrHeightMm: 4, mrdfOcrRotationDeg: 0,
   };
   rows: AuditRow[] = [];
   highestUsed: number | null = 1041;

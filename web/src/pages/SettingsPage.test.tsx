@@ -17,6 +17,7 @@ const payload = {
     { key: 'markSeqFontPt', group: 'Sequence number', label: 'Font size', type: 'number', unit: 'pt', min: 1, max: 72, description: 'Size of the sequence number.', usedBy: 'Print files.', appliesTo: 'Next print files.', value: 8 },
     { key: 'windowWidthMm', group: 'Envelope window', label: 'Width', type: 'number', unit: 'mm', min: 0.1, max: 400, description: 'Width of the address window.', usedBy: 'Marks preview.', appliesTo: 'Next preview.', value: 90 },
     { key: 'pageWidthMm', group: 'Page size', label: 'Width', type: 'number', unit: 'mm', min: 50, max: 1000, description: 'Width of the page.', usedBy: 'Marks preview.', appliesTo: 'Next preview.', value: 210 },
+    { key: 'mrdfOcrRotationDeg', group: 'MRDF page codes', label: 'OCR code: rotation', type: 'integer', unit: '°', allowed: [0, 90, 180, 270], description: 'Turns the OCR code clockwise.', usedBy: 'MRDF.', appliesTo: 'Next print files.', value: 0 },
     { key: 'mrdfOcrHeightMm', group: 'MRDF page codes', label: 'OCR code: box height', type: 'number', unit: 'mm', min: 0.1, max: 400, description: 'Height of the OCR code box.', usedBy: 'MRDF.', appliesTo: 'Next print files.', value: 4 },
   ],
   batchCode: { highestUsed: 1041, next: 1042 },
@@ -92,6 +93,18 @@ describe('SettingsPage', () => {
     await user.clear(input); await user.type(input, '3');
     await user.click(screen.getByRole('button', { name: 'Save changes' }));
     expect((await screen.findAllByText(/must be at least 1/)).length).toBeGreaterThan(0);
+  });
+  it('offers the OCR code rotation as 0, 90, 180 and 270 and saves the choice as a number', async () => {
+    const user = userEvent.setup();
+    wrap();
+    await screen.findByText('Make print files automatically');
+    await user.click(screen.getByRole('tab', { name: 'Control marks' }));
+    await user.click(screen.getByDisplayValue('0°'));
+    expect(screen.getAllByRole('option', { hidden: true }).map((o) => o.textContent)).toEqual(['0°', '90°', '180°', '270°']);
+    await user.click(screen.getByRole('option', { name: '270°', hidden: true }));
+    await user.click(screen.getByRole('button', { name: 'Save changes' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'PUT')).toBe(true));
+    expect(calls.find((c) => c.method === 'PUT')!.body).toEqual({ values: { mrdfOcrRotationDeg: 270 } });
   });
   describe('Preview positions', () => {
     beforeEach(() => { URL.createObjectURL = vi.fn(() => 'blob:preview'); URL.revokeObjectURL = vi.fn(); });

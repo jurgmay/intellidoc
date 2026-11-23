@@ -73,7 +73,9 @@ CREATE TABLE idoc.settings (
     mrdf_ocr_top_mm                     DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_mrdf_ocr_top DEFAULT (10),
     mrdf_ocr_width_mm                   DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_mrdf_ocr_width DEFAULT (30),
     mrdf_ocr_height_mm                  DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_mrdf_ocr_height DEFAULT (4),
+    mrdf_ocr_rotation_deg               INT           NOT NULL CONSTRAINT df_settings_mrdf_ocr_rot DEFAULT (0),  -- clockwise about the centre of the OCR box: 0, 90, 180 or 270
     CONSTRAINT ck_settings_single_row CHECK (settings_id = 1),
+    CONSTRAINT ck_settings_mrdf_rot CHECK (mrdf_ocr_rotation_deg IN (0, 90, 180, 270)),
     CONSTRAINT ck_settings_mrdf CHECK (mrdf_dm_width_mm > 0 AND mrdf_dm_height_mm > 0 AND mrdf_ocr_font_pt > 0 AND mrdf_ocr_width_mm > 0 AND mrdf_ocr_height_mm > 0
         AND mrdf_dm_left_mm >= 0 AND mrdf_dm_top_mm >= 0 AND mrdf_ocr_left_mm >= 0 AND mrdf_ocr_top_mm >= 0),
     CONSTRAINT ck_settings_marks CHECK (max_pages_per_pdf >= 2 AND mark_seq_font_pt > 0 AND mark_seq_width_mm > 0 AND mark_seq_height_mm > 0
