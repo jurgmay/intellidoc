@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActivityData } from '../api/activity';
 import { theme } from '../theme';
-import { buildLines, duration, durationText, elapsed, size } from './activityLines';
+import { buildLines, duration, durationText, elapsed } from './activityLines';
 import { ActivityPage } from './ActivityPage';
 
 const job = (id: number, over: object = {}) => ({ id, customerCode: 'ACME', customerName: 'Acme', baseName: `j${id}`, pdfFileName: `j${id}.pdf`, receivedAt: `2026-11-22T10:0${id}:00.000Z`, status: 'Received',
@@ -61,12 +61,13 @@ describe('times', () => {
     const print = l.find((x) => x.detail?.startsWith('Print files:'))!;
     expect(print).toMatchObject({ stage: 'Completed' }); expect(durationText(print, NOW)).toBe('30s');
   });
-  it('shows Start time, End time and Duration columns instead of Time', async () => {
+  it('shows Start time, End time and Duration columns instead of Time, and no Size column', async () => {
     show();
     expect(await screen.findByRole('columnheader', { name: 'Start time' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'End time' })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: 'Duration' })).toBeInTheDocument();
     expect(screen.queryByRole('columnheader', { name: 'Time' })).toBeNull();
+    expect(screen.queryByRole('columnheader', { name: 'Size' })).toBeNull();
   });
 });
 
@@ -122,8 +123,7 @@ describe('PDF check progress and estimates', () => {
 });
 
 describe('formatting', () => {
-  it('sizes and elapsed times', () => {
-    expect(size(512)).toBe('512 B'); expect(size(2048)).toBe('2 KB'); expect(size(5 * 1_048_576)).toBe('5.0 MB'); expect(size(null)).toBe('');
+  it('elapsed times', () => {
     expect(elapsed('2026-11-22T21:04:30.000Z', NOW)).toBe('30s'); expect(elapsed('2026-11-22T21:02:00.000Z', NOW)).toBe('3m 0s'); expect(elapsed('2026-11-22T19:00:00.000Z', NOW)).toBe('2h 5m');
   });
 });
@@ -194,7 +194,7 @@ describe('ActivityPage', () => {
     show();
     await screen.findByText('a.xml');   // the table is there from the start; wait for its first rows
     const ra = (await screen.findAllByRole('row')).find((r) => within(r).queryByText('a.xml'))!;
-    expect(within(ra).getByText('Arrived')).toBeInTheDocument(); expect(within(ra).getByText('2 KB')).toBeInTheDocument();
+    expect(within(ra).getByText('Arrived')).toBeInTheDocument(); expect(within(ra).queryByText('2 KB')).toBeNull();
     const rb = (await screen.findAllByRole('row')).find((r) => within(r).queryByText('b.xml'))!;
     expect(within(rb).getByText('Not yet')).toBeInTheDocument();
     expect(await screen.findByText(/0 of 4 batches\. Batch 70 \(1 of 4\): file 2 of 3 built/)).toBeInTheDocument();
