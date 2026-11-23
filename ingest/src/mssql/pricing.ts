@@ -2,7 +2,7 @@ import sql from 'mssql';
 import { findCostingModel } from './costing.js';
 import { priceMailpiece } from '../costing/calculate.js';
 import type { CostingModel } from '../costing/types.js';
-import { composedPages, type ColourMode } from '../costing/colour.js';
+import { composedPages, paddingPages, type ColourMode, type PackPages } from '../costing/colour.js';
 
 interface Row {
   mailpiece_id: number; account_id: number; usage_day: string; is_cancelled: boolean;
@@ -72,6 +72,7 @@ export async function priceMailpieces(pool: sql.ConnectionPool, filter: PriceFil
     LEFT JOIN idoc.postal_rate AS r ON r.postal_rate_id = m.postal_rate_id
     WHERE ${where} AND m.is_cancelled = 0`)).recordset;
 
+  const smallBatchLimit = (await pool.request().query<{ n: number }>('SELECT small_batch_limit AS n FROM idoc.settings WHERE settings_id = 1')).recordset[0]!.n;
   const result: PriceJobResult = { priced: 0, noModel: 0, unknownColours: 0 };
   const models = new Map<string, CostingModel | null>();
   const tx = new sql.Transaction(pool);
@@ -84,11 +85,13 @@ export async function priceMailpieces(pool: sql.ConnectionPool, filter: PriceFil
       const model = models.get(key);
       if (!model) { result.noModel++; continue; }
       if (dryRun) { result.priced++; continue; }
-      const pages = composedPages(m.colour_mode, m.packs_json ? JSON.parse(m.packs_json) : []);   // what is printed, not what arrived
+      const packs: PackPages[] = m.packs_json ? JSON.parse(m.packs_json) : [];
+      const pages = composedPages(m.colour_mode, packs);   // what is printed, not what arrived
+      pages.blank += paddingPages(packs);                   // the blank the composer adds after an odd pack
       const price = priceMailpiece(model, {
         packs: m.pack_count, colourPages: pages.colour, monoPages: pages.mono, blankPages: pages.blank, sheets: m.sheet_count, inserts: m.inserts,
         enclosing: m.department === 'Machine enclosing' ? 'Machine' : 'Hand', // Reception work is done by hand
-        isOversticker: !!m.is_oversticker, batchMailpieces: m.batch_mailpieces, postalFormat: m.format_name ?? '',
+        isOversticker: !!m.is_oversticker, batchMailpieces: m.batch_mailpieces, smallBatchLimit, postalFormat: m.format_name ?? '',
         isAddressMatching: !!m.is_address_matching, envelopeStockItemId: m.outer_stock_item_id,
         postageRate: m.rate_id === null ? null : { id: m.rate_id, cost: m.rate_cost === null ? null : Number(m.rate_cost), sellPrice: m.rate_sell === null ? null : Number(m.rate_sell) },
       });

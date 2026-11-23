@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { priceMailpiece, SMALL_BATCH_LIMIT } from '../src/costing/calculate.js';
+import { priceMailpiece } from '../src/costing/calculate.js';
 import type { ChargeCode, CostingModel, PricingInput, Rate } from '../src/costing/types.js';
 
 const r = (cost: number, sellPrice: number, adjustment = 0): Rate => ({ cost, sellPrice, adjustment });
@@ -16,7 +16,7 @@ const model = (): CostingModel => ({
 });
 /** `sheets` is the mailpiece's own count; unless a test says otherwise it is one sheet to two pages in one pack. */
 const input = (over: Partial<PricingInput> = {}): PricingInput => {
-  const base = { packs: 1, colourPages: 0, monoPages: 2, blankPages: 0, inserts: 0, enclosing: 'Hand' as const, isOversticker: false, batchMailpieces: 50, postalFormat: 'Letter',
+  const base = { packs: 1, colourPages: 0, monoPages: 2, blankPages: 0, inserts: 0, enclosing: 'Hand' as const, isOversticker: false, batchMailpieces: 50, smallBatchLimit: 20, postalFormat: 'Letter',
     isAddressMatching: false, envelopeStockItemId: 7 as number | null, postageRate: { id: 3, cost: 0.55, sellPrice: 0.70 } as PricingInput['postageRate'], ...over };
   return { sheets: Math.ceil((base.colourPages + base.monoPages + base.blankPages) / 2), ...base };
 };
@@ -57,9 +57,13 @@ describe('priceMailpiece', () => {
   });
 
   it('the small batch adjustment starts below the limit', () => {
-    expect(SMALL_BATCH_LIMIT).toBe(20);
     expect(line(priceMailpiece(model(), input({ batchMailpieces: 19 })), 'HAND_SMALL_BATCH_ADJUSTMENT')).toBeDefined();
     expect(line(priceMailpiece(model(), input({ batchMailpieces: 20 })), 'HAND_SMALL_BATCH_ADJUSTMENT')).toBeUndefined();
+  });
+  it('the small batch limit is the Settings value, and 0 turns the adjustment off', () => {
+    expect(line(priceMailpiece(model(), input({ batchMailpieces: 19, smallBatchLimit: 10 })), 'HAND_SMALL_BATCH_ADJUSTMENT')).toBeUndefined();
+    expect(line(priceMailpiece(model(), input({ batchMailpieces: 9, smallBatchLimit: 10 })), 'HAND_SMALL_BATCH_ADJUSTMENT')).toBeDefined();
+    expect(line(priceMailpiece(model(), input({ batchMailpieces: 1, smallBatchLimit: 0 })), 'HAND_SMALL_BATCH_ADJUSTMENT')).toBeUndefined();
   });
 
   it('warns, and leaves the part out, when there is no postage rate or no envelope price', () => {
@@ -85,12 +89,12 @@ describe('priceMailpiece', () => {
   });
 
   it('bills the sheets the mailpiece prints on, not half its pages: each pack is printed on whole sheets', () => {
-    // two packs of 3 pages: 6 pages, but 2 + 2 = 4 sheets, because the composer pads each odd pack with a blank page
-    const p = priceMailpiece(model(), input({ packs: 2, monoPages: 6, sheets: 4 }));
+    // two packs of 3 pages: 6 pages, but 2 + 2 = 4 sheets, because the composer pads each odd pack with a blank page (billed as 2 blank pages)
+    const p = priceMailpiece(model(), input({ packs: 2, monoPages: 6, blankPages: 2, sheets: 4 }));
     expect(line(p, 'PAPER_SHEET')).toMatchObject({ quantity: 4, cost: 0.04, sell: 0.08 });
     expect(line(p, 'HAND_ENCLOSING_SHEET')).toMatchObject({ quantity: 3 });   // every sheet after the first
-    expect(line(p, 'MONO_PAGE')).toMatchObject({ quantity: 6 });               // the padding blank is not a charged page
-    expect(line(p, 'BLANK_PAGE')).toBeUndefined();
+    expect(line(p, 'MONO_PAGE')).toMatchObject({ quantity: 6 });
+    expect(line(p, 'BLANK_PAGE')).toMatchObject({ quantity: 2 });
   });
   it('bills a sheet a page for a pack that is not duplex', () => {
     expect(line(priceMailpiece(model(), input({ monoPages: 3, sheets: 3 })), 'PAPER_SHEET')).toMatchObject({ quantity: 3 });

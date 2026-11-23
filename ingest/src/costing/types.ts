@@ -39,7 +39,9 @@ export interface CostingModel {
 export interface PricingInput {
   /** Packs merged into the mailpiece. */
   packs: number;
-  colourPages: number; monoPages: number; blankPages: number;
+  colourPages: number; monoPages: number;
+  /** Blank pages as printed: blank in the incoming PDF, plus the one the composer adds after a pack with an odd number of pages. */
+  blankPages: number;
   /**
    * Sheets the mailpiece prints on: the mailpiece's own sheet count, the one that decided its weight and envelope. Each pack is
    * printed on whole sheets (the composer pads an odd pack with a blank page), and a pack that is not duplex takes a sheet a page, so
@@ -51,6 +53,8 @@ export interface PricingInput {
   isOversticker: boolean;
   /** Mailpieces in the batch (small batches carry an adjustment). */
   batchMailpieces: number;
+  /** A batch of fewer mailpieces than this is a small batch (the Settings value). */
+  smallBatchLimit: number;
   postalFormat: string;
   /** The customer has address matching on. */
   isAddressMatching: boolean;

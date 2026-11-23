@@ -212,7 +212,7 @@ Each PDF page is classed as blank, mono or colour (`src/pdfInk.ts`) and the coun
 
 ## Price at production
 
-When a job is Received, `priceJob` (`src/mssql/pricing.ts`) prices each mailpiece from the customer's costing model and stores the totals and the lines on the mailpiece. A mailpiece with no model that day, or with unknown page colours, stays unpriced. Paper and the extra-sheet enclosing charges use the mailpiece's own sheet count (each pack is printed on whole sheets, as the composer lays it out), not half the pages; mail priced earlier keeps its price until "Price mail again". The last change needs no schema change or rebuild; run `npm run test:db` to check it. See docs/account-structure.md.
+When a job is Received, `priceJob` (`src/mssql/pricing.ts`) prices each mailpiece from the customer's costing model and stores the totals and the lines on the mailpiece. A mailpiece with no model that day, or with unknown page colours, stays unpriced. Paper and the extra-sheet enclosing charges use the mailpiece's own sheet count (each pack is printed on whole sheets, as the composer lays it out), not half the pages; mail priced earlier keeps its price until "Price mail again". The blank page the composer adds after an odd pack is billed as a blank page, and the small batch limit is the `small_batch_limit` setting (default 20). `settings` gained a column, so run `npm run settings:export`, `npm run db:rebuild <folder>` and `npm run test:db`. See docs/account-structure.md.
 
 ## Production gate
 

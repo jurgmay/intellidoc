@@ -416,6 +416,18 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     await ingest(c.xml, 'job-price-c.xml', null, { ref, pdf: new FakePdf(0), repo });
     const jobC = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-price-c'`);
     expect(await priceJob(pool, jobC)).toEqual({ priced: 0, noModel: 0, unknownColours: 1 });
+
+    // the small batch limit is a Setting: the adjustment is on a batch of fewer mailpieces than it, and 0 turns it off
+    await pool.request().query(`INSERT INTO idoc.costing_model_rate (costing_model_id, charge_code, cost, sell_price, adjustment) VALUES (${m1}, N'HAND_SMALL_BATCH_ADJUSTMENT', 0, 0.5, 0)`);
+    const smallLines = async (limit: number): Promise<number> => {
+      await pool.request().query(`UPDATE idoc.settings SET small_batch_limit = ${limit} WHERE settings_id = 1`);
+      await priceJob(pool, jobA);
+      return scalar(`SELECT COUNT(*) AS n FROM idoc.mailpiece_price_line l JOIN idoc.mailpiece m ON m.mailpiece_id = l.mailpiece_id WHERE m.job_id = ${jobA} AND l.charge_code = N'HAND_SMALL_BATCH_ADJUSTMENT'`);
+    };
+    try {
+      expect(await smallLines(0)).toBe(0);
+      expect(await smallLines(1000)).toBe(2);
+    } finally { await pool.request().query('UPDATE idoc.settings SET small_batch_limit = 20 WHERE settings_id = 1'); }
   });
 
   it('re-price: fills in unpriced mail for a customer and date range, and overwrites only when asked', async () => {

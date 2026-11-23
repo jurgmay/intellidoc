@@ -1,7 +1,5 @@
 import { CHARGES, type ChargeCode, type CostingModel, type PriceLine, type Pricing, type PricingInput, type Rate } from './types.js';
 
-/** A batch with fewer mailpieces than this carries the small batch adjustment. */
-export const SMALL_BATCH_LIMIT = 20;
 const ZERO: Rate = { cost: 0, sellPrice: 0, adjustment: 0 };
 const r4 = (n: number): number => Math.round((n + Number.EPSILON) * 10_000) / 10_000;
 const label = (code: ChargeCode): string => CHARGES.find((c) => c.code === code)!.label;
@@ -45,7 +43,7 @@ export function priceMailpiece(model: CostingModel, input: PricingInput): Pricin
   if (input.isOversticker) charge('OVERSTICKERING', 1);
 
   // Adjustments are a sell price only: they cost nothing and are not themselves adjusted.
-  if (input.batchMailpieces < SMALL_BATCH_LIMIT) charge('HAND_SMALL_BATCH_ADJUSTMENT', 1, true);
+  if (input.batchMailpieces < input.smallBatchLimit) charge('HAND_SMALL_BATCH_ADJUSTMENT', 1, true);
   if (input.postalFormat === 'Letter') charge('HAND_LETTER_ADJUSTMENT', 1, true);
   if (input.postalFormat === 'Large Letter') charge('HAND_LARGE_LETTER_ADJUSTMENT', 1, true);
   charge('ADJUSTMENT', 1, true);
