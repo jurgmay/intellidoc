@@ -1,4 +1,4 @@
-import { api } from './client';
+import { api, ApiError } from './client';
 
 export type SettingValue = number | boolean | string;
 export interface SettingView {
@@ -15,3 +15,14 @@ export const getSettings = (): Promise<SettingsPayload> => api('/api/settings');
 export const saveSettings = (values: Record<string, SettingValue>): Promise<SettingsPayload & { changed: number }> => api('/api/settings', { method: 'PUT', body: { values } });
 export const getAudit = (): Promise<{ rows: AuditRow[] }> => api('/api/settings/audit?limit=100');
 export const setNextBatchCode = (next: number): Promise<BatchCodeInfo> => api('/api/settings/batch-code', { method: 'PUT', body: { next } });
+
+export type MarksPreviewPage = 'window' | 'mrdf';
+/** The picture of the page with the marks, drawn from the values given (the ones on screen, saved or not). Resolves to a PNG blob. */
+export async function getMarksPreview(page: MarksPreviewPage, values: Record<string, SettingValue>): Promise<Blob> {
+  const res = await fetch('/api/settings/marks-preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ page, values }) });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { error?: string; errors?: Record<string, string> };
+    throw new ApiError(data.error ?? (data.errors ? Object.values(data.errors).join(' ') : `Request failed (${res.status})`), res.status, data.errors);
+  }
+  return res.blob();
+}

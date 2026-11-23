@@ -115,7 +115,7 @@ async function composeJobBatches(o: ComposeJobOptions, job: Awaited<ReturnType<t
 
     const kw = batchKeywords({ archive: b.archive, edgeToEdge: !!b.paperName && paperFacts(b.paperName).edgeToEdge });
     const files = await composeBatch({
-      batchCode: b.batchCode, source, runSheet, plan, marks: settings.marks, grey: o.grey, fileName: (n, total) => printFileName(runData.fileName, n, total),
+      batchCode: b.batchCode, source, runSheet, plan, marks: settings.marks, pageSize: settings.pageSize, grey: o.grey, fileName: (n, total) => printFileName(runData.fileName, n, total),
       keywords: kw ? [kw] : undefined, mrdf: b.mrdf !== null,
       // Building the files is 90% of a batch; writing, saving and the MRDF file take the rest.
       onProgress: (f, what) => { void step(piecesDone + size * 0.9 * f, `${at}: ${what}`); },

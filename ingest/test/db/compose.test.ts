@@ -31,6 +31,7 @@ describe.skipIf(!hasDb)('composeJob', { timeout: 120_000 }, () => {
     const s = await loadComposeSettings(pool);
     expect(s.autoCompose).toBe(false);
     expect(s.maxPagesPerPdf).toBe(10000);
+    expect(s.pageSize).toEqual({ widthMm: 210, heightMm: 297 });
     expect(s.marks.dot).toEqual({ xMm: 205.5, yMm: 269, diameterMm: 2 });
     expect(s.marks.seq.fontPt).toBe(8);
     expect(s.marks.mrdf).toEqual({ dm: { leftMm: 10, topMm: 10, widthMm: 8, heightMm: 8 }, ocr: { fontPt: 8.2, leftMm: 20, topMm: 10, widthMm: 30, heightMm: 4 } });
