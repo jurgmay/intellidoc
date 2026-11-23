@@ -11,6 +11,8 @@ import { buildApp } from '../src/app.js';
 import { MemorySettingsStore } from '../src/settings/store.js';
 import { SETTINGS, validate, BY_KEY, nameOf } from '../src/settings/catalogue.js';
 import type { MarksPreviewer } from '../src/settings/preview.js';
+import type { Connectivity, TestResult } from '../src/settings/connectivity.js';
+import type { SmtpSettings } from '../../ingest/src/mail.js';
 
 let store: MemorySettingsStore; let app: FastifyInstance;
 beforeEach(async () => { store = new MemorySettingsStore(); app = await buildApp({ settings: store, customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: new MemoryRecipientStore(), reports: new MemoryReportStore(), reference: new MemoryReferenceStore() }); });
@@ -27,11 +29,11 @@ describe('GET /api/settings', () => {
     expect(w).toMatchObject({ value: 12, group: 'Enclosing' });
     expect(w.usedBy).toMatch(/machine/i);
     expect(body.settings.find((s: { key: string }) => s.key === 'machineEnclosingEnvelopeSize').options).toEqual(['C5', 'C4']);
-    expect(body.groups).toEqual(['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'Page size', 'Envelope window', 'Sequence number', 'Data Matrix', 'Pack start dot', 'MRDF page codes', 'Network access', 'Workflow server', 'IntelliDoc folders', 'Bluecrest File-Based folders', 'Postal docketing']);
+    expect(body.groups).toEqual(['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'Page size', 'Envelope window', 'Sequence number', 'Data Matrix', 'Pack start dot', 'MRDF page codes', 'Network access', 'Workflow server', 'IntelliDoc folders', 'Bluecrest File-Based folders', 'Postal docketing', 'Email settings', 'H-POD API settings']);
     expect(body.batchCode).toEqual({ highestUsed: 1041, next: 1042 });
   });
   it('every setting names a column, a group that exists and a description', () => {
-    for (const s of SETTINGS) { expect(s.column).toMatch(/^[a-z0-9_]+$/); expect(['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'Page size', 'Envelope window', 'Sequence number', 'Data Matrix', 'Pack start dot', 'MRDF page codes', 'Network access', 'Workflow server', 'IntelliDoc folders', 'Bluecrest File-Based folders', 'Postal docketing']).toContain(s.group); expect(s.description.length).toBeGreaterThan(10); expect(s.usedBy.length).toBeGreaterThan(10); }
+    for (const s of SETTINGS) { expect(s.column).toMatch(/^[a-z0-9_]+$/); expect(['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'Page size', 'Envelope window', 'Sequence number', 'Data Matrix', 'Pack start dot', 'MRDF page codes', 'Network access', 'Workflow server', 'IntelliDoc folders', 'Bluecrest File-Based folders', 'Postal docketing', 'Email settings', 'H-POD API settings']).toContain(s.group); expect(s.description.length).toBeGreaterThan(10); expect(s.usedBy.length).toBeGreaterThan(10); }
   });
 });
 
@@ -247,5 +249,93 @@ describe('network settings', () => {
     expect(r.statusCode).toBe(422); expect(r.json().errors.networkPassword).toMatch(/INTELLIDOC_SECRET_KEY/);
     expect(noKey.values['networkPassword']).toBe(''); expect(noKey.values['folderIn']).toBe(''); expect(noKey.rows).toHaveLength(0);
     expect((await a.inject({ method: 'PUT', url: '/api/settings', payload: { values: { folderIn: 'C:\\in' } } })).statusCode).toBe(200);
+  });
+});
+
+describe('connectivity settings', () => {
+  const EMAIL_KEYS = ['emailEnabled', 'smtpFromName', 'smtpFromAddress', 'smtpReplyTo', 'smtpServer', 'smtpPort', 'smtpUsername', 'smtpPassword'];
+  const HPOD_KEYS = ['hpodEndpoint', 'hpodInstance', 'hpodAccountCode', 'hpodUsername', 'hpodPassword'];
+
+  it('are the requested fields in the requested groups and order', () => {
+    expect(SETTINGS.filter((s) => s.group === 'Email settings').map((s) => [s.key, s.label, s.type])).toEqual([
+      ['emailEnabled', 'Send e-mail', 'boolean'], ['smtpFromName', "SMTP 'from' name", 'text'], ['smtpFromAddress', "SMTP 'from' address", 'email'], ['smtpReplyTo', "SMTP 'reply to'", 'email'],
+      ['smtpServer', 'SMTP server', 'text'], ['smtpPort', 'SMTP port', 'integer'], ['smtpUsername', 'SMTP username', 'text'], ['smtpPassword', 'SMTP password', 'secret']]);
+    expect(SETTINGS.filter((s) => s.group === 'H-POD API settings').map((s) => [s.key, s.label, s.type])).toEqual([
+      ['hpodEndpoint', 'Endpoint', 'url'], ['hpodInstance', 'Instance', 'text'], ['hpodAccountCode', 'Account code', 'text'], ['hpodUsername', 'Username', 'text'], ['hpodPassword', 'Password', 'secret']]);
+    expect(store.values['emailEnabled']).toBe(false); expect(store.values['smtpPort']).toBe(587);
+    for (const k of [...EMAIL_KEYS, ...HPOD_KEYS]) expect(BY_KEY.has(k)).toBe(true);
+  });
+  it('check an e-mail address, a port and a web address, and name the H-POD fields apart from the network ones in the change log', async () => {
+    expect((await put({ smtpFromAddress: 'not an address' })).statusCode).toBe(422);
+    expect((await put({ smtpReplyTo: 'a@b.co, c@d.co' })).statusCode).toBe(422); // one address only
+    expect((await put({ smtpPort: 0 })).statusCode).toBe(422); expect((await put({ smtpPort: 70000 })).statusCode).toBe(422); expect((await put({ smtpPort: 25.5 })).statusCode).toBe(422);
+    expect((await put({ hpodEndpoint: 'ftp://x' })).statusCode).toBe(422); expect((await put({ hpodEndpoint: 'hpod.example.com' })).statusCode).toBe(422);
+    expect((await put({ smtpFromAddress: ' idoc@latcham.co.uk ', smtpReplyTo: '', smtpPort: 465, hpodEndpoint: 'https://hpod.example.com/api', hpodUsername: 'svc' })).statusCode).toBe(200);
+    expect(store.values).toMatchObject({ smtpFromAddress: 'idoc@latcham.co.uk', smtpPort: 465, hpodEndpoint: 'https://hpod.example.com/api' });
+    expect(store.rows.map((r) => r.setting)).toContain('H-POD API settings: username');
+  });
+  it('keep both passwords encrypted and out of every response', async () => {
+    await put({ smtpPassword: 'smtp-pass-1', hpodPassword: 'hpod-pass-1' });
+    const body = JSON.stringify((await app.inject({ url: '/api/settings' })).json());
+    expect(body).not.toContain('smtp-pass-1'); expect(body).not.toContain('hpod-pass-1');
+    expect(await store.secret('smtpPassword')).toBe('smtp-pass-1'); expect(await store.secret('hpodPassword')).toBe('hpod-pass-1');
+  });
+
+  describe('test buttons', () => {
+    let sent: { smtp: SmtpSettings; to: string[] }[]; let checked: string[];
+    let result: TestResult;
+    const make = async () => {
+      sent = []; checked = []; result = { ok: true, message: 'fine' };
+      const fake: Connectivity = { sendTestEmail: async (smtp, to) => { sent.push({ smtp, to }); return result; }, checkEndpoint: async (url) => { checked.push(url); return result; } };
+      return buildApp({ settings: store, customers: new MemoryCustomerStore(), costing: new MemoryCostingStore(), postal: new MemoryPostalStore(), reprice: new MemoryRepriceStore(), recipients: new MemoryRecipientStore(), reports: new MemoryReportStore(), reference: new MemoryReferenceStore(), connectivity: fake });
+    };
+    const post = (a: FastifyInstance, url: string, values?: Record<string, unknown>) => a.inject({ method: 'POST', url, payload: { values } });
+    const mail = { smtpServer: 'smtp.example.com', smtpPort: 587, smtpFromName: 'IntelliDoc', smtpFromAddress: 'idoc@latcham.co.uk', smtpReplyTo: 'help@latcham.co.uk', smtpUsername: 'svc', alertRecipients: 'admin@latcham.co.uk, ops@latcham.co.uk' };
+
+    it('send the test e-mail to the alert recipients with the settings on screen, saved or not, and the typed password', async () => {
+      const a = await make();
+      const r = await post(a, '/api/settings/test-email', { ...mail, smtpPassword: 'typed-pass' });
+      expect(r.json()).toEqual({ ok: true, message: 'fine' });
+      expect(sent).toEqual([{ to: ['admin@latcham.co.uk', 'ops@latcham.co.uk'], smtp: { host: 'smtp.example.com', port: 587, secure: false, user: 'svc', pass: 'typed-pass', from: '"IntelliDoc" <idoc@latcham.co.uk>', replyTo: 'help@latcham.co.uk' } }]);
+      expect(store.values['smtpServer']).toBe(''); expect(store.rows).toHaveLength(0); // nothing was saved
+      expect(JSON.stringify(r.json())).not.toContain('typed-pass');
+    });
+    it('use the saved password when none is typed, and TLS from the start on port 465', async () => {
+      await put({ smtpPassword: 'saved-pass' });
+      const a = await make();
+      await post(a, '/api/settings/test-email', { ...mail, smtpPort: 465 });
+      expect(sent[0]!.smtp).toMatchObject({ pass: 'saved-pass', secure: true, port: 465 });
+    });
+    it('say what is missing instead of sending', async () => {
+      const a = await make();
+      expect((await post(a, '/api/settings/test-email', { ...mail, alertRecipients: '' })).json().message).toMatch(/Alert e-mail recipients/);
+      expect((await post(a, '/api/settings/test-email', { ...mail, smtpServer: '' })).json().message).toBe('Enter the SMTP server first.');
+      expect((await post(a, '/api/settings/test-email', { ...mail, smtpFromAddress: '' })).json().message).toMatch(/'from' address/);
+      expect((await post(a, '/api/settings/test-email', { ...mail })).json().message).toMatch(/no password/); // a username but no password anywhere
+      const open = (await post(a, '/api/settings/test-email', { ...mail, smtpUsername: '' })).json();
+      expect(open.ok).toBe(true); expect(sent.at(-1)!.smtp).toMatchObject({ user: undefined, pass: undefined });
+      expect(sent).toHaveLength(1);
+    });
+    it('pass the failure of the mail server on, and refuse values that could not be saved', async () => {
+      const a = await make();
+      result = { ok: false, message: 'Invalid login' };
+      expect((await post(a, '/api/settings/test-email', { ...mail, smtpPassword: 'x' })).json()).toEqual({ ok: false, message: 'Invalid login' });
+      const bad = await post(a, '/api/settings/test-email', { ...mail, smtpPort: 0 });
+      expect(bad.statusCode).toBe(422); expect(bad.json().errors.smtpPort).toBeTruthy();
+    });
+    it('say when a saved password cannot be read because the key is not set', async () => {
+      await put({ smtpPassword: 'saved-pass' });
+      store = Object.assign(new MemorySettingsStore(null), { values: { ...store.values } });
+      const a = await make();
+      const r = await post(a, '/api/settings/test-email', mail);
+      expect(r.json().ok).toBe(false); expect(r.json().message).toMatch(/INTELLIDOC_SECRET_KEY/);
+    });
+    it('check the H-POD endpoint on screen', async () => {
+      const a = await make();
+      expect((await post(a, '/api/settings/test-hpod', {})).json()).toEqual({ ok: false, message: 'Enter the Endpoint first.' });
+      expect((await post(a, '/api/settings/test-hpod', { hpodEndpoint: 'https://hpod.example.com/api' })).json()).toEqual({ ok: true, message: 'fine' });
+      expect(checked).toEqual(['https://hpod.example.com/api']);
+      expect((await post(a, '/api/settings/test-hpod', { hpodEndpoint: 'nope' })).statusCode).toBe(422);
+    });
   });
 });

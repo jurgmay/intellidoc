@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Alert, Button, Group, Loader, Paper, Stack, Tabs, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { IconAlertCircle, IconEye } from '@tabler/icons-react';
-import { getSettings, removeSecret, saveSettings, type SettingsPayload, type SettingValue } from '../api/settings';
+import { getSettings, removeSecret, saveSettings, testEmail, testHpod, type SettingsPayload, type SettingValue } from '../api/settings';
 import { ApiError } from '../api/client';
 import { SettingRow } from './SettingRow';
 import { BatchCodeCard } from './BatchCodeCard';
 import { MarksPreviewModal } from './MarksPreviewModal';
+import { TestButton } from './TestButton';
 import { ChangeLog } from './ChangeLog';
 import { PostalRatesTab } from './PostalRatesTab';
 import { AnonymousTab, PaperTab, PostalFormatsTab } from './ReferenceTabs';
@@ -14,6 +15,8 @@ import { AnonymousTab, PaperTab, PostalFormatsTab } from './ReferenceTabs';
 /** The settings on the Control marks tab: the page and envelope window, where the marks go on the page (sequence number, Data Matrix, pack start dot) and the MRDF page codes (Data Matrix, OCR code). */
 /** The settings on the Network tab: network access, the workflow server, the IntelliDoc and Bluecrest folders and postal docketing. */
 const NETWORK = /^(network|workflow|folder|bluecrest|dockets)/;
+/** The settings on the Connectivity tab: e-mail (SMTP) and the H-POD API. */
+const CONNECTIVITY = /^(email|smtp|hpod)/;
 const CONTROL_MARK = /^(page|window|markSeq|markDm|markDot|mrdfDm|mrdfOcr)/;
 
 export function SettingsPage() {
@@ -54,6 +57,9 @@ export function SettingsPage() {
     } finally { setSaving(false); }
   };
 
+  /** What the test buttons send: the values on screen for that test. A password box left empty means "keep the saved one", so it is not sent. */
+  const onScreen = (only: RegExp) => Object.fromEntries(data.settings.filter((s) => only.test(s.key) && !(s.type === 'secret' && draft[s.key] === '')).map((s) => [s.key, draft[s.key]!]));
+
   /** Removes a saved password now (it is its own action, so it does not wait for Save changes); other unsaved edits stay. */
   const removeSaved = async (key: string) => {
     try {
@@ -65,7 +71,7 @@ export function SettingsPage() {
   };
 
   /** The settings of each group that pass `keep`, as cards; a group with none left is not shown. */
-  const groups = (keep: (s: SettingsPayload['settings'][number]) => boolean) => data.groups.map((g) => {
+  const groups = (keep: (s: SettingsPayload['settings'][number]) => boolean, after: Record<string, ReactNode> = {}) => data.groups.map((g) => {
     const rows = data.settings.filter((s) => s.group === g && keep(s));
     if (!rows.length) return null;
     return (
@@ -77,6 +83,7 @@ export function SettingsPage() {
               onChange={(v) => setDraft((d) => ({ ...d, [s.key]: v }))} onRemoveSecret={s.type === 'secret' ? () => removeSaved(s.key) : undefined} />
           ))}
         </Stack>
+        {after[g]}
       </Paper>
     );
   });
@@ -103,6 +110,7 @@ export function SettingsPage() {
           <Tabs.Tab value="general">General</Tabs.Tab>
           <Tabs.Tab value="marks">Control marks</Tabs.Tab>
           <Tabs.Tab value="network">Network</Tabs.Tab>
+          <Tabs.Tab value="connectivity">Connectivity</Tabs.Tab>
           <Tabs.Tab value="postal">Postal rates</Tabs.Tab>
           <Tabs.Tab value="formats">Postal formats</Tabs.Tab>
           <Tabs.Tab value="papers">Paper</Tabs.Tab>
@@ -111,7 +119,7 @@ export function SettingsPage() {
         </Tabs.List>
         <Tabs.Panel value="general" pt="lg">
           <Stack gap="xl">
-            {groups((s) => !CONTROL_MARK.test(s.key) && !NETWORK.test(s.key))}
+            {groups((s) => !CONTROL_MARK.test(s.key) && !NETWORK.test(s.key) && !CONNECTIVITY.test(s.key))}
             <BatchCodeCard info={data.batchCode} onChanged={(b) => { setData({ ...data, batchCode: b }); setLogVersion((v) => v + 1); }} />
           </Stack>
         </Tabs.Panel>
@@ -130,13 +138,24 @@ export function SettingsPage() {
             {groups((s) => NETWORK.test(s.key))}
           </Stack>
         </Tabs.Panel>
+        <Tabs.Panel value="connectivity" pt="lg">
+          <Stack gap="xl">
+            <Text size="sm" c="dimmed" maw={760}>
+              The test buttons use the values on screen, saved or not. These settings are not used by the rest of the app yet.
+            </Text>
+            {groups((s) => CONNECTIVITY.test(s.key), {
+              'Email settings': <TestButton label="Send a test e-mail to the system administrator" hint="Goes to the Alert e-mail recipients on the General tab." run={() => testEmail(onScreen(/^(email|smtp)/))} />,
+              'H-POD API settings': <TestButton label="Test the connection" run={() => testHpod(onScreen(/^hpod/))} />,
+            })}
+          </Stack>
+        </Tabs.Panel>
         <Tabs.Panel value="postal" pt="lg">{seen.has('postal') && <PostalRatesTab />}</Tabs.Panel>
         <Tabs.Panel value="formats" pt="lg">{seen.has('formats') && <PostalFormatsTab />}</Tabs.Panel>
         <Tabs.Panel value="papers" pt="lg">{seen.has('papers') && <PaperTab />}</Tabs.Panel>
         <Tabs.Panel value="anonymous" pt="lg">{seen.has('anonymous') && <AnonymousTab />}</Tabs.Panel>
         <Tabs.Panel value="log" pt="lg"><ChangeLog version={logVersion} /></Tabs.Panel>
       </Tabs>
-      {(tab === 'general' || tab === 'marks' || tab === 'network') && saveBar}
+      {(tab === 'general' || tab === 'marks' || tab === 'network' || tab === 'connectivity') && saveBar}
       <MarksPreviewModal opened={previewing} onClose={() => setPreviewing(false)} values={Object.fromEntries(Object.entries(draft).filter(([k]) => CONTROL_MARK.test(k)))} />
     </Stack>
   );

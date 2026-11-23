@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { BY_KEY, GROUPS, SETTINGS, validate, type SettingValue } from './catalogue.js';
 import type { Change, SettingsStore } from './store.js';
 import { SecretKeyMissing } from './secret.js';
+import { realConnectivity, smtpFromValues, testEmailRecipients, type Connectivity } from './connectivity.js';
 import { marksFromValues, pageSizeFromValues, windowFromValues, type MarksPreviewer } from './preview.js';
 
 /** Who is making the change. There is no sign-in yet, so this is 'system'; Microsoft sign-in will replace this one function. */
@@ -17,7 +18,25 @@ async function payload(store: SettingsStore) {
   };
 }
 
-export function settingsRoutes(app: FastifyInstance, store: SettingsStore, preview: MarksPreviewer): void {
+/**
+ * The saved values with the values on screen laid over them (checked the way a save would check them). `typed` holds a password the user has typed
+ * but not saved, in the clear, for the one request that tests with it.
+ */
+async function overlayValues(store: SettingsStore, input: unknown): Promise<{ values: Record<string, SettingValue>; typed: Record<string, string>; errors: Record<string, string> }> {
+  const values = await store.read();
+  const typed: Record<string, string> = {}, errors: Record<string, string> = {};
+  for (const [key, raw] of Object.entries((input ?? {}) as Record<string, unknown>)) {
+    const def = BY_KEY.get(key);
+    if (!def) { errors[key] = 'Unknown setting'; continue; }
+    const v = validate(def, raw);
+    if ('error' in v) errors[key] = v.error;
+    else if (def.type === 'secret') typed[key] = v.value as string;
+    else values[key] = v.value;
+  }
+  return { values, typed, errors };
+}
+
+export function settingsRoutes(app: FastifyInstance, store: SettingsStore, preview: MarksPreviewer, connectivity: Connectivity = realConnectivity): void {
   app.get('/api/settings', async () => payload(store));
 
   app.put('/api/settings', async (req, reply) => {
@@ -49,19 +68,39 @@ export function settingsRoutes(app: FastifyInstance, store: SettingsStore, previ
     const page = body.page ?? 'window';
     if (page !== 'window' && page !== 'mrdf') return reply.code(422).send({ errors: { page: 'page must be window or mrdf' } });
     if (body.values !== undefined && (typeof body.values !== 'object' || body.values === null)) return reply.code(400).send({ error: 'Expected { "values": { ... } }' });
-    const values = await store.read();
-    const errors: Record<string, string> = {};
-    for (const [key, raw] of Object.entries(body.values ?? {})) {
-      const def = BY_KEY.get(key);
-      if (!def) { errors[key] = 'Unknown setting'; continue; }
-      const v = validate(def, raw);
-      if ('error' in v) errors[key] = v.error; else values[key] = v.value;
-    }
+    const { values, errors } = await overlayValues(store, body.values);
     if (Object.keys(errors).length) return reply.code(422).send({ errors });
     let png: Uint8Array;
     try { png = await preview(page, marksFromValues(values), windowFromValues(values), pageSizeFromValues(values)); }
     catch (e) { console.error(e); return reply.code(503).send({ error: `The preview could not be drawn: ${(e as Error).message}` }); }
     return reply.header('Content-Type', 'image/png').header('Cache-Control', 'no-store').send(Buffer.from(png));
+  });
+
+  /** The password to test with: the one typed on screen, else the saved one. Null when there is none; throws SecretKeyMissing when one is saved but cannot be read. */
+  const passwordFor = async (key: string, typed: Record<string, string>): Promise<string | null> => typed[key] ?? store.secret(key);
+  const body422 = (reply: import('fastify').FastifyReply, errors: Record<string, string>) => reply.code(422).send({ errors });
+
+  /** Sends a test e-mail to the alert recipients through the mail server on screen. The result is 200 with ok true or false: a refused login is an answer, not an error. */
+  app.post('/api/settings/test-email', async (req, reply) => {
+    const { values, typed, errors } = await overlayValues(store, (req.body as { values?: unknown } | null)?.values);
+    if (Object.keys(errors).length) return body422(reply, errors);
+    const to = testEmailRecipients(values);
+    if (!to.length) return { ok: false, message: 'There is nobody to send it to. Enter the Alert e-mail recipients on the General tab (the system administrator) and save.' };
+    let password: string | null;
+    try { password = await passwordFor('smtpPassword', typed); }
+    catch (e) { if (e instanceof SecretKeyMissing) return { ok: false, message: e.message }; throw e; }
+    const smtp = smtpFromValues(values, password);
+    if ('error' in smtp) return { ok: false, message: smtp.error };
+    return connectivity.sendTestEmail(smtp.smtp, to);
+  });
+
+  /** Checks that the H-POD API address answers (it does not sign in). */
+  app.post('/api/settings/test-hpod', async (req, reply) => {
+    const { values, errors } = await overlayValues(store, (req.body as { values?: unknown } | null)?.values);
+    if (Object.keys(errors).length) return body422(reply, errors);
+    const url = String(values['hpodEndpoint'] ?? '').trim();
+    if (!url) return { ok: false, message: 'Enter the Endpoint first.' };
+    return connectivity.checkEndpoint(url);
   });
 
   /** Removes a saved password (the only way to clear one: an empty value in PUT is refused). */

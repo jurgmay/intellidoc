@@ -9,7 +9,7 @@ export interface Mailer {
   readonly configured?: boolean;
 }
 
-export interface SmtpSettings { host: string; port: number; secure: boolean; user?: string; pass?: string; from: string }
+export interface SmtpSettings { host: string; port: number; secure: boolean; user?: string; pass?: string; from: string; replyTo?: string }
 
 /** Reads SMTP_HOST, SMTP_PORT (587), SMTP_SECURE (1 = TLS from the start), SMTP_USER, SMTP_PASS, SMTP_FROM. Undefined when SMTP_HOST is not set. */
 export function smtpFromEnv(env: Record<string, string | undefined>): SmtpSettings | undefined {
@@ -26,11 +26,13 @@ export class SmtpMailer implements Mailer {
   readonly configured = true;
   private readonly transport;
   constructor(private readonly s: SmtpSettings) {
-    this.transport = nodemailer.createTransport({ host: s.host, port: s.port, secure: s.secure, auth: s.user ? { user: s.user, pass: s.pass ?? '' } : undefined });
+    this.transport = nodemailer.createTransport({ host: s.host, port: s.port, secure: s.secure, auth: s.user ? { user: s.user, pass: s.pass ?? '' } : undefined,
+      // a wrong host or a blocked port should fail in seconds, not after nodemailer's two minute defaults
+      connectionTimeout: 15_000, greetingTimeout: 15_000, socketTimeout: 30_000 });
   }
   async send(to: string[], subject: string, text: string, options: MailOptions = {}): Promise<void> {
     await this.transport.sendMail({
-      from: this.s.from, to: to.join(', '), cc: options.cc?.length ? options.cc.join(', ') : undefined, subject, text,
+      from: this.s.from, replyTo: this.s.replyTo || undefined, to: to.join(', '), cc: options.cc?.length ? options.cc.join(', ') : undefined, subject, text,
       attachments: options.attachments?.map((a) => ({ filename: a.filename, content: Buffer.from(a.content), contentType: a.contentType ?? 'application/pdf' })),
     });
   }

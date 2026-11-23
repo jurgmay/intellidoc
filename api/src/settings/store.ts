@@ -132,6 +132,7 @@ export class MemorySettingsStore implements SettingsStore {
     markDmLeftMm: 20, markDmTopMm: 30, markDmWidthMm: 8, markDmHeightMm: 8, markDotXMm: 205.5, markDotYMm: 269, markDotDiameterMm: 2,
     mrdfDmLeftMm: 10, mrdfDmTopMm: 10, mrdfDmWidthMm: 8, mrdfDmHeightMm: 8, mrdfOcrFontPt: 8.2, mrdfOcrLeftMm: 20, mrdfOcrTopMm: 10, mrdfOcrWidthMm: 30, mrdfOcrHeightMm: 4, mrdfOcrRotationDeg: 0,
     networkUsername: '', networkPassword: '', workflowNetworkPath: '', workflowSharedFolder: '', folderIn: '', folderOut: '', folderHold: '', folderPrintFiles: '', folderProcessed: '', bluecrestNetworkPath: '', bluecrestInputFolder: '', bluecrestOutputFolder: '', bluecrestLockFolder: '', bluecrestSelectFolder: '', bluecrestArchiveName: '', docketsFolder: '', docketsSignedForFolder: '',
+    emailEnabled: false, smtpFromName: '', smtpFromAddress: '', smtpReplyTo: '', smtpServer: '', smtpPort: 587, smtpUsername: '', smtpPassword: '', hpodEndpoint: '', hpodInstance: '', hpodAccountCode: '', hpodUsername: '', hpodPassword: '',
   };
   rows: AuditRow[] = [];
   highestUsed: number | null = 1041;
