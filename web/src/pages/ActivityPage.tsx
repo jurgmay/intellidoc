@@ -56,22 +56,22 @@ export function ActivityPage({ refreshMs = 3000 }: { refreshMs?: number }) {
       {(
         <Paper withBorder>
           <Table highlightOnHover>
-            <Table.Thead><Table.Tr><Table.Th data-min-width={128} style={{ whiteSpace: 'nowrap' }}>Status</Table.Th><Table.Th data-min-width={288}>Account</Table.Th><Table.Th data-min-width={128} style={{ whiteSpace: 'nowrap' }}>PDF</Table.Th><Table.Th>Progress</Table.Th><Table.Th style={{ whiteSpace: 'nowrap' }}>Start time</Table.Th><Table.Th style={{ whiteSpace: 'nowrap' }}>End time</Table.Th><Table.Th>Duration</Table.Th></Table.Tr></Table.Thead>
+            <Table.Thead><Table.Tr><Table.Th data-min-width={128} ta="center" style={{ whiteSpace: 'nowrap' }}>Status</Table.Th><Table.Th data-min-width={288}>Account</Table.Th><Table.Th data-min-width={128} ta="center" style={{ whiteSpace: 'nowrap' }}>PDF</Table.Th><Table.Th>Progress</Table.Th><Table.Th ta="center" style={{ whiteSpace: 'nowrap' }}>Start time</Table.Th><Table.Th ta="center" style={{ whiteSpace: 'nowrap' }}>End time</Table.Th><Table.Th ta="center">Duration</Table.Th></Table.Tr></Table.Thead>
             <Table.Tbody>
               {lines.map((l) => (
                 <Table.Tr key={l.key}>
-                  <Table.Td style={{ whiteSpace: 'nowrap' }}><Badge color={COLOUR[l.stage]} variant={l.stage === 'Completed' ? 'light' : 'filled'} styles={BADGE_FULL}>{l.stage}</Badge></Table.Td>
+                  <Table.Td ta="center" style={{ whiteSpace: 'nowrap' }}><Badge color={COLOUR[l.stage]} variant={l.stage === 'Completed' ? 'light' : 'filled'} styles={BADGE_FULL}>{l.stage}</Badge></Table.Td>
                   <Table.Td>{l.account}</Table.Td>
-                  <Table.Td style={{ whiteSpace: 'nowrap' }}>{l.pdf === 'arrived' ? <Badge color="green" variant="light" styles={BADGE_FULL}>Arrived</Badge> : l.pdf === 'waiting' ? <Badge color="yellow" variant="light" styles={BADGE_FULL}>Not yet</Badge> : ''}</Table.Td>
+                  <Table.Td ta="center" style={{ whiteSpace: 'nowrap' }}>{l.pdf === 'arrived' ? <Badge color="green" variant="light" styles={BADGE_FULL}>Arrived</Badge> : l.pdf === 'waiting' ? <Badge color="yellow" variant="light" styles={BADGE_FULL}>Not yet</Badge> : ''}</Table.Td>
                   <Table.Td miw={260}>
                     {l.progress && <Progress value={l.progress.total ? (l.progress.done / l.progress.total) * 100 : 0} mb={4} animated aria-label={`${l.progress.done} of ${l.progress.total} ${l.progress.unit}`} />}
                     {!l.progress && (l.stage === 'Processing' || l.stage === 'Making print files') && !l.stalled && <Progress value={100} animated mb={4} />}
                     <Text size="sm" c={l.stalled || l.stage === 'Failed' ? 'red' : undefined}>{l.detail}</Text>
                     <Text size="xs" c="dimmed" style={{ overflowWrap: 'anywhere' }}>{l.name}</Text>
                   </Table.Td>
-                  <Table.Td style={{ whiteSpace: 'nowrap' }}>{clock(l.start)}</Table.Td>
-                  <Table.Td style={{ whiteSpace: 'nowrap' }}>{clock(l.end)}</Table.Td>
-                  <Table.Td style={{ whiteSpace: 'nowrap' }}>{durationText(l, now)}</Table.Td>
+                  <Table.Td ta="center" style={{ whiteSpace: 'nowrap' }}>{clock(l.start)}</Table.Td>
+                  <Table.Td ta="center" style={{ whiteSpace: 'nowrap' }}>{clock(l.end)}</Table.Td>
+                  <Table.Td ta="center" style={{ whiteSpace: 'nowrap' }}>{durationText(l, now)}</Table.Td>
                 </Table.Tr>
               ))}
               {!data && !error && <Table.Tr><Table.Td colSpan={7}><Group justify="center" gap="xs" py="md" role="status"><Loader size="sm" /><Text c="dimmed">Loading…</Text></Group></Table.Td></Table.Tr>}
