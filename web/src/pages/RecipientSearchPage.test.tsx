@@ -1,10 +1,11 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MantineProvider } from '@mantine/core';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { theme } from '../theme';
 import { RecipientSearchPage } from './RecipientSearchPage';
+import { resetRecipientSearchSession } from './recipientSearchSession';
 
 const scopes = [{ id: 1, label: 'Odevo', isCustomer: true }, { id: 2, label: 'Odevo > Highline Solicitors', isCustomer: false }];
 const hit = {
@@ -25,6 +26,7 @@ let urls: string[];
 let respond: (url: string) => { status: number; json: unknown };
 
 beforeEach(() => {
+  resetRecipientSearchSession();
   urls = [];
   respond = (url) => url.startsWith('/api/recipients/scopes') ? { status: 200, json: { rows: scopes } } : url.startsWith('/api/mailpieces/') ? { status: 200, json: price } : { status: 200, json: { scope: { id: 1, label: 'Odevo' }, rows: [hit], truncated: false } };
   vi.stubGlobal('fetch', vi.fn(async (url: string) => { urls.push(url); const r = respond(url); return new Response(JSON.stringify(r.json), { status: r.status }); }));
@@ -33,6 +35,31 @@ afterEach(() => vi.unstubAllGlobals());
 const show = () => render(<MantineProvider theme={theme}><MemoryRouter><RecipientSearchPage /></MemoryRouter></MantineProvider>);
 
 describe('RecipientSearchPage', () => {
+  it('keeps the account, the terms and the results when you leave the page and come back, and Clear forgets them', async () => {
+    const first = show();
+    await waitFor(() => expect(urls).toContain('/api/recipients/scopes'));
+    await userEvent.click(screen.getByRole('combobox', { name: /Search in/ }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Odevo', hidden: true }));
+    await userEvent.type(screen.getByLabelText('Name'), 'patel');
+    await userEvent.type(screen.getByLabelText('Reference'), 'T-10*');
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }));
+    await screen.findByText('Mrs A Patel');
+    first.unmount();   // another page is shown
+    const searches = urls.filter((u) => u.startsWith('/api/recipients/search')).length;
+    show();            // and back again
+    expect(screen.getByLabelText('Name')).toHaveValue('patel');
+    expect(screen.getByLabelText('Reference')).toHaveValue('T-10*');
+    await waitFor(() => expect(screen.getByRole('combobox', { name: /Search in/ })).toHaveValue('Odevo'));
+    expect(screen.getByText('Mrs A Patel')).toBeInTheDocument();
+    expect(screen.getByText(/1 found in Odevo and below. Searched at \d\d:\d\d/)).toBeInTheDocument();
+    expect(urls.filter((u) => u.startsWith('/api/recipients/search'))).toHaveLength(searches); // shown as it was: no new search
+    await userEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(screen.queryByText('Mrs A Patel')).not.toBeInTheDocument();
+    cleanup(); show();
+    expect(screen.getByLabelText('Name')).toHaveValue('');
+    expect(screen.queryByText('Mrs A Patel')).not.toBeInTheDocument();
+  });
+
   it('will not search until an account is chosen', async () => {
     show();
     await userEvent.type(screen.getByLabelText('Name'), 'patel');
