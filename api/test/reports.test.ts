@@ -7,10 +7,11 @@ import { MemoryRepriceStore } from '../src/reprice/memoryStore.js';
 import { MemoryPostalStore } from '../src/postal/memoryStore.js';
 import { MemoryCostingStore } from '../src/costing/memoryStore.js';
 import { MemoryRecipientStore } from '../src/recipients/memoryStore.js';
-import { buildUsageReport, eachDay } from '../src/reports/aggregate.js';
+import { buildMarginReport, buildUsageReport, eachDay } from '../src/reports/aggregate.js';
 import { MemoryReportStore } from '../src/reports/memoryStore.js';
 import { MemoryReferenceStore } from '../src/reference/memoryStore.js';
 import { chartBrands, usagePdf } from '../src/reports/pdf.js';
+import { marginPdf } from '../src/reports/marginPdf.js';
 import type { UsageLine } from '../src/reports/types.js';
 import { MemorySettingsStore } from '../src/settings/store.js';
 
@@ -118,6 +119,23 @@ describe('margin report', () => {
   it('keeps costs out of the usage report and its PDF route', async () => {
     const usage = (await get('invoicingAccountId=5&from=2026-11-01&to=2026-11-05')).body;
     expect(usage).not.toMatch(/cost|margin/i);
+  });
+  it('has a PDF named for the account and period, with the same checks', async () => {
+    const r = await app.inject({ method: 'GET', url: '/api/reports/margin.pdf?invoicingAccountId=5&from=2026-11-01&to=2026-11-05' });
+    expect(r.statusCode).toBe(200);
+    expect(r.headers['content-type']).toBe('application/pdf');
+    expect(r.headers['content-disposition']).toContain('margin-ODEVO-2026-11-01-to-2026-11-05.pdf');
+    expect(r.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
+    expect((await PDFDocument.load(r.rawPayload)).getPageCount()).toBe(1);
+    expect((await app.inject({ method: 'GET', url: '/api/reports/margin.pdf?from=2026-11-01&to=2026-11-02' })).statusCode).toBe(422);
+    expect((await app.inject({ method: 'GET', url: '/api/reports/margin.pdf?invoicingAccountId=99&from=2026-11-01&to=2026-11-02' })).statusCode).toBe(404);
+  });
+  it('the PDF runs to more pages for a long, busy period, takes a loss, and an empty period still renders', async () => {
+    const acct = { id: 1, code: 'X', name: 'X' };
+    const days = eachDay('2026-01-01', '2026-12-31');
+    const lines = days.flatMap((d, i) => ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map((b, j) => ({ day: d, brand: b, format: 'Letter', service: `S${j}`, mailpieces: 3, priced: 3, productionSell: 1 + (i % 4), postageSell: 2, productionCost: 2, postageCost: 3 })));
+    expect((await PDFDocument.load(await marginPdf(buildMarginReport(acct, '2026-01-01', '2026-12-31', lines), new Date('2026-12-31T10:00:00Z')))).getPageCount()).toBeGreaterThan(1);
+    expect((await PDFDocument.load(await marginPdf(buildMarginReport(acct, '2026-11-01', '2026-11-01', []), new Date()))).getPageCount()).toBe(1);
   });
   it('validates like the usage report, and 404s for an unknown account', async () => {
     expect((await margin('invoicingAccountId=5&from=2026-11-05&to=2026-11-01')).statusCode).toBe(422);

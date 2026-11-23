@@ -87,4 +87,6 @@ The web page (`/batches`) works like Mailpieces: a header band for each batch (c
 
 ## Usage report
 
+The internal margin report has the same parameters at `GET /api/reports/margin`, and `GET /api/reports/margin.pdf` returns it as a PDF in the same style as the usage PDF (sell and cost for each day, then the numbers; marked INTERNAL because it shows costs).
+
 `GET /api/reports/invoicing-accounts` lists the invoicing accounts that have produced anything. `GET /api/reports/usage?invoicingAccountId=…&from=YYYY-MM-DD&to=YYYY-MM-DD` returns the daily usage for one invoicing account (at most 366 days), and `GET /api/reports/usage.pdf` with the same parameters returns it as a PDF. The numbers come from the view `idoc.v_usage_daily`, so the view has to exist (it also carries the sell value of production and postage, which the report adds up as `productionSell`, `postageSell`, `totalSell` and counts `unpriced` mailpieces): rebuild the scratch DB (`npm run db:rebuild <folder>` in `ingest`) after pulling this change.

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Alert, Button, Group, Loader, Paper, Select, Stack, Text, TextInput, Title } from '@mantine/core';
 import { IconAlertCircle, IconFileTypePdf } from '@tabler/icons-react';
 import { ApiError } from '../api/client';
-import { getMargin, getUsage, listInvoicingAccounts, usagePdfUrl, type InvoicingAccount, type MarginReport, type UsageReport } from '../api/reports';
+import { getMargin, getUsage, listInvoicingAccounts, marginPdfUrl, usagePdfUrl, type InvoicingAccount, type MarginReport, type UsageReport } from '../api/reports';
 import { MarginReportView } from './MarginReportView';
 import { UsageReportView } from './UsageReportView';
 import { iso } from './reportFormat';
@@ -11,10 +11,10 @@ type Kind = 'usage' | 'margin';
 const KINDS = [{ value: 'usage', label: 'Usage report' }, { value: 'margin', label: 'Margin report' }];
 const NOTES: Record<Kind, string> = {
   usage: 'Counted on the day the mailpieces were produced (UK time). Cancelled mailpieces and batches are left out. Amounts are the sell price (excluding VAT) of production and postage, as priced when the mail was produced.',
-  margin: 'Internal: shows costs, screen only. Sell is what would be invoiced (excluding VAT); margin is sell minus cost. Counted on the day the mailpieces were produced (UK time), at the prices when they were produced. Cancelled mail is left out.',
+  margin: 'Internal: shows costs, so do not send it to the customer. Sell is what would be invoiced (excluding VAT); margin is sell minus cost. Counted on the day the mailpieces were produced (UK time), at the prices when they were produced. Cancelled mail is left out.',
 };
 
-/** The reports for one invoicing account over a period. The same form drives each report; choose which one. Usage can also be a PDF; margin is internal and screen only. */
+/** The reports for one invoicing account over a period. The same form drives each report; choose which one. Either can also be a PDF; the margin report is internal (it shows costs). */
 export function ReportsPage() {
   const today = new Date();
   const [kind, setKind] = useState<Kind>('usage');
@@ -52,8 +52,8 @@ export function ReportsPage() {
             <TextInput label="From" type="date" value={from} onChange={(e) => setFrom(e.currentTarget.value)} error={errors['from']} />
             <TextInput label="To" type="date" value={to} onChange={(e) => setTo(e.currentTarget.value)} error={errors['to']} />
             <Button type="submit" loading={busy}>Show report</Button>
-            {kind === 'usage' && <Button component="a" variant="default" leftSection={<IconFileTypePdf size={16} />} target="_blank" rel="noreferrer"
-              href={account ? usagePdfUrl({ invoicingAccountId: Number(account), from, to }) : undefined} disabled={!account}>PDF</Button>}
+            <Button component="a" variant="default" leftSection={<IconFileTypePdf size={16} />} target="_blank" rel="noreferrer"
+              href={account ? (kind === 'usage' ? usagePdfUrl : marginPdfUrl)({ invoicingAccountId: Number(account), from, to }) : undefined} disabled={!account}>PDF</Button>
           </Group>
         </form>
         <Text size="xs" c="dimmed" mt="xs">{NOTES[kind]}</Text>
