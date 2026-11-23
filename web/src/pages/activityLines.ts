@@ -69,7 +69,6 @@ export function buildLines(d: ActivityData, now: number = Date.now()): ActivityL
 }
 
 export const COLOUR: Record<Stage, string> = { 'Making print files': 'blue', Processing: 'blue', Waiting: 'gray', 'Awaiting PDF': 'yellow', Failed: 'red', Completed: 'green' };
-export const size = (n: number | null): string => (n === null ? '' : n < 1024 ? `${n} B` : n < 1_048_576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1_048_576).toFixed(1)} MB`);
 export const clock = (iso: string | null): string => (iso ? new Date(iso).toLocaleTimeString('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '');
 /** "45 s", "14 min", "1 h 20 min": a rough length of time. */
 export function duration(seconds: number): string {
