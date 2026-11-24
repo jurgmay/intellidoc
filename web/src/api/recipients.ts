@@ -12,7 +12,7 @@ export interface RecipientRow {
   invoicingCode: string | null; invoicingName: string | null; brand: string | null; priceSell: number | null; packs: RecipientPack[];
 }
 export interface RecipientResult { scope: { id: number; label: string }; rows: RecipientRow[]; truncated: boolean }
-export interface RecipientQuery { accountId: number; name: string; address: string; reference: string; referenceKey: string; jobGuid: string; packGuid: string; from: string; to: string }
+export interface RecipientQuery { accountId: number; name: string; address: string; reference: string; referenceKey: string; jobGuid: string; packGuid: string; from: string; to: string; limit?: number }
 
 /** The mailpieces of one batch, in print order, `limit` at a time starting after `offset`. */
 export const listBatchMailpieces = (accountId: number, batchId: number, offset: number, limit: number): Promise<RecipientResult> =>
@@ -23,6 +23,7 @@ export const listScopes = (): Promise<{ rows: SearchScope[] }> => api('/api/reci
 export function searchRecipients(q: RecipientQuery): Promise<RecipientResult> {
   const p = new URLSearchParams({ accountId: String(q.accountId) });
   for (const k of ['name', 'address', 'reference', 'referenceKey', 'jobGuid', 'packGuid', 'from', 'to'] as const) if (q[k].trim()) p.set(k, q[k].trim());
+  if (q.limit) p.set('limit', String(q.limit));
   return api(`/api/recipients/search?${p.toString()}`);
 }
 

@@ -1,4 +1,4 @@
-import { Badge, Box, Button, Group, Paper, Table, Text } from '@mantine/core';
+import { Badge, Box, Button, Checkbox, Group, Paper, Table, Text } from '@mantine/core';
 import { IconChevronRight } from '@tabler/icons-react';
 import { ukDate } from '../dates';
 import type { RecipientRow } from '../api/recipients';
@@ -12,8 +12,10 @@ export function Field({ label, children }: { label: string; children: React.Reac
 }
 
 /** One mailpiece: a header band with what is common to the envelope (click it to show or hide the letters), then the letters in the order they go in. */
-export function MailpieceCard({ row: r, open, onToggle, onPrice, showSequence = false }: {
-  row: RecipientRow; open: boolean; onToggle: () => void; onPrice: (mailpieceId: number) => void;
+export function MailpieceCard({ row: r, open, onToggle, onPrice, showSequence = false, select }: {
+  row: RecipientRow; open: boolean; onToggle: () => void; onPrice?: (mailpieceId: number) => void;
+  /** A tick box in the header, to choose mailpieces (used when reviewing matches for the audit report). */
+  select?: { checked: boolean; onChange: (checked: boolean) => void };
   /** Show the mailpiece's place in the batch's print order (used inside a batch). */
   showSequence?: boolean;
 }) {
@@ -24,6 +26,7 @@ export function MailpieceCard({ row: r, open, onToggle, onPrice, showSequence = 
         style={{ cursor: 'pointer', borderBottom: open ? '1px solid var(--mantine-color-default-border)' : undefined }}
         onClick={onToggle}
         onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onToggle(); } }}>
+        {select && <Checkbox checked={select.checked} onChange={(e) => select.onChange(e.currentTarget.checked)} onClick={(e) => e.stopPropagation()} aria-label={`Include the mailpiece to ${who} in the report`} mt={2} />}
         <IconChevronRight size={18} style={{ flex: 'none', marginTop: 4, transition: 'transform 150ms', transform: open ? 'rotate(90deg)' : undefined }} aria-hidden />
         <div style={{ minWidth: 0, flex: '1 1 18rem' }}>
           <Group gap="xs" wrap="nowrap">
@@ -40,7 +43,7 @@ export function MailpieceCard({ row: r, open, onToggle, onPrice, showSequence = 
           <Field label="Sent from">{r.accountPath}{r.brand && <Text size="xs" c="dimmed">{r.brand}</Text>}</Field>
           <Field label="Invoiced to">{r.invoicingName ?? '–'}</Field>
         </Group>
-        <Button size="compact-sm" variant="light" aria-label={`Price of the mailpiece to ${who}`} onClick={(e) => { e.stopPropagation(); onPrice(r.mailpieceId); }}>{r.priceSell == null ? 'Not priced' : `£${r.priceSell.toFixed(2)}`}</Button>
+        {onPrice && <Button size="compact-sm" variant="light" aria-label={`Price of the mailpiece to ${who}`} onClick={(e) => { e.stopPropagation(); onPrice(r.mailpieceId); }}>{r.priceSell == null ? 'Not priced' : `£${r.priceSell.toFixed(2)}`}</Button>}
       </Group>
       {/* the letters in the envelope, in the order they go in: what is specific to each */}
       {open && <Box p="sm">

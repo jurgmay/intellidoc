@@ -5,6 +5,7 @@ import { MemoryJobComposer, MemoryJobStore } from './jobs/memoryStore.js';
 import { MemoryReportStore } from './reports/memoryStore.js';
 import { MemoryRecipientStore } from './recipients/memoryStore.js';
 import { MemoryBatchStore, type MemoryBatch } from './batches/memoryStore.js';
+import { MemoryAuditStore } from './audit/memoryStore.js';
 import { MemoryCostingStore } from './costing/memoryStore.js';
 import { MemoryRepriceStore } from './reprice/memoryStore.js';
 import { MemoryPostalStore } from './postal/memoryStore.js';
@@ -93,6 +94,18 @@ const batch = (batchCode: number, over: Partial<MemoryBatch>): MemoryBatch => {
     priceSell: Math.round(mine.reduce((a, r) => a + (r.priceSell ?? 0), 0) * 1e4) / 1e4, unpriced: mine.filter((r) => r.priceSell === null).length,
     ancestors: [...new Set(mine.flatMap((r) => r.ancestors))], ...over };
 };
+// Audit report details for the same mailpieces (no page images: the stub has no customer PDFs)
+const audit = new MemoryAuditStore();
+audit.scopeList = recipients.scopeList;
+audit.rows = recipients.recipients.map((r) => ({
+  mailpieceId: r.mailpieceId, ancestors: r.ancestors, addressLines: r.addressLines, postcode: r.postcode, isCancelled: r.isCancelled, producedAt: `${r.releaseDate.slice(0, 10)}T09:40:00Z`,
+  job: { jobId: 1, name: r.job, xmlFile: `${r.job}.xml`, pdfFile: `${r.job}.pdf`, receivedAt: `${r.releaseDate.slice(0, 10)}T09:30:00Z`, pdfReceivedAt: `${r.releaseDate.slice(0, 10)}T09:31:00Z` },
+  batch: r.batchCode === null ? null : { batchCode: r.batchCode, status: 'Despatched', createdAt: `${r.releaseDate.slice(0, 10)}T09:45:00Z`, department: 'Machine enclosing', sequenceNumber: r.sequenceNumber, files: [{ segment: 1, fileName: `${r.batchCode}.pdf`, createdAt: `${r.releaseDate.slice(0, 10)}T09:46:00Z` }],
+    events: ['Created', 'Printed', 'Enclosed', 'Despatched'].map((type, i) => ({ type, at: `${r.releaseDate.slice(0, 10)}T${String(9 + i * 2).padStart(2, '0')}:45:00Z`, by: i ? 'production' : null, note: null })) },
+  service: { provider: 'Royal Mail', name: '2nd Class', format: 'Letter', tracked: false }, envelope: 'C5', weightG: 22, pageCount: r.packs.reduce((n, k) => n + k.pageCount, 0), sheetCount: 2,
+  submittedBy: { path: r.accountPath, code: r.accountCode }, brand: r.brand,
+  packs: r.packs.map((k) => ({ ...k, receivedAt: `${r.releaseDate.slice(0, 10)}T09:30:00Z`, ownerAccount: r.accountCode, ownerUser: 'uploader@example.com' })),
+}));
 batches.batches = [batch(7250, {}), batch(7251, { createdAt: '2026-11-19T10:02:00', status: 'Created', department: 'Hand enclosing' }), batch(7252, { createdAt: '2026-11-20T08:20:00', status: 'Despatched' })];
 const reports = new MemoryReportStore();
 reports.accounts = [{ id: 101, code: 'ACME', name: 'Acme Energy Ltd' }, { id: 106, code: 'ODEVO', name: 'Odevo' }];
@@ -138,6 +151,6 @@ inbox.items = [
 ];
 const composer = new MemoryJobComposer();
 composer.result = [{ batchCode: 7031, files: ['7031_1.pdf'], mrdfFile: null, skipped: null }, { batchCode: 7032, files: ['7032_1.pdf'], mrdfFile: null, skipped: null }];
-const app = await buildApp({ settings: store, hpod: new HpodSessions(store, { fetch: fakeHpodFetch() }), customers, costing, postal, reference: new MemoryReferenceStore(), reprice, recipients, batches, reports, jobs: { store: jobs, composer }, activity: { store: activityStore, inbox }, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
+const app = await buildApp({ settings: store, hpod: new HpodSessions(store, { fetch: fakeHpodFetch() }), customers, costing, postal, reference: new MemoryReferenceStore(), reprice, recipients, batches, audit, reports, jobs: { store: jobs, composer }, activity: { store: activityStore, inbox }, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
 await app.listen({ port: Number(process.env['API_PORT'] ?? 3001), host: '127.0.0.1' });
 console.log('Stub API (no database) on http://127.0.0.1:3001');
