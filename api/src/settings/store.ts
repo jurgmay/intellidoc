@@ -6,6 +6,15 @@ export interface AuditRow { id: number; changedAt: string; changedBy: string; se
 export interface Change { key: string; oldValue: SettingValue; newValue: SettingValue }
 export interface BatchCodeInfo { highestUsed: number | null; next: number }
 
+/**
+ * `maxUsed` is the highest batch code on any batch; `sequenceValue` is the sequence's current_value. After a restart (or before the first batch) the current value is the next
+ * number to issue, not yet used; once a batch has taken it, it equals the highest used. So a current value above every batch code is what comes next, otherwise it is one more than the highest.
+ */
+export function nextBatchCodeInfo(maxUsed: number | null, sequenceValue: number | null): BatchCodeInfo {
+  if (maxUsed === null) return { highestUsed: null, next: sequenceValue ?? 1 };
+  return { highestUsed: maxUsed, next: sequenceValue !== null && sequenceValue > maxUsed ? sequenceValue : maxUsed + 1 };
+}
+
 export interface SettingsStore {
   read(): Promise<Record<string, SettingValue>>;
   /** Allowed values of the envelope size select. */
@@ -108,9 +117,8 @@ export class MssqlSettingsStore implements SettingsStore {
 
   async batchCode(): Promise<BatchCodeInfo> {
     const max = (await this.pool.request().query('SELECT MAX(batch_code) AS m FROM idoc.batch')).recordset[0].m as number | null;
-    if (max !== null) return { highestUsed: Number(max), next: Number(max) + 1 };
     const cur = (await this.pool.request().query(`SELECT CAST(current_value AS BIGINT) AS v FROM sys.sequences WHERE name = N'batch_code_seq' AND schema_id = SCHEMA_ID(N'idoc')`)).recordset[0];
-    return { highestUsed: null, next: Number(cur?.v ?? 1) };
+    return nextBatchCodeInfo(max === null ? null : Number(max), cur?.v === undefined || cur.v === null ? null : Number(cur.v));
   }
 
   async setNextBatchCode(next: number, by: string): Promise<void> {
