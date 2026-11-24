@@ -101,7 +101,7 @@ export function CustomersPage() {
             </Table.Thead>
             <Table.Tbody>
               {items.map(({ row: r, depth }) => (
-                <Table.Tr key={r.id} onClick={() => nav(`/customers/${r.id}`)} style={{ cursor: 'pointer' }}>
+                <Table.Tr key={r.id} onClick={() => nav(`/customers/${r.id}`)} style={{ cursor: 'pointer', ...(r.isDeleted ? { backgroundColor: 'var(--mantine-color-red-0)' } : r.isTesting ? { backgroundColor: 'var(--mantine-color-orange-0)' } : {}) }}>   {/* pale red for deleted, pale orange for testing (deleted wins) */}
                   <Table.Td fw={500} pl={depth * 24 + 12} style={CELL}>{depth > 0 && <Text span c="dimmed" fw={400}>└ </Text>}{r.name}{depth === 0 && r.parentCode && <Text span size="xs" c="dimmed" fw={400}> · part of {r.parentCode}</Text>}</Table.Td>
                   <Table.Td style={CELL}>{r.code}</Table.Td>
                   <Table.Td ta="center" style={CELL}>{r.misJobNumber ?? <Text span c="dimmed">–</Text>}</Table.Td>

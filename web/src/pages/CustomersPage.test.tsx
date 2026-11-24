@@ -53,6 +53,20 @@ const wrap = (path: string) => render(
 );
 
 describe('Customers list', () => {
+  it('gives a Testing customer a pale orange row, and no other row', async () => {
+    respond = (url) => (url.startsWith('/api/customers?') ? { status: 200, json: { rows: [{ ...row, isTesting: true }, { ...row, id: 8, code: 'LIVE', name: 'Live Co', isTesting: false }] } } : { status: 204 });
+    wrap('/customers');
+    const test = (await screen.findByText('Acme Energy Ltd')).closest('tr')!;
+    expect(test.getAttribute('style')).toMatch(/orange-0/);
+    expect(screen.getByText('Live Co').closest('tr')!.getAttribute('style')).not.toMatch(/orange/);
+  });
+  it('gives a Deleted customer a pale red row, even when it is also Testing', async () => {
+    respond = (url) => (url.startsWith('/api/customers?') ? { status: 200, json: { rows: [{ ...row, isDeleted: true, isTesting: true }] } } : { status: 204 });
+    wrap('/customers');
+    const tr = (await screen.findByText('Acme Energy Ltd')).closest('tr')!;
+    expect(tr.getAttribute('style')).toMatch(/red-0/);
+    expect(tr.getAttribute('style')).not.toMatch(/orange/);
+  });
   it('shows a purple SSO pill for a customer that uses SSO', async () => {
     respond = (url) => (url.startsWith('/api/customers?') ? { status: 200, json: { rows: [{ ...row, isSso: true }] } } : { status: 204 });
     wrap('/customers');
