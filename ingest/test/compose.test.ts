@@ -11,15 +11,21 @@ import { ghostscriptArgs, type GreyConverter } from '../src/compose/grey.js';
 import { analysePageInk } from '../src/pdfInk.js';
 
 const pack = (id: number, start: number, end: number, o: Partial<PlanPack> = {}): PlanPack =>
-  ({ packId: id, startPage: start, endPage: end, submittingAccountId: 1, releaseDate: new Date('2026-01-01'), documentSequence: 99, forceMono: false, ...o });
+  ({ packId: id, startPage: start, endPage: end, ownerAccount: 'A', ownerUser: 'U', releaseDate: new Date('2026-01-01'), documentSequence: 99, forceMono: false, ...o });
+/** Owner B prints after the default owner A */
+const B = { ownerAccount: 'B' };
 const mp = (id: number, packs: PlanPack[], o: Partial<PlanMailpiece> = {}): PlanMailpiece =>
-  ({ mailpieceId: id, sequenceNumber: null, weightBandG: 100, isCancelled: false, colourMode: 'ORIGINAL', isAddressMatching: false, packs, ...o });
+  ({ mailpieceId: id, sequenceNumber: null, isCancelled: false, colourMode: 'ORIGINAL', isAddressMatching: false, packs, ...o });
 
 describe('sequence numbers', () => {
-  it('are given lightest first, then in source order; unknown weights last; cancelled mailpieces get none', () => {
-    const s = assignSequences([mp(1, [pack(1, 1, 2)], { weightBandG: 250 }), mp(2, [pack(2, 3, 4)], { weightBandG: 100 }), mp(3, [pack(3, 5, 6)], { weightBandG: null }),
-      mp(4, [pack(4, 7, 8)], { weightBandG: 100 }), mp(5, [pack(5, 9, 9)], { isCancelled: true })]);
-    expect([...s]).toEqual([[2, 1], [4, 2], [1, 3], [3, 4]]);
+  it('follow the owner account, owner user, release date, then source order; cancelled mailpieces get none', () => {
+    const own = (account: string, user: string, release = '2026-01-01') => ({ ownerAccount: account, ownerUser: user, releaseDate: new Date(release) });
+    const s = assignSequences([
+      mp(1, [pack(1, 1, 2, own('B', 'x'))]), mp(2, [pack(2, 3, 4, own('a', 'y'))]), mp(3, [pack(3, 5, 6, own('a', 'x', '2026-02-01'))]),
+      mp(4, [pack(4, 7, 8, own('A', 'x'))]), mp(5, [pack(5, 9, 9)], { isCancelled: true }), mp(6, [pack(6, 10, 10, own('a', 'x')), pack(7, 11, 11, own('Z', 'z'))]),
+    ]);
+    // a/x/Jan: mailpieces 4 (page 7) then 6 (page 10); then a/x/Feb: 3; then a/y: 2; then B: 1
+    expect([...s]).toEqual([[4, 1], [6, 2], [3, 3], [2, 4], [1, 5]]);
   });
   it('are kept when the batch is composed again; new mailpieces follow the highest', () => {
     const s = assignSequences([mp(1, [pack(1, 1, 2)], { sequenceNumber: 7 }), mp(2, [pack(2, 3, 4)]), mp(3, [pack(3, 5, 6)], { sequenceNumber: 2 })]);
@@ -40,8 +46,8 @@ describe('colour modes', () => {
 
 describe('pack order', () => {
   it('is owner, release date, source order; with address matching it is the document sequence', () => {
-    const a = pack(1, 1, 1, { submittingAccountId: 2, documentSequence: 1 }), b = pack(2, 2, 2, { submittingAccountId: 1, releaseDate: new Date('2026-02-01'), documentSequence: 3 });
-    const c = pack(3, 3, 3, { submittingAccountId: 1, releaseDate: new Date('2026-01-01'), documentSequence: 2 });
+    const a = pack(1, 1, 1, { ownerAccount: 'B', documentSequence: 1 }), b = pack(2, 2, 2, { ownerAccount: 'A', ownerUser: 'U', releaseDate: new Date('2026-02-01'), documentSequence: 3 });
+    const c = pack(3, 3, 3, { ownerAccount: 'A', ownerUser: 'U', releaseDate: new Date('2026-01-01'), documentSequence: 2 });
     expect(orderPacks(mp(1, [a, b, c])).map((p) => p.packId)).toEqual([3, 2, 1]);
     expect(orderPacks(mp(1, [a, b, c], { isAddressMatching: true })).map((p) => p.packId)).toEqual([1, 3, 2]);
   });
@@ -49,7 +55,7 @@ describe('pack order', () => {
 
 describe('planBatch', () => {
   it('pads odd packs, puts the run sheet first and records each pack output pages', () => {
-    const plan = planBatch([mp(1, [pack(1, 1, 3), pack(2, 4, 4)], { weightBandG: 250 }), mp(2, [pack(3, 5, 6)], { weightBandG: 100 })], { maxPagesPerPdf: 100, runSheetPages: 2 });
+    const plan = planBatch([mp(1, [pack(1, 1, 3, B), pack(2, 4, 4, B)]), mp(2, [pack(3, 5, 6)])], { maxPagesPerPdf: 100, runSheetPages: 2 });
     const [s] = plan.segments;
     expect(plan.segments).toHaveLength(1);
     expect(s!.pages.map((p) => p.kind[0])).toEqual(['r', 'r', 's', 's', 's', 's', 's', 'b', 's', 'b']);
@@ -72,13 +78,13 @@ describe('planBatch', () => {
     });
   });
   it('closes a file after the mailpiece that takes it past the limit', () => {
-    const mps = [1, 2, 3, 4].map((i) => mp(i, [pack(i, i * 2 - 1, i * 2)], { weightBandG: i })); // 2 pages each
+    const mps = [1, 2, 3, 4].map((i) => mp(i, [pack(i, i * 2 - 1, i * 2)])); // 2 pages each
     const plan = planBatch(mps, { maxPagesPerPdf: 5, runSheetPages: 0 });
     expect(plan.segments.map((s) => s.mailpieces.map((m) => m.mailpieceId))).toEqual([[1, 2, 3], [4]]); // 6 pages > 5, so the file ran over by one mailpiece
     expect(plan.segments[1]!.mailpieces[0]!.outputPage).toBe(1);
   });
   it('puts the run sheet in the first file only and counts it', () => {
-    const mps = [1, 2, 3].map((i) => mp(i, [pack(i, i * 2 - 1, i * 2)], { weightBandG: i }));
+    const mps = [1, 2, 3].map((i) => mp(i, [pack(i, i * 2 - 1, i * 2)]));
     const plan = planBatch(mps, { maxPagesPerPdf: 4, runSheetPages: 2 });
     expect(plan.segments.map((s) => s.pages.length)).toEqual([6, 2]); // run sheet + mailpiece 1 = 4 (not over), + mailpiece 2 = 6 > 4: closed after it; mailpiece 3 starts file 2 with no run sheet
   });
@@ -125,7 +131,7 @@ class FakeGrey implements GreyConverter { seen: number[] = []; async convert(pdf
 const hasPdftotext = spawnSync('pdftotext', ['-v']).error === undefined;
 
 describe('composeBatch', () => {
-  const mailpieces = [mp(1, [pack(1, 1, 3), pack(2, 4, 4)], { weightBandG: 250, colourMode: 'FIRST_MAILPIECE_PAGE' }), mp(2, [pack(3, 5, 6)], { weightBandG: 100, colourMode: 'FIRST_MAILPIECE_PAGE' })];
+  const mailpieces = [mp(1, [pack(1, 1, 3, B), pack(2, 4, 4, B)], { colourMode: 'FIRST_MAILPIECE_PAGE' }), mp(2, [pack(3, 5, 6)], { colourMode: 'FIRST_MAILPIECE_PAGE' })];
   const run = async (g: GreyConverter | null, mode: 'FIRST_MAILPIECE_PAGE' | 'ALL_MONO' = 'FIRST_MAILPIECE_PAGE') => {
     const mps = mailpieces.map((m) => ({ ...m, colourMode: mode }));
     const plan = planBatch(mps, { maxPagesPerPdf: 100, runSheetPages: 2 });

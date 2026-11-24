@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { basename } from 'node:path';
 import { parseHpodV6 } from './parser.js';
 import { normaliseAddress } from './address.js';
+import { comparePacks } from './packOrder.js';
 import { exclusionFor, groupPacks, matchKey } from './matching.js';
 import { parseEnvelopeText } from './envelopeText.js';
 import { choosePhysical, PhysicalError } from './physical.js';
@@ -104,6 +105,9 @@ export async function ingest(
   const mailpieces: Mailpiece[] = [];
   if (!issues.some((i) => i.severity === 'error')) {
     let id = 1;
+    // Packs go into mailpieces in owner account, owner user, release date order, so mailpieces are created (and numbered) in that order
+    const key = (p: IngestPack) => ({ ownerAccount: p.parsed.source.ownerAccount, ownerUser: p.parsed.source.ownerUser, releaseDate: new Date(p.parsed.releaseDate ?? 0), startPage: p.parsed.startPage });
+    packs.sort((a, b) => comparePacks(key(a), key(b)));
     for (const g of groupPacks(packs, ref)) {
       g.sort((a, b) => a.documentSequence - b.documentSequence || a.parsed.startPage - b.parsed.startPage);
       const first = g[0]!;

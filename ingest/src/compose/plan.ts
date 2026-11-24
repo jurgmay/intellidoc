@@ -3,12 +3,15 @@
  * The rules are the ones in FileMaker's "@Create PDFs" script (see docs/pdf-composition.md).
  */
 import type { ColourMode } from '../costing/colour.js';
+import { comparePacks } from '../packOrder.js';
 
 export interface PlanPack {
   packId: number;
   startPage: number; // pages of the source PDF, 1-based, inclusive
   endPage: number;
-  submittingAccountId: number;
+  /** The pack's source: XML OwnerAccount and OwnerUser. */
+  ownerAccount: string;
+  ownerUser: string;
   releaseDate: Date;
   documentSequence: number;
   /** The pack's own option set says Mono: every page of it is printed mono, whatever the colour mode. */
@@ -19,8 +22,6 @@ export interface PlanMailpiece {
   mailpieceId: number;
   /** Set when the batch has been composed before; kept so a re-compose never renumbers. */
   sequenceNumber: number | null;
-  /** The weight band the mailpiece was priced in (postal_rate.max_weight_g); null when unknown (sorts last). */
-  weightBandG: number | null;
   isCancelled: boolean;
   colourMode: ColourMode;
   isAddressMatching: boolean;
@@ -56,18 +57,18 @@ export interface BatchPlan {
   segments: PlannedSegment[];
 }
 
-const firstPage = (m: PlanMailpiece): number => Math.min(...m.packs.map((p) => p.startPage));
+const firstPack = (m: PlanMailpiece): PlanPack => [...m.packs].sort(comparePacks)[0]!;
 
 /**
- * Sequence numbers: when no mailpiece has one yet they are given out 1..n by weight band, lightest first (then source order), the way
- * FileMaker did it so the enclosing line sees the light mail first. Mailpieces added later get the next numbers after the highest.
+ * Sequence numbers: when no mailpiece has one yet they are given out 1..n in the order of each mailpiece's first pack (owner account, owner user, release
+ * date, then source order). Mailpieces added later get the next numbers after the highest.
  */
 export function assignSequences(mailpieces: PlanMailpiece[]): Map<number, number> {
   const live = mailpieces.filter((m) => !m.isCancelled && m.packs.length > 0);
   const out = new Map<number, number>();
   let next = Math.max(0, ...live.map((m) => m.sequenceNumber ?? 0)) + 1;
   const todo = live.filter((m) => m.sequenceNumber === null);
-  todo.sort((a, b) => (a.weightBandG ?? Infinity) - (b.weightBandG ?? Infinity) || firstPage(a) - firstPage(b) || a.mailpieceId - b.mailpieceId);
+  todo.sort((a, b) => comparePacks(firstPack(a), firstPack(b)) || a.mailpieceId - b.mailpieceId);
   for (const m of todo) out.set(m.mailpieceId, next++);
   return out;
 }
@@ -75,9 +76,7 @@ export function assignSequences(mailpieces: PlanMailpiece[]): Map<number, number
 /** The order of the packs inside one mailpiece. */
 export function orderPacks(m: PlanMailpiece): PlanPack[] {
   const byAddress = (a: PlanPack, b: PlanPack): number => a.documentSequence - b.documentSequence || a.startPage - b.startPage;
-  const byOwner = (a: PlanPack, b: PlanPack): number =>
-    a.submittingAccountId - b.submittingAccountId || a.releaseDate.getTime() - b.releaseDate.getTime() || a.startPage - b.startPage;
-  return [...m.packs].sort(m.isAddressMatching ? byAddress : byOwner);
+  return [...m.packs].sort(m.isAddressMatching ? byAddress : comparePacks);
 }
 
 /** Whether page `n` (1-based) of a pack is printed mono, for the mailpiece's colour mode. `packIndex` is the pack's place in the mailpiece (0 = first). */
