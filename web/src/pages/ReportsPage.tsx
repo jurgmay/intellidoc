@@ -4,13 +4,15 @@ import { IconAlertCircle, IconFileTypePdf } from '@tabler/icons-react';
 import { ApiError } from '../api/client';
 import { getMargin, getUsage, listInvoicingAccounts, marginPdfUrl, usagePdfUrl, type InvoicingAccount, type MarginReport, type UsageReport } from '../api/reports';
 import { MarginReportView } from './MarginReportView';
+import { AuditReportPanel } from './AuditReportPanel';
 import { UsageReportView } from './UsageReportView';
 import { iso } from './reportFormat';
 
-type Kind = 'usage' | 'margin';
-const KINDS = [{ value: 'usage', label: 'Usage report' }, { value: 'margin', label: 'Margin report' }];
+type Kind = 'usage' | 'margin' | 'audit';
+const KINDS = [{ value: 'usage', label: 'Usage report' }, { value: 'margin', label: 'Margin report' }, { value: 'audit', label: 'Mailpiece audit report' }];
 const NOTES: Record<Kind, string> = {
   usage: 'Counted on the day the mailpieces were produced (UK time). Cancelled mailpieces and batches are left out. Amounts are the sell price (excluding VAT) of production and postage, as priced when the mail was produced.',
+  audit: '',
   margin: 'Internal: shows costs, so do not send it to the customer. Sell is what would be invoiced (excluding VAT); margin is sell minus cost. Counted on the day the mailpieces were produced (UK time), at the prices when they were produced. Cancelled mail is left out.',
 };
 
@@ -35,18 +37,20 @@ export function ReportsPage() {
     if (!account) { setErrors({ invoicingAccountId: 'Choose the invoicing account to report on.' }); return; }
     setBusy(true);
     const q = { invoicingAccountId: Number(account), from, to };
-    try { setShown(kind === 'usage' ? { kind, report: await getUsage(q) } : { kind, report: await getMargin(q) }); }
+    try { setShown(kind === 'usage' ? { kind: 'usage', report: await getUsage(q) } : { kind: 'margin', report: await getMargin(q) }); }
     catch (err) { setShown(null); if (err instanceof ApiError && err.fieldErrors) setErrors(err.fieldErrors); else setError((err as Error).message); }
     finally { setBusy(false); }
   }
 
+  const kindSelect = <Select label="Report" allowDeselect={false} data={KINDS} value={kind} onChange={(v) => { setKind((v as Kind) ?? 'usage'); setShown(null); setErrors({}); }} w={220} />;
+  if (kind === 'audit') return <Stack><Title order={2}>Reports</Title><AuditReportPanel header={kindSelect} /></Stack>;
   return (
     <Stack>
       <Title order={2}>Reports</Title>
       <Paper withBorder p="md">
         <form onSubmit={show}>
           <Group align="flex-end">
-            <Select label="Report" allowDeselect={false} data={KINDS} value={kind} onChange={(v) => { setKind((v as Kind) ?? 'usage'); setShown(null); setErrors({}); }} w={180} />
+            {kindSelect}
             <Select label="Invoicing account" placeholder="Choose an account" searchable style={{ flex: 1 }} data={(accounts ?? []).map((a) => ({ value: String(a.id), label: `${a.name} (${a.code})` }))}
               value={account} onChange={setAccount} error={errors['invoicingAccountId']} disabled={!accounts} withAsterisk />
             <TextInput label="From" type="date" value={from} onChange={(e) => setFrom(e.currentTarget.value)} error={errors['from']} />

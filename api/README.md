@@ -85,6 +85,17 @@ The mailpieces of a batch come from the mailpiece search, so the two pages show 
 
 The web page (`/batches`) works like Mailpieces: a header band for each batch (collapsed at first; click it, or press Enter or Space on it, to show its mailpieces, and again to hide them), and each mailpiece inside is the same collapsible box as on the Mailpieces page, with its print-order number. The mailpieces are fetched 50 at a time when a batch is first opened ("Show more mailpieces" for the rest). Like the Mailpieces page it keeps its account, terms, results, and which batches and mailpieces are open while the app is open. Code: `api/src/batches/`, `web/src/pages/BatchesPage.tsx`, and `MailpieceCard.tsx` which both pages share.
 
+## Mailpiece audit report (proof of postage)
+
+For when a customer's customer says they never received a letter. On the Reports page, choose **Mailpiece audit report**. It has two steps, because a name and address match can catch a different person:
+
+1. **Find and review.** The form takes the Mailpieces search terms (name, address, job GUID, pack GUID, reference and its name, release dates) within an account and below, and lists up to 300 matching mailpieces as the Mailpieces page does, so the letters and their metadata can be opened and checked. Nothing is ticked at first. Tick the mailpieces that are the recipient's (Tick all / Untick all help).
+2. **Create report.** `POST /api/reports/audit.pdf` with `{ accountId, mailpieceIds, criteria, thumbnails }` returns a PDF. Only mailpieces in that account or below are included (the rest are named in a note on the first page), at most 300, oldest first. `criteria` is the words describing the search, printed on the first page with the number ticked and the time the report was made. `thumbnails` (default true) turns the page images off.
+
+**What it holds:** a summary page, then one page per mailpiece: the address, the first page of the letter, when it was produced, the job, who submitted it (the account path as it was at the time, and the export's Source owner account and user), the service (and whether it is tracked), contents and weight, the batch and its place in the print order, a **timeline** (job received, PDF received, mailpiece produced, print file made, then the batch's Created, Printed, Enclosed and Despatched events with who recorded them and any note), and each letter's pack GUID, job GUID, sequence, pages, release and receipt times and references. All times are shown in UK time (GMT or BST). It holds no prices or costs. IntelliDoc stores no tracking numbers or delivery scans, so for tracked and signed-for services the report only says the service is tracked; the proof of delivery is the carrier's.
+
+**Page images** are rendered with Ghostscript from the customer's PDF in the watcher's `processed` folder, which keeps them for 90 days. The page used is the first page of the mailpiece's first letter. When the PDF is gone (or the API has no `WATCH_DIR` / `AUDIT_PDF_DIR`) that mailpiece's page says so, and the rest of the report is unaffected. `AUDIT_PDF_DIR` overrides `WATCH_DIR/processed`; `GS_PATH` names Ghostscript if it is not on the PATH. Code: `api/src/audit/`, `web/src/pages/AuditReportPanel.tsx`.
+
 ## Usage report
 
 The internal margin report has the same parameters at `GET /api/reports/margin`, and `GET /api/reports/margin.pdf` returns it as a PDF in the same style as the usage PDF (sell and cost for each day, then the numbers; marked INTERNAL because it shows costs).
