@@ -12,7 +12,7 @@ import { RecipientSearchPage } from './pages/RecipientSearchPage';
 import { BatchesPage } from './pages/BatchesPage';
 import { SettingsPage } from './pages/SettingsPage';
 
-const NAV = [{ to: '/customers', label: 'Customers', icon: IconUsers }, { to: '/activity', label: 'Activity', icon: IconActivity }, { to: '/jobs', label: 'Jobs', icon: IconFiles }, { to: '/batches', label: 'Batches', icon: IconPackage }, { to: '/mailpieces', label: 'Mailpieces', icon: IconSearch }, { to: '/reports', label: 'Reports', icon: IconChartBar }, { to: '/hpod', label: 'H-POD', icon: IconPlugConnected }, { to: '/settings', label: 'Settings', icon: IconSettings }];
+const NAV = [{ to: '/activity', label: 'Activity', icon: IconActivity }, { to: '/customers', label: 'Customers', icon: IconUsers }, { to: '/jobs', label: 'Jobs', icon: IconFiles }, { to: '/batches', label: 'Batches', icon: IconPackage }, { to: '/mailpieces', label: 'Mailpieces', icon: IconSearch }, { to: '/reports', label: 'Reports', icon: IconChartBar }, { to: '/hpod', label: 'H-POD', icon: IconPlugConnected }, { to: '/settings', label: 'Settings', icon: IconSettings }];
 
 export function App() {
   const { pathname } = useLocation();
