@@ -3,7 +3,7 @@ export const COLOUR_MODES = ['ORIGINAL', 'FIRST_PACK_PAGE', 'FIRST_MAILPIECE_PAG
 export type ColourMode = (typeof COLOUR_MODES)[number];
 export interface CustomerRow {
   id: number; code: string; name: string; misJobNumber: string | null; pendingJobNumber: string | null;
-  isAddressMatching: boolean; isTesting: boolean; isDeleted: boolean;
+  isAddressMatching: boolean; isUseMrdf: boolean; isTesting: boolean; isDeleted: boolean;
   /** The hierarchy parent: where this customer sits in the tree. It keeps its own settings. */
   parentId: number | null; parentCode: string | null;
   accountCount: number; brandCount: number; envelopeCount: number;

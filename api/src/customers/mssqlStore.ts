@@ -54,7 +54,7 @@ export class MssqlCustomerStore implements CustomerStore {
 
   async list(search: string, includeDeleted: boolean): Promise<CustomerRow[]> {
     const rows = (await this.pool.request().input('q', sql.NVarChar(200), `%${search.trim().replace(/[%_[]/g, '[$&]')}%`).input('d', sql.Bit, includeDeleted).query(`
-      SELECT a.account_id, a.account_code, a.name, a.mis_job_number, a.pending_mis_job_number, a.is_address_matching, a.is_testing, a.is_deleted, a.parent_account_id, par.account_code AS parent_code,
+      SELECT a.account_id, a.account_code, a.name, a.mis_job_number, a.pending_mis_job_number, a.is_address_matching, a.is_use_mrdf, a.is_testing, a.is_deleted, a.parent_account_id, par.account_code AS parent_code,
         (SELECT COUNT(*) FROM idoc.v_account_owner o JOIN idoc.account s ON s.account_id = o.account_id WHERE o.owner_account_id = a.account_id AND o.account_id <> a.account_id AND s.is_deleted = 0) AS accounts,
         (SELECT COUNT(*) FROM idoc.brand b WHERE b.account_id = a.account_id) AS brands,
         (SELECT COUNT(*) FROM idoc.account_envelope e WHERE e.account_id = a.account_id AND e.is_deleted = 0) AS envelopes
@@ -64,7 +64,7 @@ export class MssqlCustomerStore implements CustomerStore {
         AND (a.account_code LIKE @q ESCAPE '[' OR a.name LIKE @q ESCAPE '[' OR a.mis_job_number LIKE @q ESCAPE '[' OR a.pending_mis_job_number LIKE @q ESCAPE '[')
       ORDER BY a.name`)).recordset as R[];
     return rows.map((r) => ({
-      id: r.account_id, code: r.account_code, name: r.name, misJobNumber: r.mis_job_number, pendingJobNumber: r.pending_mis_job_number ?? null, parentId: r.parent_account_id ?? null, parentCode: r.parent_code ?? null, isAddressMatching: !!r.is_address_matching, isTesting: !!r.is_testing, isDeleted: !!r.is_deleted,
+      id: r.account_id, code: r.account_code, name: r.name, misJobNumber: r.mis_job_number, pendingJobNumber: r.pending_mis_job_number ?? null, parentId: r.parent_account_id ?? null, parentCode: r.parent_code ?? null, isAddressMatching: !!r.is_address_matching, isUseMrdf: !!r.is_use_mrdf, isTesting: !!r.is_testing, isDeleted: !!r.is_deleted,
       accountCount: r.accounts, brandCount: r.brands, envelopeCount: r.envelopes,
     }));
   }

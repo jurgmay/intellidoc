@@ -22,7 +22,7 @@ const lookups = {
   postalRates: [{ id: 1, label: 'Royal Mail – 2nd Class (Letter), up to 100g', format: 'Letter' }, { id: 2, label: 'Royal Mail – 1st Class (Letter), up to 100g', format: 'Letter' }],
   envelopeStock: [{ id: 10, code: 'WH0101', description: 'C5 white window', size: 'C5' }],
 };
-const row = { id: 7, code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', pendingJobNumber: '24601' as string | null, parentId: null as number | null, parentCode: null as string | null, isAddressMatching: true, isTesting: false, isDeleted: false, accountCount: 1, brandCount: 2, envelopeCount: 1 };
+const row = { id: 7, code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', pendingJobNumber: '24601' as string | null, parentId: null as number | null, parentCode: null as string | null, isAddressMatching: true, isUseMrdf: false, isTesting: false, isDeleted: false, accountCount: 1, brandCount: 2, envelopeCount: 1 };
 
 let calls: { url: string; method: string; body?: any }[];
 let respond: (url: string, method: string, body: any) => { status: number; json?: unknown };
@@ -53,10 +53,18 @@ const wrap = (path: string) => render(
 );
 
 describe('Customers list', () => {
+  it('shows a green Uses MRDF pill for a customer that uses MRDF', async () => {
+    respond = (url) => (url.startsWith('/api/customers?') ? { status: 200, json: { rows: [{ ...row, isUseMrdf: true }] } } : { status: 204 });
+    wrap('/customers');
+    const pill = await screen.findByText('Uses MRDF');
+    expect(pill.closest('.mantine-Badge-root')).toHaveAttribute('data-variant', 'light');
+    expect(pill.closest('.mantine-Badge-root')?.getAttribute('style')).toMatch(/green/);
+  });
   it('lists customers with their counts and searches as you type', async () => {
     wrap('/customers');
     expect(await screen.findByText('Acme Energy Ltd')).toBeInTheDocument();
     expect(screen.getByText('Address matching')).toBeInTheDocument();
+    expect(screen.queryByText('Uses MRDF')).not.toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('Search customers'), 'acme');
     await waitFor(() => expect(calls.some((c) => c.url === '/api/customers?search=acme')).toBe(true));
   });
