@@ -49,3 +49,7 @@ export async function importPostal(file: File, startDate: string, endDate: strin
   }
   return data as unknown as { plan: ImportPlan; result: ImportResult | null };
 }
+
+export interface EndPlan { lastDay: string; rows: { rateId: number }[]; services: number; startingLater: number }
+/** Without apply, says how many prices would get this last day. With apply, sets it. */
+export const endAllPrices = (lastDay: string, apply: boolean) => api<{ plan: EndPlan; ended: number | null }>('/api/postal/end-prices', { method: 'POST', body: { lastDay, apply } });

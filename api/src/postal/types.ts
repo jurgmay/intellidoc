@@ -1,3 +1,4 @@
+import type { EndPlan } from './endPrices.js';
 import type { ImportPlan } from './importPlan.js';
 export interface FormatRef { id: number; name: string }
 export type RateStatus = 'current' | 'planned' | 'ended';
@@ -35,5 +36,7 @@ export interface PostalStore {
   priceChange(serviceId: number, input: PriceChangeInput, by: string): Promise<number>;
   /** Applies a plan from planImport in one transaction: adds the providers, services and prices it lists, ending the old row of changed bands the day before. The plan must be importable. */
   applyImport(plan: ImportPlan, by: string, fileName: string): Promise<ImportResult>;
+  /** Sets the last day of the plan's rows in one transaction and writes one audit line. Returns how many were ended. */
+  endPrices(plan: EndPlan, by: string): Promise<number>;
   history(limit: number): Promise<HistoryEntry[]>;
 }

@@ -2,6 +2,7 @@ import sql from 'mssql';
 import { ConflictError, NotFoundError, ValidationError } from '../errors.js';
 import * as D from './describe.js';
 import { bandLabel, checkNoOverlap, dayBefore, planPriceChange, statusOf, type BandRow } from './rules.js';
+import { describeEnd, type EndPlan } from './endPrices.js';
 import type { ImportPlan } from './importPlan.js';
 import type { HistoryEntry, ImportResult, PostalOverview, PostalStore, PriceChangeInput, ProviderView, RateInput, ServiceInput, ServiceView } from './types.js';
 
@@ -278,6 +279,20 @@ export class MssqlPostalStore implements PostalStore {
       for (const line of D.describeImport(plan, fileName)) await this.audit(t, by, line);
       const c = plan.counts;
       return { newProviders: c.newProviders, newServices: c.newServices, newBands: c.newBands, changedBands: c.changedBands, updatedBands: c.updatedBands, unchangedBands: c.unchangedBands };
+    });
+  }
+
+  async endPrices(plan: EndPlan, by: string): Promise<number> {
+    if (plan.rows.length === 0) return 0;
+    return this.tx(async (t) => {
+      let n = 0;
+      for (const row of plan.rows) {
+        // Only rows that still start by the last day and run past it (the plan may be a moment old)
+        n += (await this.req(t).input('i', sql.Int, row.rateId).input('d', sql.Date, plan.lastDay).query(
+          'UPDATE idoc.postal_rate SET valid_to = @d WHERE postal_rate_id = @i AND valid_from <= @d AND (valid_to IS NULL OR valid_to > @d)')).rowsAffected[0] ?? 0;
+      }
+      await this.audit(t, by, describeEnd({ ...plan, rows: plan.rows }));
+      return n;
     });
   }
 

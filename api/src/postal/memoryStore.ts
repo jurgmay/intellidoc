@@ -1,5 +1,6 @@
 import { ConflictError, NotFoundError, ValidationError } from '../errors.js';
 import * as D from './describe.js';
+import { describeEnd, type EndPlan } from './endPrices.js';
 import type { ImportPlan } from './importPlan.js';
 import { checkNoOverlap, planPriceChange, statusOf, type BandRow } from './rules.js';
 import type { ImportResult, FormatRef, HistoryEntry, PostalOverview, PostalStore, PriceChangeInput, ProviderView, RateInput, RateView, ServiceInput, ServiceView } from './types.js';
@@ -134,6 +135,12 @@ export class MemoryPostalStore implements PostalStore {
     for (const line of D.describeImport(plan, fileName)) this.log(by, line);
     const c = plan.counts;
     return { newProviders: c.newProviders, newServices: c.newServices, newBands: c.newBands, changedBands: c.changedBands, updatedBands: c.updatedBands, unchangedBands: c.unchangedBands };
+  }
+
+  async endPrices(plan: EndPlan, by: string): Promise<number> {
+    for (const row of plan.rows) this.rate(row.rateId).validTo = plan.lastDay;
+    if (plan.rows.length) this.log(by, describeEnd(plan));
+    return plan.rows.length;
   }
 
   async history(limit: number): Promise<HistoryEntry[]> {

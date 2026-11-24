@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { ConflictError, NotFoundError, ValidationError } from '../errors.js';
+import { planEnd } from './endPrices.js';
 import { readRatesFile } from './importFile.js';
 import { planImport } from './importPlan.js';
 import { userOf } from '../settings/routes.js';
@@ -38,6 +39,14 @@ export function postalRoutes(app: FastifyInstance, store: PostalStore): void {
   app.get('/api/postal/history', async (req) => {
     const n = Number((req.query as { limit?: string }).limit ?? 50);
     return { rows: await store.history(Number.isInteger(n) && n > 0 ? Math.min(n, 500) : 50) };
+  });
+
+  /** Sets the last day of every price that runs past it. Without apply, only says what would end. */
+  app.post('/api/postal/end-prices', async (req) => {
+    const b = (req.body ?? {}) as { lastDay?: unknown; apply?: unknown };
+    const plan = planEnd(await store.overview(), typeof b.lastDay === 'string' ? b.lastDay : '');
+    if (b.apply !== true) return { plan, ended: null };
+    return { plan, ended: await store.endPrices(plan, userOf(req)) };
   });
 
   app.post('/api/postal/providers', async (req, reply) => reply.code(201).send({ id: await store.createProvider(parseName(req.body as Body), userOf(req)) }));

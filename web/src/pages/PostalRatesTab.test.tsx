@@ -99,4 +99,19 @@ describe('PostalRatesTab', () => {
     await userEvent.click(within(dlg).getByRole('button', { name: 'Import prices' }));
     await waitFor(() => expect(imports[1]).toContain('apply=1'));
   });
+  it('ends all current prices: says how many, then ends them', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fetchMock = vi.mocked(fetch) as any; const base = fetchMock.getMockImplementation()!; const bodies: any[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
+    fetchMock.mockImplementation(async (url: string, init?: { method?: string; body?: string }) => {
+      if (url === '/api/postal/end-prices') { const b = JSON.parse(init!.body!); bodies.push(b); return new Response(JSON.stringify({ plan: { lastDay: b.lastDay, rows: [{ rateId: 11 }], services: 1, startingLater: 0 }, ended: b.apply ? 1 : null }), { status: 200 }); }
+      return base(url, init);
+    });
+    wrap(); await screen.findByText('2nd Class');
+    await userEvent.click(screen.getByRole('button', { name: /End all prices/ }));
+    const dlg = await screen.findByRole('dialog');
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Check' }));
+    expect(await within(dlg).findByText(/1 price across 1 service will end on 21\/11\/2026/)).toBeInTheDocument();
+    await userEvent.click(within(dlg).getByRole('button', { name: 'End 1 price' }));
+    await waitFor(() => expect(bodies).toEqual([{ lastDay: '2026-11-21', apply: false }, { lastDay: '2026-11-21', apply: true }]));
+  });
 });
