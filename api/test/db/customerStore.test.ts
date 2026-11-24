@@ -43,7 +43,7 @@ describe.skipIf(!cs)('MssqlCustomerStore', { timeout: 120_000 }, () => {
     expect(d).toMatchObject({ misJobNumber: '777', pendingJobNumber: null, jobNumberRolloverDay: 1, invoicing: null, archiveCustomerTag: 'DETCO', archiveProviderTag: 'IRON', archiveDirectoryTag: 'det/dir', logo1: 'LOGO1', logo2: null, returnAddress: 'PO Box 1', colourMode: 'FIRST_PACK_PAGE', batchingKey: 'Brand New Key', packSequenceKey: 'Department', flags: { isAddressMatching: true, isSso: true, isTesting: false } });
     expect((await store.lookups()).passthroughKeys).toContain('Brand New Key');
     const lines = (await store.history(id, 20)).map((h) => h.summary);
-    expect(lines).toEqual(expect.arrayContaining(['Address matching: off → on', 'SSO: off → on', 'Job number: (none) → "777"', 'Logo 1: (none) → "LOGO1"', 'Archive customer tag: (none) → "DETCO"']));
+    expect(lines).toEqual(expect.arrayContaining(['Address matching: off → on', 'Uses SSO: off → on', 'Job number: (none) → "777"', 'Logo 1: (none) → "LOGO1"', 'Archive customer tag: (none) → "DETCO"']));
     await expect(store.get(999999)).rejects.toBeInstanceOf(NotFoundError);
   });
 
