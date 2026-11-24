@@ -48,18 +48,18 @@ export async function loadJobToCompose(pool: sql.ConnectionPool, jobId: number):
      WHERE b.job_id = @j ORDER BY b.batch_code`)).recordset;
 
   const rows = (await pool.request().input('j', sql.BigInt, jobId).query<{
-    batch_id: number; mailpiece_id: number; sequence_number: number | null; max_weight_g: number | null; is_cancelled: boolean; colour_mode: string; is_address_matching: boolean;
-    pack_id: number; start_page: number; end_page: number; submitting_account_id: number; release_date: Date; document_sequence: number; option_colour: string;
+    batch_id: number; mailpiece_id: number; sequence_number: number | null; is_cancelled: boolean; colour_mode: string; is_address_matching: boolean;
+    pack_id: number; start_page: number; end_page: number; owner_account: string; owner_user: string; release_date: Date; document_sequence: number; option_colour: string;
   }>(`
-    SELECT m.batch_id, m.mailpiece_id, m.sequence_number, r.max_weight_g, m.is_cancelled,
+    SELECT m.batch_id, m.mailpiece_id, m.sequence_number, m.is_cancelled,
            COALESCE((SELECT a.colour_mode FROM idoc.v_account_owner AS o INNER JOIN idoc.account AS a ON a.account_id = o.owner_account_id WHERE o.account_id = m.submitting_account_id), N'ORIGINAL') AS colour_mode,
            COALESCE((SELECT TOP 1 a.is_address_matching FROM idoc.v_account_setting_source AS s INNER JOIN idoc.account AS a ON a.account_id = s.source_account_id
                      WHERE s.account_id = m.account_id AND s.setting = N'matching' ORDER BY s.depth), 0) AS is_address_matching,
-           p.pack_id, p.start_page, p.end_page, p.submitting_account_id, p.release_date, p.document_sequence, os.colour AS option_colour
+           p.pack_id, p.start_page, p.end_page, src.owner_account, src.owner_user, p.release_date, p.document_sequence, os.colour AS option_colour
     FROM idoc.mailpiece AS m
     INNER JOIN idoc.pack AS p ON p.mailpiece_id = m.mailpiece_id
     INNER JOIN idoc.option_set AS os ON os.option_set_id = p.option_set_id
-    LEFT JOIN idoc.postal_rate AS r ON r.postal_rate_id = m.postal_rate_id
+    INNER JOIN idoc.source AS src ON src.source_id = p.source_id
     WHERE m.job_id = @j AND m.batch_id IS NOT NULL ORDER BY m.mailpiece_id, p.pack_id`)).recordset;
 
   const byBatch = new Map<number, Map<number, PlanMailpiece>>();
@@ -69,10 +69,10 @@ export async function loadJobToCompose(pool: sql.ConnectionPool, jobId: number):
     let m = mps.get(x.mailpiece_id);
     if (!m) {
       const mode = (COLOUR_MODES as readonly string[]).includes(x.colour_mode) ? (x.colour_mode as ColourMode) : 'ORIGINAL';
-      m = { mailpieceId: Number(x.mailpiece_id), sequenceNumber: x.sequence_number, weightBandG: x.max_weight_g, isCancelled: Boolean(x.is_cancelled), colourMode: mode, isAddressMatching: Boolean(x.is_address_matching), packs: [] };
+      m = { mailpieceId: Number(x.mailpiece_id), sequenceNumber: x.sequence_number, isCancelled: Boolean(x.is_cancelled), colourMode: mode, isAddressMatching: Boolean(x.is_address_matching), packs: [] };
       mps.set(x.mailpiece_id, m);
     }
-    m.packs.push({ packId: Number(x.pack_id), startPage: x.start_page, endPage: x.end_page, submittingAccountId: x.submitting_account_id, releaseDate: x.release_date,
+    m.packs.push({ packId: Number(x.pack_id), startPage: x.start_page, endPage: x.end_page, ownerAccount: x.owner_account, ownerUser: x.owner_user, releaseDate: x.release_date,
       documentSequence: x.document_sequence, forceMono: /^mono/i.test(x.option_colour.trim()) });
   }
   return {

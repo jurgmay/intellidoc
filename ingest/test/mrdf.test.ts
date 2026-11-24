@@ -150,8 +150,9 @@ describe('MRDF page codes', () => {
 });
 
 // ---- from the plan, and in the composed PDF ----
-const pack = (id: number, start: number, end: number): PlanPack => ({ packId: id, startPage: start, endPage: end, submittingAccountId: 1, releaseDate: new Date('2026-01-01'), documentSequence: 99, forceMono: false });
-const mp = (id: number, packs: PlanPack[], weight: number): PlanMailpiece => ({ mailpieceId: id, sequenceNumber: null, weightBandG: weight, isCancelled: false, colourMode: 'ORIGINAL', isAddressMatching: false, packs });
+const pack = (id: number, start: number, end: number): PlanPack => ({ packId: id, startPage: start, endPage: end, ownerAccount: 'A', ownerUser: 'U', releaseDate: new Date('2026-01-01'), documentSequence: 99, forceMono: false });
+// `weight` only decides who owns the packs: the lighter mailpiece belongs to account A, so it is printed first
+const mp = (id: number, packs: PlanPack[], weight: number): PlanMailpiece => ({ mailpieceId: id, sequenceNumber: null, isCancelled: false, colourMode: 'ORIGINAL', isAddressMatching: false, packs: packs.map((p) => ({ ...p, ownerAccount: weight <= 100 ? 'A' : 'B' })) });
 const mailpieces = [mp(1, [pack(1, 1, 3), pack(2, 4, 4)], 250), mp(2, [pack(3, 5, 6)], 100)];
 const plan = planBatch(mailpieces, { maxPagesPerPdf: 100, runSheetPages: 2 });
 

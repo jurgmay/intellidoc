@@ -101,9 +101,9 @@ showpage
   });
 
   it('composes a whole print file with it: colour pages are grey, the marks are black only, the metadata is intact', async () => {
-    const pack = (id: number, start: number, end: number): PlanPack => ({ packId: id, startPage: start, endPage: end, submittingAccountId: 1, releaseDate: new Date('2026-01-01'), documentSequence: 99, forceMono: false });
-    const mps: PlanMailpiece[] = [{ mailpieceId: 1, sequenceNumber: null, weightBandG: 100, isCancelled: false, colourMode: 'ALL_MONO', isAddressMatching: false, packs: [pack(1, 1, 2)] },
-      { mailpieceId: 2, sequenceNumber: null, weightBandG: 250, isCancelled: false, colourMode: 'ALL_MONO', isAddressMatching: false, packs: [pack(2, 3, 3)] }];
+    const pack = (id: number, start: number, end: number): PlanPack => ({ packId: id, startPage: start, endPage: end, ownerAccount: 'A', ownerUser: 'U', releaseDate: new Date('2026-01-01'), documentSequence: 99, forceMono: false });
+    const mps: PlanMailpiece[] = [{ mailpieceId: 1, sequenceNumber: null, isCancelled: false, colourMode: 'ALL_MONO', isAddressMatching: false, packs: [pack(1, 1, 2)] },
+      { mailpieceId: 2, sequenceNumber: null, isCancelled: false, colourMode: 'ALL_MONO', isAddressMatching: false, packs: [pack(2, 3, 3)] }];
     const plan = planBatch(mps, { maxPagesPerPdf: 100, runSheetPages: 0 });
     const marks = { seq: { fontPt: 8, leftMm: 20, topMm: 40, widthMm: 45, heightMm: 4 }, dm: { leftMm: 20, topMm: 30, widthMm: 8, heightMm: 8 }, dot: { xMm: 205.5, yMm: 269, diameterMm: 2 } };
     const [f] = await composeBatch({ batchCode: 1042, source: await colourSource(false), runSheet: null, plan, marks, grey: new GhostscriptGrey(GS), fileName: (n) => `1042_${n}.pdf`, keywords: ['imposition:SRA4'] });
