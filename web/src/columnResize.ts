@@ -53,6 +53,8 @@ export function enhanceTable(table: HTMLTableElement): boolean {
   if (!row || row.cells.length < 2) return false;
   table.setAttribute(DONE, '');
   const cells = [...row.cells];
+  // A column's own minimum holds from the start, not only once the first drag fixes the widths.
+  cells.forEach((c) => { const m = Number(c.dataset['minWidth']); if (m > 0) c.style.minWidth = `${Math.max(MIN_COLUMN_PX, m)}px`; });
   let frozen = false;
   const freeze = () => {
     if (frozen) return;

@@ -41,6 +41,12 @@ describe('a column\'s own minimum', () => {
     expect(resizeColumns([200, 300, 200], 0, 500, [96, 288, 96])).toEqual([200 + 12 + 104, 288, 96]);
     expect(resizeColumns([200, 300, 200], 1, -500, [96, 288, 96])).toEqual([200, 288, 212]);
   });
+  it('holds from the moment the table is set up, before any drag', () => {
+    const t = make(); const th = t.tHead!.rows[0]!.cells[1]!; th.setAttribute('data-min-width', '300'); enhanceTable(t);
+    expect(th.style.minWidth).toBe('300px');
+    expect(t.tHead!.rows[0]!.cells[0]!.style.minWidth).toBe('');   // a column that asks for nothing is left alone
+    expect(t.hasAttribute('data-col-fixed')).toBe(false);
+  });
   it('reads it from the header', () => {
     const t = make(); const th = t.tHead!.rows[0]!.cells[1]!; th.setAttribute('data-min-width', '288'); enhanceTable(t);
     drag(t.querySelectorAll('[data-col-handle]')[1]!, 100, -900);   // narrow File: it may not go below 288
