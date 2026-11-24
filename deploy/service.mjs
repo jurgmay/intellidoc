@@ -6,18 +6,23 @@
 import { existsSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** Each service runs `node --import tsx --env-file=.env <script>` in its own folder, so the .env files there are the configuration. */
+/**
+ * Each service runs `node --import <tsx> --env-file <its .env> <script>`. Windows starts services in the wrong folder, so every path is absolute:
+ * a relative ".env" is "not found".
+ */
 export function definitions(base = root) {
-  const common = { nodeOptions: ['--import=tsx', '--env-file=.env'], wait: 5, grow: 0.25, maxRestarts: 25, stopparentfirst: true, stoptimeout: 30 };
+  const common = { wait: 5, grow: 0.25, maxRestarts: 25, stopparentfirst: true, stoptimeout: 30 };
+  const node = (dir) => [`--import=${pathToFileURL(join(dir, 'node_modules', 'tsx', 'dist', 'loader.mjs')).href}`, `--env-file=${join(dir, '.env')}`];
+  const apiDir = join(base, 'api'), watcherDir = join(base, 'ingest');
   return [
-    { key: 'api', ...common, name: 'IntelliDocApi', description: 'IntelliDoc web app and API (serves the web app from web/dist on API_PORT)', dir: join(base, 'api'), script: join(base, 'api', 'src', 'server.ts'),
-      needs: [join(base, 'api', '.env'), join(base, 'web', 'dist', 'index.html')] },
-    { key: 'watcher', ...common, name: 'IntelliDocWatcher', description: 'IntelliDoc folder watcher: imports XML and PDF files, makes print files and records Activity', dir: join(base, 'ingest'), script: join(base, 'ingest', 'src', 'watch.ts'),
-      needs: [join(base, 'ingest', '.env')] },
+    { key: 'api', ...common, nodeOptions: node(apiDir), name: 'IntelliDocApi', description: 'IntelliDoc web app and API (serves the web app from web/dist on API_PORT)', dir: apiDir, script: join(apiDir, 'src', 'server.ts'),
+      needs: [join(apiDir, '.env'), join(base, 'web', 'dist', 'index.html')] },
+    { key: 'watcher', ...common, nodeOptions: node(watcherDir), name: 'IntelliDocWatcher', description: 'IntelliDoc folder watcher: imports XML and PDF files, makes print files and records Activity', dir: watcherDir, script: join(watcherDir, 'src', 'watch.ts'),
+      needs: [join(watcherDir, '.env')] },
   ];
 }
 
@@ -26,7 +31,7 @@ function preflight(defs) {
   const problems = [];
   if (major < 20 || (major === 20 && minor < 6)) problems.push(`Node ${process.versions.node} is too old: 20.6 or newer is needed (for --env-file).`);
   for (const d of defs) {
-    if (!existsSync(join(d.dir, 'node_modules', 'tsx'))) problems.push(`${d.dir}: run "npm install" there first.`);
+    if (!existsSync(join(d.dir, 'node_modules', 'tsx', 'dist', 'loader.mjs'))) problems.push(`${d.dir}: run "npm install" there first.`);
     for (const f of d.needs) if (!existsSync(f)) problems.push(`Missing ${f}${f.endsWith('index.html') ? ' (run "npm run build" in the web folder)' : ' (copy .env.example to .env and fill it in)'}`);
   }
   return problems;
