@@ -57,6 +57,9 @@ describe('mailpiece audit report', () => {
     expect(r.headers['content-disposition']).toMatch(/mailpiece-audit-\d{4}-\d{2}-\d{2}\.pdf/);
     expect(r.rawPayload.subarray(0, 5).toString()).toBe('%PDF-');
     expect(await pages(r)).toBe(3);
+    const last = store.log[store.log.length - 1]!;   // the audit log records who made a report holding personal data
+    expect(last).toMatchObject({ by: 'system', accountId: 1 });
+    expect(last.summary).toMatch(/2 mailpieces.*Name contains patel/);
   });
   it('leaves out mailpieces that are not in the account searched, and refuses when none are', async () => {
     expect(await pages(await post({ accountId: 2, mailpieceIds: [1, 2, 3], thumbnails: false }))).toBe(2);   // only mailpiece 1 is in Child

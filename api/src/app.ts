@@ -12,6 +12,7 @@ import type { CostingStore } from './costing/types.js';
 import { customerRoutes } from './customers/routes.js';
 import type { CustomerStore } from './customers/types.js';
 import { ConflictError, NotFoundError, ValidationError } from './errors.js';
+import { authRoutes, type AuthDeps } from './auth/routes.js';
 import { auditRoutes } from './audit/routes.js';
 import type { AuditStore, PageRenderer } from './audit/types.js';
 import { batchRoutes } from './batches/routes.js';
@@ -32,10 +33,11 @@ import { hpodErrorStatus, hpodRoutes } from './hpod/routes.js';
 import type { HpodService } from './hpod/service.js';
 import { HpodError } from '../../ingest/src/hpod/client.js';
 
-export interface AppDeps { activity?: Omit<ActivityDeps, 'jobs' | 'settings'>; settings: SettingsStore; customers: CustomerStore; costing: CostingStore; postal: PostalStore; reference: ReferenceStore; reprice: RepriceStore; recipients: RecipientStore; /** The Batches page. Optional so a test can leave it out. */ batches?: BatchStore; /** The mailpiece audit report. Optional so a test can leave it out. */ audit?: AuditStore; pageRenderer?: PageRenderer; reports: ReportStore; /** Jobs and making their print files. Optional so a server without print folders can still start. */ jobs?: JobDeps; /** The H-POD module (sign-in session, submissions, tracking, every API call). Optional so a test can leave it out. */ hpod?: HpodService; /** The checks behind the test buttons on Settings > Connectivity (sending an e-mail, signing in to H-POD); tests pass fakes. */ connectivity?: Connectivity; /** Draws the marks preview (needs Ghostscript); tests pass a fake. */ marksPreview?: MarksPreviewer; /** Folder with the built web app, served at / when it exists. */ webDir?: string }
+export interface AppDeps { /** Sign-in. Without it every request is allowed and acts as 'system' (tests and the stub server only; server.ts always sets it). */ auth?: AuthDeps; activity?: Omit<ActivityDeps, 'jobs' | 'settings'>; settings: SettingsStore; customers: CustomerStore; costing: CostingStore; postal: PostalStore; reference: ReferenceStore; reprice: RepriceStore; recipients: RecipientStore; /** The Batches page. Optional so a test can leave it out. */ batches?: BatchStore; /** The mailpiece audit report. Optional so a test can leave it out. */ audit?: AuditStore; pageRenderer?: PageRenderer; reports: ReportStore; /** Jobs and making their print files. Optional so a server without print folders can still start. */ jobs?: JobDeps; /** The H-POD module (sign-in session, submissions, tracking, every API call). Optional so a test can leave it out. */ hpod?: HpodService; /** The checks behind the test buttons on Settings > Connectivity (sending an e-mail, signing in to H-POD); tests pass fakes. */ connectivity?: Connectivity; /** Draws the marks preview (needs Ghostscript); tests pass a fake. */ marksPreview?: MarksPreviewer; /** Folder with the built web app, served at / when it exists. */ webDir?: string }
 
 export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
+  if (deps.auth) authRoutes(app, deps.auth);   // first, so its check covers every route registered after it
   app.get('/api/health', async () => ({ ok: true }));
   settingsRoutes(app, deps.settings, deps.marksPreview ?? drawMarksPreview, deps.connectivity);
   customerRoutes(app, deps.customers);

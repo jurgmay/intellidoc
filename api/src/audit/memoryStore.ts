@@ -8,6 +8,8 @@ export interface MemoryAudit extends AuditMailpiece { /** The submitting account
 export class MemoryAuditStore implements AuditStore {
   scopeList: SearchScope[] = [];
   rows: MemoryAudit[] = [];
+  log: { by: string; accountId: number; summary: string }[] = [];
+  async logReport(by: string, accountId: number, summary: string): Promise<void> { this.log.push({ by, accountId, summary }); }
   async details(accountId: number, ids: number[]) {
     const scope = this.scopeList.find((s) => s.id === accountId);
     if (!scope) throw new NotFoundError('That account does not exist.');

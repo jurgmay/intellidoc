@@ -1,6 +1,9 @@
+import { signInAgain } from './signIn';
+
 /** Makes the mailpiece audit report (a PDF) for the mailpieces that were ticked, and returns it. */
 export async function createAuditReport(body: { accountId: number; mailpieceIds: number[]; criteria: string; thumbnails: boolean }): Promise<Blob> {
   const res = await fetch('/api/reports/audit.pdf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  if (res.status === 401) { signInAgain(); throw new Error('Your sign-in has ended. Signing in again…'); }
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
     try {

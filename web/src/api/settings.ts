@@ -1,4 +1,5 @@
 import { api, ApiError } from './client';
+import { signInAgain } from './signIn';
 
 export type SettingValue = number | boolean | string;
 export interface SettingView {
@@ -24,6 +25,7 @@ export type MarksPreviewPage = 'window' | 'mrdf';
 /** The picture of the page with the marks, drawn from the values given (the ones on screen, saved or not). Resolves to a PNG blob. */
 export async function getMarksPreview(page: MarksPreviewPage, values: Record<string, SettingValue>): Promise<Blob> {
   const res = await fetch('/api/settings/marks-preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ page, values }) });
+  if (res.status === 401) { signInAgain(); throw new ApiError('Your sign-in has ended. Signing in again…', 401); }
   if (!res.ok) {
     const data = (await res.json().catch(() => ({}))) as { error?: string; errors?: Record<string, string> };
     throw new ApiError(data.error ?? (data.errors ? Object.values(data.errors).join(' ') : `Request failed (${res.status})`), res.status, data.errors);

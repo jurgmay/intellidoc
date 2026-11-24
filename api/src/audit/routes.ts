@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { userOf } from '../settings/routes.js';
 import { ValidationError } from '../errors.js';
 import { auditPdf, type Thumb } from './pdf.js';
 import type { AuditStore, PageRenderer } from './types.js';
@@ -30,6 +31,7 @@ export function auditRoutes(app: FastifyInstance, store: AuditStore, renderer: P
     const generated = now();
     const file = `mailpiece-audit-${generated.toISOString().slice(0, 10)}.pdf`;
     const pdf = await auditPdf({ scopeLabel, criteria: q.criteria, rows, thumbs, generated, requested: q.mailpieceIds.length });
+    await store.logReport(userOf(req), q.accountId, `Mailpiece audit report: ${rows.length} mailpiece${rows.length === 1 ? '' : 's'} in ${scopeLabel}. ${q.criteria}`);
     return reply.header('Content-Type', 'application/pdf').header('Content-Disposition', `inline; filename="${file}"`).send(Buffer.from(pdf));
   });
 }
