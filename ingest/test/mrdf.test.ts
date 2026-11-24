@@ -183,6 +183,19 @@ describe('composeBatch with MRDF', () => {
   it('needs the MRDF positions', async () => {
     await expect(composeBatch({ batchCode: 1, source: await pdf(6, 'Page'), runSheet: await pdf(2, 'Run'), plan, marks: { ...marks, mrdf: undefined }, grey: null, fileName: () => 'o.pdf', mrdf: true })).rejects.toThrow(/MRDF/);
   });
+  it.skipIf(!hasPdftotext)('turns the OCR code in the composed PDF when its rotation is set (90 stands the text on end)', async () => {
+    const wordBox = async (rotationDeg: number): Promise<{ w: number; h: number }> => {
+      const f = (await composeBatch({ batchCode: 1042, source: await pdf(6, 'Page'), runSheet: await pdf(2, 'Run'), plan, marks: { ...marks, mrdf: { ...marks.mrdf, ocr: { ...marks.mrdf.ocr, rotationDeg } } }, grey: null, fileName: () => 'o.pdf', mrdf: true }))[0]!;
+      const dir = mkdtempSync(join(tmpdir(), 'idoc-mrdf-')); const file = join(dir, 'o.pdf'); writeFileSync(file, f.bytes);
+      const xml = execFileSync('pdftotext', ['-f', '3', '-l', '3', '-bbox', file, '-'], { encoding: 'utf8' });
+      const m = /<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">0101000001<\/word>/.exec(xml);
+      expect(m, `OCR word found with rotation ${rotationDeg}`).not.toBeNull();
+      return { w: Number(m![3]) - Number(m![1]), h: Number(m![4]) - Number(m![2]) };
+    };
+    const flat = await wordBox(0), turned = await wordBox(90);
+    expect(flat.w).toBeGreaterThan(flat.h);
+    expect(turned.h).toBeGreaterThan(turned.w);
+  });
   it.skipIf(!hasPdftotext)('prints sheet, sheets and piece as the OCR code on pages 3, 5, 7 and 9 only', async () => {
     const f = await run(true);
     const dir = mkdtempSync(join(tmpdir(), 'idoc-mrdf-')); const file = join(dir, 'o.pdf'); writeFileSync(file, f.bytes);

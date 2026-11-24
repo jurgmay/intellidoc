@@ -7,7 +7,7 @@ import { theme } from '../theme';
 import { SettingsPage } from './SettingsPage';
 
 const payload = {
-  groups: ['Enclosing', 'PDF and alerts', 'Print production settings', 'Page size', 'Envelope window', 'Sequence number', 'MRDF page codes', 'Network access', 'Workflow server', 'Email settings', 'H-POD API settings'],
+  groups: ['Enclosing', 'PDF and alerts', 'Print production settings', 'Page size', 'Envelope window', 'Sequence number', 'MRDF OCR code', 'MRDF Data Matrix', 'Network access', 'Workflow server', 'Email settings', 'H-POD API settings'],
   settings: [
     { key: 'machineEnclosingMaxSheets', group: 'Enclosing', label: 'Machine enclosing: maximum sheets per letter', type: 'integer', unit: 'sheets', min: 1, max: 500,
       description: 'The machine can enclose letters of up to this many sheets.', usedBy: 'Import: routes mailpieces.', appliesTo: 'Next file imported.', value: 12 },
@@ -25,8 +25,8 @@ const payload = {
     { key: 'smtpPassword', group: 'Email settings', label: 'SMTP password', type: 'secret', description: 'Stored encrypted.', usedBy: 'Test button.', appliesTo: 'Saved immediately.', value: '', isSet: false },
     { key: 'hpodEndpoint', group: 'H-POD API settings', label: 'Endpoint', type: 'url', description: 'The H-POD API address.', usedBy: 'Test button.', appliesTo: 'Saved immediately.', value: '' },
     { key: 'hpodPassword', group: 'H-POD API settings', label: 'Password', type: 'secret', description: 'Stored encrypted.', usedBy: 'Nothing yet.', appliesTo: 'Saved immediately.', value: '', isSet: true },
-    { key: 'mrdfOcrRotationDeg', group: 'MRDF page codes', label: 'OCR code: rotation', type: 'integer', unit: '°', allowed: [0, 90, 180, 270], description: 'Turns the OCR code clockwise.', usedBy: 'MRDF.', appliesTo: 'Next print files.', value: 0 },
-    { key: 'mrdfOcrHeightMm', group: 'MRDF page codes', label: 'OCR code: box height', type: 'number', unit: 'mm', min: 0.1, max: 400, description: 'Height of the OCR code box.', usedBy: 'MRDF.', appliesTo: 'Next print files.', value: 4 },
+    { key: 'mrdfOcrRotationDeg', group: 'MRDF OCR code', label: 'Rotation', type: 'integer', unit: '°', allowed: [0, 90, 180, 270], description: 'Turns the OCR code clockwise.', usedBy: 'MRDF.', appliesTo: 'Next print files.', value: 0 },
+    { key: 'mrdfOcrHeightMm', group: 'MRDF OCR code', label: 'Box height', type: 'number', unit: 'mm', min: 0.1, max: 400, description: 'Height of the OCR code box.', usedBy: 'MRDF.', appliesTo: 'Next print files.', value: 4 },
   ],
   batchCode: { highestUsed: 1041, next: 1042 },
 };
@@ -75,7 +75,8 @@ describe('SettingsPage', () => {
     panel = within(screen.getByRole('tabpanel'));
     expect(panel.getByRole('heading', { name: 'Sequence number' })).toBeInTheDocument();
     expect(panel.getByText('Font size')).toBeInTheDocument();
-    expect(panel.getByText('OCR code: box height')).toBeInTheDocument();
+    expect(panel.getByRole('heading', { name: 'MRDF OCR code' })).toBeInTheDocument();
+    expect(panel.getByText('Box height')).toBeInTheDocument();
     expect(panel.queryByText('Make print files automatically')).toBeNull();
     expect(screen.getByText('No unsaved changes')).toBeInTheDocument();
   });

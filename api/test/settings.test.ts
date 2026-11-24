@@ -30,11 +30,11 @@ describe('GET /api/settings', () => {
     expect(w).toMatchObject({ value: 12, group: 'Enclosing' });
     expect(w.usedBy).toMatch(/machine/i);
     expect(body.settings.find((s: { key: string }) => s.key === 'machineEnclosingEnvelopeSize').options).toEqual(['C5', 'C4']);
-    expect(body.groups).toEqual(['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'Page size', 'Envelope window', 'Sequence number', 'Data Matrix', 'Pack start dot', 'MRDF page codes', 'Network access', 'Workflow server', 'IntelliDoc folders', 'Bluecrest File-Based folders', 'Postal docketing', 'Email settings', 'H-POD API settings']);
+    expect(body.groups).toEqual(['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'Page size', 'Envelope window', 'Sequence number', 'Data Matrix', 'Pack start dot', 'MRDF OCR code', 'MRDF Data Matrix', 'Network access', 'Workflow server', 'IntelliDoc folders', 'Bluecrest File-Based folders', 'Postal docketing', 'Email settings', 'H-POD API settings']);
     expect(body.batchCode).toEqual({ highestUsed: 1041, next: 1042 });
   });
   it('every setting names a column, a group that exists and a description', () => {
-    for (const s of SETTINGS) { expect(s.column).toMatch(/^[a-z0-9_]+$/); expect(['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'Page size', 'Envelope window', 'Sequence number', 'Data Matrix', 'Pack start dot', 'MRDF page codes', 'Network access', 'Workflow server', 'IntelliDoc folders', 'Bluecrest File-Based folders', 'Postal docketing', 'Email settings', 'H-POD API settings']).toContain(s.group); expect(s.description.length).toBeGreaterThan(10); expect(s.usedBy.length).toBeGreaterThan(10); }
+    for (const s of SETTINGS) { expect(s.column).toMatch(/^[a-z0-9_]+$/); expect(['Weights and sizes', 'Enclosing', 'PDF and alerts', 'Print production settings', 'Page size', 'Envelope window', 'Sequence number', 'Data Matrix', 'Pack start dot', 'MRDF OCR code', 'MRDF Data Matrix', 'Network access', 'Workflow server', 'IntelliDoc folders', 'Bluecrest File-Based folders', 'Postal docketing', 'Email settings', 'H-POD API settings']).toContain(s.group); expect(s.description.length).toBeGreaterThan(10); expect(s.usedBy.length).toBeGreaterThan(10); }
   });
 });
 
@@ -169,7 +169,7 @@ describe('POST /api/settings/marks-preview', () => {
 describe('MRDF OCR code rotation', () => {
   it('is 0, 90, 180 or 270 and nothing else', async () => {
     const def = BY_KEY.get('mrdfOcrRotationDeg')!;
-    expect(def.group).toBe('MRDF page codes');
+    expect(def.group).toBe('MRDF OCR code');
     expect(store.values['mrdfOcrRotationDeg']).toBe(0);
     expect((await put({ mrdfOcrRotationDeg: 270 })).statusCode).toBe(200);
     expect(store.values['mrdfOcrRotationDeg']).toBe(270);
