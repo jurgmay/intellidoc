@@ -75,4 +75,28 @@ describe('PostalRatesTab', () => {
     expect(within(dlg).getByLabelText('Up to weight (g)')).toBeDisabled();
     expect(within(dlg).getByLabelText('Last day')).not.toBeDisabled();
   });
+  it('imports a price list: check first, then import', async () => {
+    const plan = { startDate: '2027-01-01', endDate: null, fileRows: 2, newProviders: [], services: [], errors: [], warnings: [{ row: null, message: '1 price has more than 4 decimal places. They are stored rounded to 4.' }], canImport: true,
+      counts: { newProviders: 0, newServices: 1, newBands: 1, changedBands: 1, updatedBands: 0, unchangedBands: 0, blockedBands: 0, skippedRows: 0 },
+      bands: [{ key: 'a', provider: 'Royal Mail', service: '2nd Class', format: 'Letter', minWeightG: 0, maxWeightG: 100, cost: 0.7, sellPrice: 0.8, action: 'change', row: 2, before: { rateId: 11, cost: 0.61, sellPrice: 0.66, validFrom: '2026-04-01', validTo: null }, message: null }] };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fetchMock = vi.mocked(fetch) as any;
+    const base = fetchMock.getMockImplementation()!;
+    const imports: string[] = [];
+    fetchMock.mockImplementation(async (url: string, init?: { method?: string; body?: unknown }) => {
+      if (url.startsWith('/api/postal/import')) { imports.push(url); return new Response(JSON.stringify({ plan, result: url.includes('apply=1') ? { newProviders: 0, newServices: 1, newBands: 1, changedBands: 1, updatedBands: 0, unchangedBands: 0 } : null }), { status: 200 }); }
+      return base(url, init);
+    });
+    wrap(); await screen.findByText('2nd Class');
+    await userEvent.click(screen.getByRole('button', { name: /Import prices/ }));
+    const dlg = await screen.findByRole('dialog');
+    expect(within(dlg).getByRole('button', { name: 'Check file' })).toBeDisabled();
+    await userEvent.upload(dlg.querySelector('input[type="file"]') as HTMLInputElement, new File(['x'], 'rates.csv', { type: 'text/csv' }));
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Check file' }));
+    expect(await within(dlg).findByText(/0.61 → 0.7/)).toBeInTheDocument();
+    expect(within(dlg).getByText(/more than 4 decimal places/)).toBeInTheDocument();
+    expect(imports[0]).toMatch(/start=2026-11-21&apply=0&name=rates\.csv/);
+    await userEvent.click(within(dlg).getByRole('button', { name: 'Import prices' }));
+    await waitFor(() => expect(imports[1]).toContain('apply=1'));
+  });
 });

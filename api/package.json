@@ -17,6 +17,7 @@
     "jose": "^6.2.18",
     "mssql": "^12.8.0",
     "pdf-lib": "^1.17.1",
+    "read-excel-file": "^5.8.8",
     "zod": "^4.1.0"
   },
   "devDependencies": {
