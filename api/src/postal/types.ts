@@ -1,3 +1,4 @@
+import type { ImportPlan } from './importPlan.js';
 export interface FormatRef { id: number; name: string }
 export type RateStatus = 'current' | 'planned' | 'ended';
 export interface RateView {
@@ -17,6 +18,8 @@ export interface ServiceInput { formatId: number; name: string; serviceCode: str
 export interface RateInput { minWeightG: number; maxWeightG: number; validFrom: string; validTo: string | null; cost: number | null; sellPrice: number | null }
 export interface PriceChangeInput { effectiveFrom: string; changes: { rateId: number; cost: number | null; sellPrice: number | null }[] }
 
+export interface ImportResult { newProviders: number; newServices: number; newBands: number; changedBands: number; updatedBands: number; unchangedBands: number }
+
 export interface PostalStore {
   overview(): Promise<PostalOverview>;
   createProvider(name: string, by: string): Promise<number>;
@@ -30,5 +33,7 @@ export interface PostalStore {
   deleteRate(id: number, by: string): Promise<void>;
   /** The old row of each band ends the day before, and a new row starts on the day with the new prices. Returns how many bands changed. */
   priceChange(serviceId: number, input: PriceChangeInput, by: string): Promise<number>;
+  /** Applies a plan from planImport in one transaction: adds the providers, services and prices it lists, ending the old row of changed bands the day before. The plan must be importable. */
+  applyImport(plan: ImportPlan, by: string, fileName: string): Promise<ImportResult>;
   history(limit: number): Promise<HistoryEntry[]>;
 }

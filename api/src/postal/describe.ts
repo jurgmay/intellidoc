@@ -1,4 +1,5 @@
 import { bandLabel } from './rules.js';
+import type { ImportPlan } from './importPlan.js';
 import type { RateInput, ServiceInput } from './types.js';
 
 const n = (x: number | null): string => (x === null ? 'not set' : String(Math.round(x * 1e4) / 1e4));
@@ -34,4 +35,18 @@ export function describePriceChange(svc: string, from: string, rows: { min: numb
     return `${bandLabel(r.min, r.max)}: ${d.join(', ')}`;
   });
   return `Postal: new prices for ${svc} from ${from}. ${bits.join('; ')}`;
+}
+
+/** The audit lines for an import: one summary, then a line per new service and per service whose prices changed. */
+export function describeImport(plan: ImportPlan, fileName: string): string[] {
+  const c = plan.counts;
+  const parts = [`${c.newBands} new`, `${c.changedBands} changed`, `${c.updatedBands} updated`, `${c.unchangedBands} unchanged`].join(', ');
+  const added = [c.newProviders ? `${c.newProviders} new provider${c.newProviders > 1 ? 's' : ''}` : '', c.newServices ? `${c.newServices} new service${c.newServices > 1 ? 's' : ''}` : ''].filter(Boolean).join(', ');
+  const lines = [`Postal: imported prices from "${fileName.slice(0, 120)}" for ${plan.startDate}${plan.endDate ? ` to ${plan.endDate}` : ' onwards'}: ${parts} price bands${added ? `; ${added}` : ''}`];
+  for (const s of plan.services) if (s.isNew) lines.push(describeServiceCreated(s.provider, `${s.name} (${s.format})`));
+  for (const s of plan.services) {
+    const rows = plan.bands.filter((b) => b.serviceKey === s.key && (b.action === 'change' || b.action === 'update') && b.before);
+    if (rows.length) lines.push(describePriceChange(`${s.provider} – ${s.name}`, plan.startDate, rows.map((b) => ({ min: b.minWeightG, max: b.maxWeightG, cost: [b.before!.cost, b.cost] as [number | null, number | null], sell: [b.before!.sellPrice, b.sellPrice] as [number | null, number | null] }))));
+  }
+  return lines;
 }

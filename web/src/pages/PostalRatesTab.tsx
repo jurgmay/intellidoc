@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Alert, Badge, Button, Group, Loader, Modal, Paper, Select, Stack, Switch, Table, Text, TextInput, Title } from '@mantine/core';
-import { IconAlertCircle, IconPlus } from '@tabler/icons-react';
+import { IconAlertCircle, IconPlus, IconUpload } from '@tabler/icons-react';
 import {
   changePrices, createProvider, createRate, createService, deleteProvider, deleteRate, deleteService, getPostal, getPostalHistory, renameProvider, saveRate, saveService,
   type PostalHistoryRow, type PostalOverview, type PostalProvider, type PostalRate, type PostalService, type RateInput, type ServiceInput,
 } from '../api/postal';
 import { run } from './customer/shared';
+import { PostalImportModal } from './PostalImportModal';
 
 const bandLabel = (r: { minWeightG: number; maxWeightG: number }): string => (r.minWeightG <= 1 ? `up to ${r.maxWeightG}g` : `${r.minWeightG}–${r.maxWeightG}g`);
 const money = (v: number | null): string => { if (v === null) return '—'; const t = String(Math.round(v * 1e4) / 1e4); return /\.\d$/.test(t) ? `${t}0` : /\./.test(t) ? t : `${t}.00`; };
@@ -202,18 +203,20 @@ export function PostalRatesTab({ onChanged }: { onChanged?: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [showEnded, setShowEnded] = useState(false);
   const [dialog, setDialog] = useState<Dialog | null>(null);
+  const [importing, setImporting] = useState(false);
   const [history, setHistory] = useState<PostalHistoryRow[]>([]);
   const load = useCallback(async () => { setO(await getPostal()); setHistory((await getPostalHistory()).rows); }, []);
   useEffect(() => { load().catch((e: Error) => setError(e.message)); }, [load]);
   if (error) return <Alert color="red" icon={<IconAlertCircle />} title="Could not load the postal rates">{error}</Alert>;
   if (!o) return <Loader />;
-  const done = () => { setDialog(null); load().catch((e: Error) => setError(e.message)); onChanged?.(); };
+  const done = () => { setDialog(null); setImporting(false); load().catch((e: Error) => setError(e.message)); onChanged?.(); };
   return (
     <Stack>
       <Group justify="space-between">
         <Text size="sm" c="dimmed" maw={640}>Postage prices by provider, service and weight. To change a price, use &ldquo;Change prices from a date&rdquo;: mail already priced keeps its price. Prices that are in use cannot be deleted, so give them a last day instead.</Text>
         <Group>
           <Switch label="Show ended prices" checked={showEnded} onChange={(e) => setShowEnded(e.currentTarget.checked)} />
+          <Button variant="default" leftSection={<IconUpload size={14} />} onClick={() => setImporting(true)}>Import prices…</Button>
           <Button leftSection={<IconPlus size={14} />} onClick={() => setDialog({ kind: 'provider', provider: null })}>New provider</Button>
         </Group>
       </Group>
@@ -244,6 +247,7 @@ export function PostalRatesTab({ onChanged }: { onChanged?: () => void }) {
           </Table>
         </Paper>
       )}
+      {importing && <PostalImportModal today={o.today} onClose={() => setImporting(false)} onDone={done} />}
       {dialog?.kind === 'provider' && <ProviderDialog d={dialog} onClose={() => setDialog(null)} onDone={done} />}
       {dialog?.kind === 'service' && <ServiceDialog d={dialog} formats={o.formats} onClose={() => setDialog(null)} onDone={done} />}
       {dialog?.kind === 'rate' && <RateDialog d={dialog} today={o.today} onClose={() => setDialog(null)} onDone={done} />}

@@ -1,7 +1,8 @@
 import { ConflictError, NotFoundError, ValidationError } from '../errors.js';
 import * as D from './describe.js';
+import type { ImportPlan } from './importPlan.js';
 import { checkNoOverlap, planPriceChange, statusOf, type BandRow } from './rules.js';
-import type { FormatRef, HistoryEntry, PostalOverview, PostalStore, PriceChangeInput, ProviderView, RateInput, RateView, ServiceInput, ServiceView } from './types.js';
+import type { ImportResult, FormatRef, HistoryEntry, PostalOverview, PostalStore, PriceChangeInput, ProviderView, RateInput, RateView, ServiceInput, ServiceView } from './types.js';
 
 interface Svc extends ServiceInput { id: number; providerId: number; batches: number }
 interface Rate extends RateInput { id: number; serviceId: number; usedBy: number }
@@ -110,6 +111,29 @@ export class MemoryPostalStore implements PostalStore {
     }
     this.log(by, D.describePriceChange(this.label(s), input.effectiveFrom, lines));
     return plan.length;
+  }
+
+  async applyImport(plan: ImportPlan, by: string, fileName: string): Promise<ImportResult> {
+    if (!plan.canImport) throw new ConflictError('This file cannot be imported as it stands.');
+    const providerId = new Map([...this.providers.entries()].map(([id, n]) => [n.toLowerCase(), id]));
+    for (const name of plan.newProviders) if (!providerId.has(name.toLowerCase())) { const id = this.next++; this.providers.set(id, name); providerId.set(name.toLowerCase(), id); }
+    const serviceId = new Map<string, number>();
+    for (const s of plan.services) {
+      if (!s.isNew) { serviceId.set(s.key, s.serviceId!); continue; }
+      const id = this.next++;
+      this.services.set(id, { id, providerId: s.providerId ?? providerId.get(s.provider.toLowerCase())!, formatId: s.formatId, name: s.name, serviceCode: s.serviceCode, isSignedFor: s.isSignedFor, isTracked: s.isTracked, isRecorded: false, batches: 0 });
+      serviceId.set(s.key, id);
+    }
+    const dayBefore = new Date(Date.parse(`${plan.startDate}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+    for (const b of plan.bands) {
+      const make = (): void => { const id = this.next++; this.rates.set(id, { id, serviceId: serviceId.get(b.serviceKey)!, minWeightG: b.minWeightG, maxWeightG: b.maxWeightG, validFrom: plan.startDate, validTo: plan.endDate, cost: b.cost, sellPrice: b.sellPrice, usedBy: 0 }); };
+      if (b.action === 'new') make();
+      else if (b.action === 'change') { this.rate(b.before!.rateId).validTo = dayBefore; make(); }
+      else if (b.action === 'update') Object.assign(this.rate(b.before!.rateId), { cost: b.cost, sellPrice: b.sellPrice, validTo: plan.endDate });
+    }
+    for (const line of D.describeImport(plan, fileName)) this.log(by, line);
+    const c = plan.counts;
+    return { newProviders: c.newProviders, newServices: c.newServices, newBands: c.newBands, changedBands: c.changedBands, updatedBands: c.updatedBands, unchangedBands: c.unchangedBands };
   }
 
   async history(limit: number): Promise<HistoryEntry[]> {

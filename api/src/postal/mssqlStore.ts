@@ -1,8 +1,9 @@
 import sql from 'mssql';
 import { ConflictError, NotFoundError, ValidationError } from '../errors.js';
 import * as D from './describe.js';
-import { checkNoOverlap, dayBefore, planPriceChange, statusOf, type BandRow } from './rules.js';
-import type { HistoryEntry, PostalOverview, PostalStore, PriceChangeInput, ProviderView, RateInput, ServiceInput, ServiceView } from './types.js';
+import { bandLabel, checkNoOverlap, dayBefore, planPriceChange, statusOf, type BandRow } from './rules.js';
+import type { ImportPlan } from './importPlan.js';
+import type { HistoryEntry, ImportResult, PostalOverview, PostalStore, PriceChangeInput, ProviderView, RateInput, ServiceInput, ServiceView } from './types.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type R = Record<string, any>;
@@ -229,6 +230,54 @@ export class MssqlPostalStore implements PostalStore {
       }
       await this.audit(t, by, D.describePriceChange(`${s.provider} – ${s.name}`, input.effectiveFrom, lines));
       return plan.length;
+    });
+  }
+
+  async applyImport(plan: ImportPlan, by: string, fileName: string): Promise<ImportResult> {
+    if (!plan.canImport) throw new ConflictError('This file cannot be imported as it stands.');
+    return this.tx(async (t) => {
+      const providerId = new Map<string, number>();
+      for (const r of (await this.req(t).query('SELECT postal_provider_id AS id, name FROM idoc.postal_provider')).recordset as R[]) providerId.set(String(r.name).toLowerCase(), r.id as number);
+      for (const name of plan.newProviders) {
+        if (providerId.has(name.toLowerCase())) continue;
+        try { providerId.set(name.toLowerCase(), (await this.req(t).input('n', sql.NVarChar(100), name).query('INSERT INTO idoc.postal_provider (name) OUTPUT INSERTED.postal_provider_id AS id VALUES (@n)')).recordset[0].id); }
+        catch (e) { this.mapErr(e, `There is already a provider called "${name}".`); }
+      }
+      const serviceId = new Map<string, number>();
+      for (const s of plan.services) {
+        if (!s.isNew) { serviceId.set(s.key, s.serviceId!); continue; }
+        try {
+          serviceId.set(s.key, (await this.req(t).input('p', sql.Int, s.providerId ?? providerId.get(s.provider.toLowerCase())!).input('f', sql.Int, s.formatId).input('n', sql.NVarChar(100), s.name).input('c', sql.NVarChar(50), s.serviceCode)
+            .input('sg', sql.Bit, s.isSignedFor).input('tr', sql.Bit, s.isTracked).input('rc', sql.Bit, false).query(`
+            INSERT INTO idoc.postal_service (postal_provider_id, postal_format_id, name, service_code, is_signed_for, is_tracked, is_recorded)
+            OUTPUT INSERTED.postal_service_id AS id VALUES (@p, @f, @n, @c, @sg, @tr, @rc)`)).recordset[0].id);
+        } catch (e) { this.mapErr(e, `${s.provider} already has a service called "${s.name}" with the ${s.format} format.`); }
+      }
+      const insert = async (b: ImportPlan['bands'][number]): Promise<number> => (await this.req(t).input('s', sql.Int, serviceId.get(b.serviceKey)!).input('mn', sql.Int, b.minWeightG).input('mx', sql.Int, b.maxWeightG)
+        .input('f', sql.Date, plan.startDate).input('to', sql.Date, plan.endDate).input('c', sql.Decimal(10, 4), b.cost).input('sp', sql.Decimal(10, 4), b.sellPrice).query(`
+        INSERT INTO idoc.postal_rate (postal_service_id, min_weight_g, max_weight_g, valid_from, valid_to, cost, sell_price)
+        OUTPUT INSERTED.postal_rate_id AS id VALUES (@s, @mn, @mx, @f, @to, @c, @sp)`)).recordset[0].id as number;
+      for (const b of plan.bands) {
+        try {
+          if (b.action === 'new') await insert(b);
+          else if (b.action === 'update') {
+            await this.req(t).input('i', sql.Int, b.before!.rateId).input('to', sql.Date, plan.endDate).input('c', sql.Decimal(10, 4), b.cost).input('sp', sql.Decimal(10, 4), b.sellPrice)
+              .query('UPDATE idoc.postal_rate SET valid_to = @to, cost = @c, sell_price = @sp WHERE postal_rate_id = @i');
+          } else if (b.action === 'change') {
+            // Re-check inside the transaction that the band still looks as it did when the file was checked.
+            const cur = await this.rate(t, b.before!.rateId);
+            if (day(cur.valid_from) !== b.before!.validFrom || day(cur.valid_to) !== b.before!.validTo) throw new ConflictError('Prices changed while the file was being imported. Check the file again.');
+            await this.req(t).input('i', sql.Int, b.before!.rateId).input('to', sql.Date, dayBefore(plan.startDate)).query('UPDATE idoc.postal_rate SET valid_to = @to WHERE postal_rate_id = @i');
+            const nid = await insert(b);
+            await this.req(t).input('o', sql.Int, b.before!.rateId).input('n', sql.Int, nid).query(`
+              INSERT INTO idoc.costing_model_postage (costing_model_id, postal_rate_id, adjustment)
+              SELECT costing_model_id, @n, adjustment FROM idoc.costing_model_postage WHERE postal_rate_id = @o`);
+          }
+        } catch (e) { this.mapErr(e, `${b.provider} – ${b.service} ${bandLabel(b.minWeightG, b.maxWeightG)} already has a price starting ${plan.startDate}. Check the file again.`); }
+      }
+      for (const line of D.describeImport(plan, fileName)) await this.audit(t, by, line);
+      const c = plan.counts;
+      return { newProviders: c.newProviders, newServices: c.newServices, newBands: c.newBands, changedBands: c.changedBands, updatedBands: c.updatedBands, unchangedBands: c.unchangedBands };
     });
   }
 
