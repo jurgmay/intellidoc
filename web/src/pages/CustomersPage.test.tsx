@@ -56,7 +56,7 @@ describe('Customers list', () => {
   it('lists customers with their counts and searches as you type', async () => {
     wrap('/customers');
     expect(await screen.findByText('Acme Energy Ltd')).toBeInTheDocument();
-    expect(screen.getByText('Matching')).toBeInTheDocument();
+    expect(screen.getByText('Address matching')).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('Search customers'), 'acme');
     await waitFor(() => expect(calls.some((c) => c.url === '/api/customers?search=acme')).toBe(true));
   });
