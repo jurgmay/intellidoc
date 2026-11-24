@@ -38,7 +38,8 @@ describe.skipIf(!cs)('MssqlRecipientStore', { timeout: 120_000 }, () => {
     // a sub-account below FEXCO, and a customer with nothing in it
     child = (await pool.request().query(`INSERT INTO idoc.account (account_code, name, parent_account_id, inherits_settings) OUTPUT INSERTED.account_id AS n VALUES (N'FEXCO_CHILD', N'Child', ${sub}, 1)`)).recordset[0].n;
     other = (await pool.request().query(`INSERT INTO idoc.account (account_code, name) OUTPUT INSERTED.account_id AS n VALUES (N'SEARCH_OTHER', N'Other customer')`)).recordset[0].n;
-    // Zed Quinn's pack was submitted from the child account
+    // Zed Quinn's mailpiece was submitted from the child account (a search covers the mailpiece's submitting account, as it was at production)
+    await pool.request().query(`UPDATE idoc.mailpiece SET submitting_account_id = ${child} WHERE address_id IN (SELECT address_id FROM idoc.address_line WHERE line_no = 1 AND text = N'Zed Quinn')`);
     await pool.request().query(`UPDATE idoc.pack SET submitting_account_id = ${child} WHERE address_id IN (SELECT address_id FROM idoc.address_line WHERE line_no = 1 AND text = N'Zed Quinn')`);
   });
   afterAll(async () => { await pool?.close(); await ipool?.close(); });
@@ -109,12 +110,14 @@ describe.skipIf(!cs)('MssqlRecipientStore', { timeout: 120_000 }, () => {
     const repo = new MssqlRepository(ipool); const ref = await loadReferenceData(ipool);
     const two = buildXml([person('Mia', 'Merge', { passthrough: { 'Tenant Reference': 'M-1', 'Document Type': 'Leaflet' } }), person('Mia', 'Merge', { passthrough: { 'Tenant Reference': 'M-2', 'Document Type': 'Statement' } })]);
     await ingest(two.xml, 'job-merge.xml', 'job-merge.pdf', { ref, pdf: new FakePdf(two.pages), repo });
-    // put both letters in one envelope (the matching rules of the customer do this at import; here it is done directly): the second letter in the file goes in first
-    const [first, second] = (await pool.request().query(`SELECT m.mailpiece_id AS id FROM idoc.mailpiece m JOIN idoc.job j ON j.job_id = m.job_id WHERE j.base_name = N'job-merge' ORDER BY m.mailpiece_id`)).recordset.map((r) => r.id as number);
-    await pool.request().query(`
+    // both letters in one envelope: the customer's matching rules do this at import. (If they did not, it is done directly here.) The second letter in the file goes in first.
+    const [first, second] = (await pool.request().query(`SELECT m.mailpiece_id AS id FROM idoc.mailpiece m JOIN idoc.job j ON j.job_id = m.job_id WHERE j.base_name = N'job-merge' ORDER BY m.mailpiece_id`)).recordset.map((r) => r.id as number) as [number, number | undefined];
+    if (second !== undefined) await pool.request().query(`
       UPDATE idoc.pack SET mailpiece_id = ${first} WHERE mailpiece_id = ${second};
       DELETE FROM idoc.mailpiece WHERE mailpiece_id = ${second};
-      UPDATE idoc.mailpiece SET pack_count = 2 WHERE mailpiece_id = ${first};
+      UPDATE idoc.mailpiece SET pack_count = 2 WHERE mailpiece_id = ${first}`);
+    expect((await pool.request().query(`SELECT pack_count AS n FROM idoc.mailpiece WHERE mailpiece_id = ${first}`)).recordset[0].n).toBe(2);
+    await pool.request().query(`
       UPDATE p SET document_sequence = 2 FROM idoc.pack p JOIN idoc.pack_passthrough pp ON pp.pack_id = p.pack_id JOIN idoc.passthrough_value v ON v.passthrough_value_id = pp.passthrough_value_id WHERE p.mailpiece_id = ${first} AND v.value = N'M-2'`);
     for (const search of [{ name: 'mia merge' }, { reference: 'M-1' }, { reference: 'M-2' }]) {
       const rows = (await store.search(q(search))).rows;
