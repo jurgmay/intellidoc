@@ -4,7 +4,7 @@ import { connect, hasDb, resetAndSeed } from './setup.js';
 import { applySettingsSql, exportSettingsSql } from '../../src/localSettings.js';
 
 /** Against a REAL scratch SQL Server database (INTELLIDOC_TEST_DB); see setup.ts. */
-describe.skipIf(!hasDb)('local settings file', () => {
+describe.skipIf(!hasDb)('local settings file', { timeout: 120_000 }, () => {   // the test resets the schema, which takes longer than vitest's 5 s
   let pool: sql.ConnectionPool;
   beforeAll(async () => { pool = await connect(); await resetAndSeed(pool); });
   afterAll(async () => { await pool?.close(); });
