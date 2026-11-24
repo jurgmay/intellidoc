@@ -3,7 +3,7 @@
 //   node service.mjs install     install both and start them        (run in an Administrator terminal)
 //   node service.mjs uninstall | start | stop | restart
 // Optional: add `api` or `watcher` at the end to act on one service only.
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -46,6 +46,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const wait = (svc, ...events) => new Promise((resolve) => { for (const e of events) svc.on(e, (...a) => resolve({ event: e, args: a })); });
   for (const d of defs) {
     const svc = new nw.Service({ name: d.name, description: d.description, script: d.script, nodeOptions: d.nodeOptions, workingdirectory: d.dir, wait: d.wait, grow: d.grow, maxRestarts: d.maxRestarts, stopparentfirst: d.stopparentfirst, stoptimeout: d.stoptimeout });
+    mkdirSync(join(root, 'deploy', 'services'), { recursive: true }); // node-windows will not create the folder itself
     svc.directory(join(root, 'deploy', 'services')); // the service wrapper files and the logs (services\daemon) go here, not beside the program's code
     svc.on('error', (e) => console.error(`${d.name}: ${e}`));
     if (command === 'install') {
