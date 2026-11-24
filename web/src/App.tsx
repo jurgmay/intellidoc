@@ -23,7 +23,7 @@ export function App() {
     <AppShell header={{ height: 64 }} navbar={{ width: 220, breakpoint: 'sm' }} padding="lg">
       <AppShell.Header>
         <Group h="100%" px="lg" justify="space-between">
-          <Image src="/intellidoc-logo.svg" alt="Intellidoc" h={48} w="auto" />
+          <Image src="/intellidoc-logo.svg" alt="Intellidoc" h={56} w="auto" />
           {me && (
             <Group gap="sm">
               <Text size="sm" title={me.email}>{me.name}{me.isAdmin ? ' (administrator)' : ''}</Text>
