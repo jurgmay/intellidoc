@@ -53,16 +53,30 @@ const wrap = (path: string) => render(
 );
 
 describe('Customers list', () => {
-  it('shows a purple Uses SSO pill for a customer that uses SSO', async () => {
+  it('gives a Testing customer a pale orange row, and no other row', async () => {
+    respond = (url) => (url.startsWith('/api/customers?') ? { status: 200, json: { rows: [{ ...row, isTesting: true }, { ...row, id: 8, code: 'LIVE', name: 'Live Co', isTesting: false }] } } : { status: 204 });
+    wrap('/customers');
+    const test = (await screen.findByText('Acme Energy Ltd')).closest('tr')!;
+    expect(test.getAttribute('style')).toMatch(/orange-0/);
+    expect(screen.getByText('Live Co').closest('tr')!.getAttribute('style')).not.toMatch(/orange/);
+  });
+  it('gives a Deleted customer a pale red row, even when it is also Testing', async () => {
+    respond = (url) => (url.startsWith('/api/customers?') ? { status: 200, json: { rows: [{ ...row, isDeleted: true, isTesting: true }] } } : { status: 204 });
+    wrap('/customers');
+    const tr = (await screen.findByText('Acme Energy Ltd')).closest('tr')!;
+    expect(tr.getAttribute('style')).toMatch(/red-0/);
+    expect(tr.getAttribute('style')).not.toMatch(/orange/);
+  });
+  it('shows a purple SSO pill for a customer that uses SSO', async () => {
     respond = (url) => (url.startsWith('/api/customers?') ? { status: 200, json: { rows: [{ ...row, isSso: true }] } } : { status: 204 });
     wrap('/customers');
-    const pill = await screen.findByText('Uses SSO');
+    const pill = await screen.findByText('SSO');
     expect(pill.closest('.mantine-Badge-root')?.getAttribute('style')).toMatch(/violet/);
   });
-  it('shows a green Uses MRDF pill for a customer that uses MRDF', async () => {
+  it('shows a green MRDF pill for a customer that uses MRDF', async () => {
     respond = (url) => (url.startsWith('/api/customers?') ? { status: 200, json: { rows: [{ ...row, isUseMrdf: true }] } } : { status: 204 });
     wrap('/customers');
-    const pill = await screen.findByText('Uses MRDF');
+    const pill = await screen.findByText('MRDF');
     expect(pill.closest('.mantine-Badge-root')).toHaveAttribute('data-variant', 'light');
     expect(pill.closest('.mantine-Badge-root')?.getAttribute('style')).toMatch(/green/);
   });
@@ -70,8 +84,8 @@ describe('Customers list', () => {
     wrap('/customers');
     expect(await screen.findByText('Acme Energy Ltd')).toBeInTheDocument();
     expect(screen.getByText('Address matching')).toBeInTheDocument();
-    expect(screen.queryByText('Uses MRDF')).not.toBeInTheDocument();
-    expect(screen.queryByText('Uses SSO')).not.toBeInTheDocument();
+    expect(screen.queryByText('MRDF')).not.toBeInTheDocument();
+    expect(screen.queryByText('SSO')).not.toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('Search customers'), 'acme');
     await waitFor(() => expect(calls.some((c) => c.url === '/api/customers?search=acme')).toBe(true));
   });
