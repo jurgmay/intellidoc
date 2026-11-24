@@ -132,3 +132,26 @@ describe('POST /api/postal/import', () => {
     expect((await upload(csv('1,RM,S,Nope,0,1,1,1,0,'), 'start=2027-01-01&apply=1')).statusCode).toBe(409);
   });
 });
+
+describe('POST /api/postal/end-prices', () => {
+  beforeEach(async () => {
+    const prov = await store.createProvider('Royal Mail', 't');
+    const svc = await store.createService(prov, { formatId: 1, name: '2nd Class', serviceCode: null, isSignedFor: false, isTracked: false, isRecorded: false }, 't');
+    await store.createRate(svc, { minWeightG: 0, maxWeightG: 100, validFrom: '2026-01-01', validTo: null, cost: 1, sellPrice: 1 }, 't');
+    await store.createRate(svc, { minWeightG: 101, maxWeightG: 250, validFrom: '2026-01-01', validTo: '2026-12-01', cost: 1, sellPrice: 1 }, 't');
+    await store.createRate(svc, { minWeightG: 251, maxWeightG: 500, validFrom: '2027-06-01', validTo: null, cost: 1, sellPrice: 1 }, 't');
+  });
+  const end = (lastDay: string, apply = false) => app.inject({ method: 'POST', url: '/api/postal/end-prices', payload: { lastDay, apply } });
+  it('previews, then ends only prices that run past the day', async () => {
+    const p = (await end('2026-12-31')).json();
+    expect(p.plan).toMatchObject({ services: 1, startingLater: 1 }); expect(p.plan.rows).toHaveLength(1); expect(p.ended).toBeNull();
+    expect((await end('2026-12-31', true)).json().ended).toBe(1);
+    const rates = (await store.overview()).providers[0]!.services[0]!.rates;
+    expect(rates.map((r) => r.validTo).sort()).toEqual(['2026-12-01', '2026-12-31', null]);
+    expect(store.audit.at(-1)!.summary).toContain('last day of 1 price');
+  });
+  it('refuses a day in the past or a bad date', async () => {
+    expect((await end('2026-11-20')).statusCode).toBe(422);
+    expect((await end('')).statusCode).toBe(422);
+  });
+});
