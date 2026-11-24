@@ -17,6 +17,13 @@ describe('navigation', () => {
     expect(screen.getByRole('link', { name: 'Mailpieces' })).toHaveAttribute('href', '/mailpieces');
     expect(screen.queryByText('Recipient search')).not.toBeInTheDocument();
   });
+  it('puts Activity at the top of the menu', async () => {
+    show('/activity');
+    expect(await screen.findByRole('heading', { name: 'Activity' })).toBeInTheDocument();
+    const labels = screen.getAllByRole('link').map((l) => l.textContent);
+    expect(labels[0]).toBe('Activity');
+    expect(labels[1]).toBe('Customers');
+  });
   it('has a Batches page in the menu', async () => {
     show('/batches');
     expect(await screen.findByRole('heading', { name: 'Batches' })).toBeInTheDocument();
