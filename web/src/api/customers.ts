@@ -4,7 +4,7 @@ export const FLAGS = ['isAddressMatching', 'isArchiveMailpieces', 'isCreateOutpu
 export type FlagKey = (typeof FLAGS)[number];
 
 export interface CustomerRow {
-  id: number; code: string; name: string; misJobNumber: string | null; pendingJobNumber: string | null; isAddressMatching: boolean; isTesting: boolean; isDeleted: boolean;
+  id: number; code: string; name: string; misJobNumber: string | null; pendingJobNumber: string | null; isAddressMatching: boolean; isUseMrdf: boolean; isSso: boolean; isTesting: boolean; isDeleted: boolean;
   parentId: number | null; parentCode: string | null;
   accountCount: number; brandCount: number; envelopeCount: number;
 }

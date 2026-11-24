@@ -81,7 +81,7 @@ export class MemoryCustomerStore implements CustomerStore {
       .filter((c) => (includeDeleted || !c.flags.isDeleted) && (!q || c.code.toLowerCase().includes(q) || c.name.toLowerCase().includes(q) || (c.misJobNumber ?? '').toLowerCase().includes(q) || (c.pendingJobNumber ?? '').toLowerCase().includes(q)))
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((c) => ({
-        id: c.id, code: c.code, name: c.name, misJobNumber: c.misJobNumber, pendingJobNumber: c.pendingJobNumber, parentId: c.parentId, parentCode: c.parentId === null ? null : this.customers.get(c.parentId)?.code ?? null, isAddressMatching: c.flags.isAddressMatching, isTesting: c.flags.isTesting, isDeleted: c.flags.isDeleted,
+        id: c.id, code: c.code, name: c.name, misJobNumber: c.misJobNumber, pendingJobNumber: c.pendingJobNumber, parentId: c.parentId, parentCode: c.parentId === null ? null : this.customers.get(c.parentId)?.code ?? null, isAddressMatching: c.flags.isAddressMatching, isUseMrdf: c.flags.isUseMrdf, isSso: c.flags.isSso, isTesting: c.flags.isTesting, isDeleted: c.flags.isDeleted,
         accountCount: this.accounts.filter((a) => a.customerId === c.id && !a.isDeleted).length,
         brandCount: this.brands.filter((b) => b.customerId === c.id).length,
         envelopeCount: this.envelopes.filter((e) => e.customerId === c.id && !e.isDeleted).length,

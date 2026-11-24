@@ -3,7 +3,7 @@ import { FLAGS, type ColourMode, type InheritMode, type SettingKey, type Custome
 /** Plain-English names for the account flags, shared by the audit log and (via the API) the screen. */
 export const FLAG_LABELS: Record<FlagKey, string> = {
   isAddressMatching: 'Address matching', isArchiveMailpieces: 'Archive mailpieces', isCreateOutputFiles: 'Create output files',
-  isSso: 'SSO', isSameDayService: 'Same-day service',
+  isSso: 'Uses SSO', isSameDayService: 'Same-day service',
   isUseMrdf: 'Use MRDF', isTesting: 'Testing', isDeleted: 'Deleted',
 };
 

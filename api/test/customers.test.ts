@@ -105,6 +105,19 @@ describe('pending job number', () => {
     expect((await call('GET', `/api/customers/${acme}/history`)).json().rows[0].summary).toBe('Pending job number: (none) → "24601" (takes effect 2026-12-01)');
     expect((await call('GET', '/api/customers?search=24601')).json().rows).toHaveLength(1);
   });
+  it('says in the list whether a customer uses MRDF', async () => {
+    const mrdf = async () => (await call('GET', '/api/customers')).json().rows.find((x: { id: number }) => x.id === acme).isUseMrdf;
+    expect(await mrdf()).toBe(false);
+    await call('PUT', `/api/customers/${acme}`, details({ flags: flags({ isUseMrdf: true }) }));
+    expect(await mrdf()).toBe(true);
+  });
+  it('says in the list whether a customer uses SSO, and calls the flag Uses SSO', async () => {
+    const sso = async () => (await call('GET', '/api/customers')).json().rows.find((x: { id: number }) => x.id === acme).isSso;
+    expect(await sso()).toBe(false);
+    await call('PUT', `/api/customers/${acme}`, details({ flags: flags({ isSso: true }) }));
+    expect(await sso()).toBe(true);
+    expect((await call('GET', `/api/customers/${acme}/history`)).json().rows[0].summary).toBe('Uses SSO: off → on');
+  });
   it('rolls over the year in December', async () => {
     store.today = () => '2026-12-15';
     expect((await call('PUT', `/api/customers/${acme}`, details({ pendingJobNumber: '25001' }))).json().pendingFrom).toBe('2027-01-01');
