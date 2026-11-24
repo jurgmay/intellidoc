@@ -6,10 +6,12 @@ import { assertScratchDatabase, dropSchema, longTimeout, runScript, schemaExists
  * watcher can be tried out. Uses INTELLIDOC_DB. The database name must contain test, scratch, tmp or dev.
  *   npm run db:init           create (refuses if idoc already exists)
  *   npm run db:reset          (reads .env) drop the idoc schema and rebuild it (DESTROYS everything in it)
+ * Add --no-test-data to leave the test accounts (FEXCO_CUSTOMER, NATIONAL_GRID_PSR...), stock and prices out: the schema only, for loading real data.
  */
 const cs = process.env['INTELLIDOC_DB'];
 if (!cs) { console.error('Set INTELLIDOC_DB first'); process.exit(2); }
 const reset = process.argv.includes('--reset');
+const testData = !process.argv.includes('--no-test-data');
 const pool = new sql.ConnectionPool(longTimeout(cs));
 await pool.connect();
 try {
@@ -20,7 +22,7 @@ try {
   }
   if (!process.exitCode) {
     await runScript(pool, 'intellidoc_core_schema.sql');
-    await runScript(pool, 'test_seed.sql');
-    console.log(`Created idoc schema and test reference data in "${name}"`);
+    if (testData) await runScript(pool, 'test_seed.sql');
+    console.log(`Created idoc schema${testData ? ' and test reference data' : ' (no test data)'} in "${name}"`);
   }
 } finally { await pool.close(); }

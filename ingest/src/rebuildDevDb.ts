@@ -8,14 +8,17 @@ import { fileURLToPath } from 'node:url';
  *   3. give every stock item without a code its unique 5-digit code
  *   4. apply your own Settings from db/local_settings.sql, if that file exists (npm run settings:export writes it)
  *   npm run db:rebuild -- <folder> [--start=10001]       (PowerShell: the -- is swallowed, so just: npm run db:rebuild C:\idoc-import)
+ * With --no-test-data step 1 leaves out the test accounts, stock and prices (db/test_seed.sql), so only your imported data is there.
+ *   npm run db:rebuild:real C:\idoc-import               (the same, without needing the flag)
  */
 const args = process.argv.slice(2);
 const dir = args.find((a) => !a.startsWith('--'));
 if (!dir) { console.error('Usage: npm run db:rebuild <folder with the FileMaker exports> [--start=10001]'); process.exit(2); }
+const noTestData = args.includes('--no-test-data');
 const start = args.find((a) => a.startsWith('--start='));
 
 const steps: [string, string, string[]][] = [
-  ['1/4 Reset the schema', './initDevDb.ts', ['--reset']],
+  ['1/4 Reset the schema', './initDevDb.ts', ['--reset', ...(noTestData ? ['--no-test-data'] : [])]],
   ['2/4 Import the FileMaker reference data', './import/cli.ts', [dir, '--apply']],
   ['3/4 Assign stock codes', './import/assignCodes.ts', ['--apply', ...(start ? [start] : [])]],
   ['4/4 Apply your settings', './applyLocalSettings.ts', []],

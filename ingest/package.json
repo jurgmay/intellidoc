@@ -14,6 +14,7 @@
     "db:init:env": "tsx --env-file=.env src/initDevDb.ts",
     "db:reset": "tsx --env-file=.env src/initDevDb.ts --reset",
     "db:rebuild": "tsx src/rebuildDevDb.ts",
+    "db:rebuild:real": "tsx src/rebuildDevDb.ts --no-test-data",
     "settings:export": "tsx --env-file=.env src/exportSettings.ts",
     "settings:apply": "tsx --env-file=.env src/applyLocalSettings.ts",
     "import:ref": "tsx src/import/cli.ts",
