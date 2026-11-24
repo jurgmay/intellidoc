@@ -111,7 +111,7 @@ describe.skipIf(!cs)('MssqlRecipientStore', { timeout: 120_000 }, () => {
     const two = buildXml([person('Mia', 'Merge', { passthrough: { 'Tenant Reference': 'M-1', 'Document Type': 'Leaflet' } }), person('Mia', 'Merge', { passthrough: { 'Tenant Reference': 'M-2', 'Document Type': 'Statement' } })]);
     await ingest(two.xml, 'job-merge.xml', 'job-merge.pdf', { ref, pdf: new FakePdf(two.pages), repo });
     // both letters in one envelope: the customer's matching rules do this at import. (If they did not, it is done directly here.) The second letter in the file goes in first.
-    const [first, second] = (await pool.request().query(`SELECT m.mailpiece_id AS id FROM idoc.mailpiece m JOIN idoc.job j ON j.job_id = m.job_id WHERE j.base_name = N'job-merge' ORDER BY m.mailpiece_id`)).recordset.map((r) => r.id as number) as [number, number | undefined];
+    const [first, second] = (await pool.request().query(`SELECT m.mailpiece_id AS id FROM idoc.mailpiece m JOIN idoc.job j ON j.job_id = m.job_id WHERE j.base_name = N'job-merge' ORDER BY m.mailpiece_id`)).recordset.map((r) => Number(r.id)) as [number, number | undefined];
     if (second !== undefined) await pool.request().query(`
       UPDATE idoc.pack SET mailpiece_id = ${first} WHERE mailpiece_id = ${second};
       DELETE FROM idoc.mailpiece WHERE mailpiece_id = ${second};
