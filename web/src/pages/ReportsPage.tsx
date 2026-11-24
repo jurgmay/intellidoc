@@ -1,3 +1,4 @@
+import { useIsAdmin } from '../auth';
 import { useEffect, useState } from 'react';
 import { Alert, Button, Group, Loader, Paper, Select, Stack, Text, TextInput, Title } from '@mantine/core';
 import { IconAlertCircle, IconFileTypePdf } from '@tabler/icons-react';
@@ -19,6 +20,8 @@ const NOTES: Record<Kind, string> = {
 /** The reports for one invoicing account over a period. The same form drives each report; choose which one. Either can also be a PDF; the margin report is internal (it shows costs). */
 export function ReportsPage() {
   const today = new Date();
+  const isAdmin = useIsAdmin();
+  const kinds = isAdmin ? KINDS : KINDS.filter((k) => k.value !== 'margin');   // the margin report shows costs
   const [kind, setKind] = useState<Kind>('usage');
   const [accounts, setAccounts] = useState<InvoicingAccount[] | null>(null);
   const [account, setAccount] = useState<string | null>(null);
@@ -42,7 +45,7 @@ export function ReportsPage() {
     finally { setBusy(false); }
   }
 
-  const kindSelect = <Select label="Report" allowDeselect={false} data={KINDS} value={kind} onChange={(v) => { setKind((v as Kind) ?? 'usage'); setShown(null); setErrors({}); }} w={220} />;
+  const kindSelect = <Select label="Report" allowDeselect={false} data={kinds} value={kind} onChange={(v) => { setKind((v as Kind) ?? 'usage'); setShown(null); setErrors({}); }} w={220} />;
   if (kind === 'audit') return <Stack><Title order={2}>Reports</Title><AuditReportPanel header={kindSelect} /></Stack>;
   return (
     <Stack>

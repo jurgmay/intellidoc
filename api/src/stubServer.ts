@@ -1,6 +1,7 @@
 import { MemoryActivityStore, MemoryInboxReader } from './activity/memoryStore.js';
 import { fileURLToPath } from 'node:url';
 import { buildApp } from './app.js';
+import { authFromEnv } from './auth/config.js';
 import { MemoryJobComposer, MemoryJobStore } from './jobs/memoryStore.js';
 import { MemoryReportStore } from './reports/memoryStore.js';
 import { MemoryRecipientStore } from './recipients/memoryStore.js';
@@ -151,6 +152,6 @@ inbox.items = [
 ];
 const composer = new MemoryJobComposer();
 composer.result = [{ batchCode: 7031, files: ['7031_1.pdf'], mrdfFile: null, skipped: null }, { batchCode: 7032, files: ['7032_1.pdf'], mrdfFile: null, skipped: null }];
-const app = await buildApp({ settings: store, hpod: new HpodSessions(store, { fetch: fakeHpodFetch() }), customers, costing, postal, reference: new MemoryReferenceStore(), reprice, recipients, batches, audit, reports, jobs: { store: jobs, composer }, activity: { store: activityStore, inbox }, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
+const app = await buildApp({ auth: authFromEnv({ AUTH_MODE: 'off' }), settings: store, hpod: new HpodSessions(store, { fetch: fakeHpodFetch() }), customers, costing, postal, reference: new MemoryReferenceStore(), reprice, recipients, batches, audit, reports, jobs: { store: jobs, composer }, activity: { store: activityStore, inbox }, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
 await app.listen({ port: Number(process.env['API_PORT'] ?? 3001), host: '127.0.0.1' });
 console.log('Stub API (no database) on http://127.0.0.1:3001');

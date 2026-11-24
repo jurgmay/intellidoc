@@ -7,7 +7,8 @@ import { realConnectivity, smtpFromValues, testEmailRecipients, type Connectivit
 import { marksFromValues, pageSizeFromValues, windowFromValues, type MarksPreviewer } from './preview.js';
 
 /** Who is making the change. There is no sign-in yet, so this is 'system'; Microsoft sign-in will replace this one function. */
-export function userOf(_req: FastifyRequest): string { return 'system'; }
+/** Who is doing this, for the audit trails: the signed-in user's e-mail address, or 'system' where nobody is signed in (tests, the stub server). */
+export function userOf(req: FastifyRequest): string { return req.user?.email || req.user?.name || 'system'; }
 
 async function payload(store: SettingsStore) {
   const [values, sizes, batchCode] = await Promise.all([store.read(), store.envelopeSizes(), store.batchCode()]);

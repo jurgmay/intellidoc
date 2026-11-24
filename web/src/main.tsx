@@ -10,6 +10,7 @@ import '@mantine/core/styles.css';
 import '@mantine/notifications/styles.css';
 import { theme } from './theme';
 import { App } from './App';
+import { AuthGate } from './auth';
 import { installColumnResize } from './columnResize';
 
 installColumnResize();
@@ -18,9 +19,11 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <MantineProvider theme={theme} defaultColorScheme="light">
       <Notifications position="top-right" />
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      <AuthGate>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </AuthGate>
     </MantineProvider>
   </React.StrictMode>,
 );

@@ -8,9 +8,12 @@ Fastify + SQL Server. Serves the web app's data under `/api`, and the built web 
     npm run dev                 (http://127.0.0.1:3001)
     npm run dev:stub            (no database: in-memory data, for working on the web app)
 
-There is no sign-in yet. Changes are recorded as made by `system`; `userOf()` in `src/settings/routes.ts` is the one place
-that will return the signed-in person once Microsoft sign-in is added. The API listens on `127.0.0.1` only; set `API_HOST`
-to expose it on the network (do that only behind the company network).
+People sign in with Microsoft Entra ID (see [docs/auth.md](../docs/auth.md)). The API refuses to start unless the `ENTRA_*`, `AUTH_PUBLIC_URL`
+and `SESSION_SECRET` lines in `.env` are set, or `AUTH_MODE=off` is given for development (only on `127.0.0.1`, never in production; everyone is then an
+administrator called `dev@localhost`). `npm run dev:stub` runs with sign-in off. Every `/api` route except `/api/health` and `/api/auth/*` needs a
+session; Settings, reference data, re-pricing, the margin report and changes to costing and postal prices need the `Admin` role. Changes are recorded in the audit log as made by
+the person's e-mail address (`userOf()` in `src/settings/routes.ts`), and each mailpiece audit report made is logged too. The API listens on `127.0.0.1` only; set `API_HOST`
+to expose it on the network (do that only behind the company network, or the reverse proxy that serves the site over https).
 
 ## Settings
 

@@ -1,5 +1,6 @@
-import { AppShell, Group, Image, NavLink, Text } from '@mantine/core';
+import { Anchor, AppShell, Group, Image, NavLink, Text } from '@mantine/core';
 import { IconActivity, IconChartBar, IconFiles, IconPackage, IconPlugConnected, IconSearch, IconSettings, IconUsers } from '@tabler/icons-react';
+import { signOut, useIsAdmin, useMe } from './auth';
 import { Link, Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { ActivityPage } from './pages/ActivityPage';
 import { CustomerPage } from './pages/CustomerPage';
@@ -15,16 +16,24 @@ const NAV = [{ to: '/customers', label: 'Customers', icon: IconUsers }, { to: '/
 
 export function App() {
   const { pathname } = useLocation();
+  const me = useMe();
+  const isAdmin = useIsAdmin();
+  const nav = isAdmin ? NAV : NAV.filter((n) => n.to !== '/settings');
   return (
     <AppShell header={{ height: 64 }} navbar={{ width: 220, breakpoint: 'sm' }} padding="lg">
       <AppShell.Header>
         <Group h="100%" px="lg" justify="space-between">
           <Image src="/intellidoc-logo.svg" alt="Intellidoc" h={48} w="auto" />
-          <Text size="xs" c="dimmed">Not signed in (sign-in comes later)</Text>
+          {me && (
+            <Group gap="sm">
+              <Text size="sm" title={me.email}>{me.name}{me.isAdmin ? ' (administrator)' : ''}</Text>
+              {me.signedInByDevelopmentBypass ? <Text size="xs" c="dimmed">sign-in is off</Text> : <Anchor component="button" type="button" size="sm" onClick={() => void signOut()}>Sign out</Anchor>}
+            </Group>
+          )}
         </Group>
       </AppShell.Header>
       <AppShell.Navbar p="sm">
-        {NAV.map((n) => (
+        {nav.map((n) => (
           <NavLink key={n.to} component={Link} to={n.to} label={n.label} leftSection={<n.icon size={18} />} active={pathname.startsWith(n.to)} />
         ))}
       </AppShell.Navbar>
@@ -41,7 +50,7 @@ export function App() {
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/margin" element={<Navigate to="/reports" replace />} />
           <Route path="/hpod" element={<HpodPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings" element={isAdmin ? <SettingsPage /> : <Text>Settings are for administrators.</Text>} />
           <Route path="*" element={<Text>Page not found.</Text>} />
         </Routes>
       </AppShell.Main>

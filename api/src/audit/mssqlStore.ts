@@ -10,6 +10,11 @@ const utc = (col: string): string => `CONVERT(NVARCHAR(19), ${col}, 126) + N'Z'`
 export class MssqlAuditStore implements AuditStore {
   constructor(private readonly pool: sql.ConnectionPool) {}
 
+  async logReport(by: string, accountId: number, summary: string): Promise<void> {
+    await this.pool.request().input('by', sql.NVarChar(200), by.slice(0, 200)).input('a', sql.BigInt, accountId).input('s', sql.NVarChar(1000), summary.slice(0, 1000))
+      .query(`INSERT INTO idoc.audit_log (changed_by, entity, entity_id, summary) VALUES (@by, N'audit report', @a, @s)`);
+  }
+
   async details(accountId: number, ids: number[]) {
     const label = ((await this.pool.request().input('a', sql.Int, accountId).query(`
       WITH t (account_id, label) AS (

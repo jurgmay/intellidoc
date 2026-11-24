@@ -24,6 +24,8 @@ export interface AuditMailpiece {
 }
 
 export interface AuditStore {
+  /** Notes in the audit log that someone made a proof-of-postage report: it holds personal data, so who made it, for whom and when is kept. */
+  logReport(by: string, accountId: number, summary: string): Promise<void>;
   /** The mailpieces with these ids that are in the account or below it, in the order of `ids`. An id that is not found (or is outside the account) is left out. */
   details(accountId: number, ids: number[]): Promise<{ scopeLabel: string; rows: AuditMailpiece[] }>;
 }

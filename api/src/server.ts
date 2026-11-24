@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { authFromEnv } from './auth/config.js';
 import { fileURLToPath } from 'node:url';
 import sql from 'mssql';
 import { buildApp } from './app.js';
@@ -29,7 +30,8 @@ const rollJobNumbers = (): void => { customers.applyDuePending().then((n) => { i
 rollJobNumbers();
 setInterval(rollJobNumbers, 10 * 60_000).unref();
 const settings = new MssqlSettingsStore(pool, secretBoxFromEnv());
-const app = await buildApp({ settings, hpod: new HpodSessions(settings), customers, costing: new MssqlCostingStore(pool), postal: new MssqlPostalStore(pool), reference: new MssqlReferenceStore(pool), reprice: new MssqlRepriceStore(pool, new Repricer(cs)), recipients: new MssqlRecipientStore(pool), batches: new MssqlBatchStore(pool), audit: new MssqlAuditStore(pool),
+const auth = (() => { try { return authFromEnv(process.env); } catch (e) { console.error((e as Error).message); process.exit(2); } })();
+const app = await buildApp({ auth, settings, hpod: new HpodSessions(settings), customers, costing: new MssqlCostingStore(pool), postal: new MssqlPostalStore(pool), reference: new MssqlReferenceStore(pool), reprice: new MssqlRepriceStore(pool, new Repricer(cs)), recipients: new MssqlRecipientStore(pool), batches: new MssqlBatchStore(pool), audit: new MssqlAuditStore(pool),
     // the customer's PDFs the watcher has processed (kept for a limited time); AUDIT_PDF_DIR overrides it
     pageRenderer: (process.env['AUDIT_PDF_DIR'] || process.env['WATCH_DIR']) ? new GhostscriptPageRenderer(process.env['AUDIT_PDF_DIR'] || join(process.env['WATCH_DIR']!, 'processed')) : undefined, reports: new MssqlReportStore(pool), jobs: { store: new MssqlJobStore(pool), composer: new IngestJobComposer(cs) }, activity: { store: new MssqlActivityStore(pool), inbox: new FsInboxReader() }, webDir: fileURLToPath(new URL('../../web/dist', import.meta.url)) });
 const port = Number(process.env['API_PORT'] ?? 3001);
