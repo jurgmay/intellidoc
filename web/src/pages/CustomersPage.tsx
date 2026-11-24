@@ -26,7 +26,7 @@ function inHierarchy(rows: CustomerRow[]): { row: CustomerRow; depth: number }[]
 
 const CELL = { whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' } as const;
 type Item = { row: CustomerRow; depth: number };
-const flagLabels = (r: CustomerRow): string[] => [r.isAddressMatching && 'Address matching', r.isUseMrdf && 'Uses MRDF', r.isSso && 'Uses SSO', r.isTesting && 'Testing', r.isDeleted && 'Deleted'].filter((x): x is string => !!x);
+const flagLabels = (r: CustomerRow): string[] => [r.isAddressMatching && 'Address matching', r.isUseMrdf && 'MRDF', r.isSso && 'SSO', r.isTesting && 'Testing', r.isDeleted && 'Deleted'].filter((x): x is string => !!x);
 const dash = (v: string | null): string => v ?? '–';
 
 /** The columns, with the text each one has to fit. The list keeps one line per customer, so a column is as wide as its longest value. */
@@ -112,8 +112,8 @@ export function CustomersPage() {
                   <Table.Td style={CELL}>
                     <Group gap={6} wrap="nowrap">
                       {r.isAddressMatching && <Badge variant="light">Address matching</Badge>}
-                      {r.isUseMrdf && <Badge color="green" variant="light">Uses MRDF</Badge>}
-                      {r.isSso && <Badge color="violet" variant="light">Uses SSO</Badge>}
+                      {r.isUseMrdf && <Badge color="green" variant="light">MRDF</Badge>}
+                      {r.isSso && <Badge color="violet" variant="light">SSO</Badge>}
                       {r.isTesting && <Badge color="orange" variant="light">Testing</Badge>}
                       {r.isDeleted && <Badge color="gray">Deleted</Badge>}
                     </Group>
