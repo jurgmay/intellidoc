@@ -28,6 +28,12 @@ beforeEach(async () => {
 });
 
 describe('GET /api/activity', () => {
+  it('lists as many finished tasks as the setting says', async () => {
+    store.rows = Array.from({ length: 60 }, (_, i) => row(i + 1));
+    expect((await app.inject({ method: 'GET', url: '/api/activity' })).json().recent).toHaveLength(30);
+    settings.values.activityRowsShown = 45;
+    expect((await app.inject({ method: 'GET', url: '/api/activity' })).json().recent).toHaveLength(45);
+  });
   it('returns the inbox, what is running, what finished lately and the newest jobs', async () => {
     inbox.items = [{ stem: 'a', xmlName: 'a.xml', xmlBytes: 10, pdfName: null, pdfBytes: null, modifiedAt: '2026-11-22T21:00:00.000Z' }];
     store.rows = [row(1), row(2, { kind: 'Print files', state: 'Running', detail: 'Batch 7 (1 of 3): file 2 of 5 built', done: 0, total: 3 }), row(3, { state: 'Failed', detail: 'Bad XML' })];

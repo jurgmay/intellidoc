@@ -118,6 +118,18 @@ export const SETTINGS: SettingDef[] = [
     appliesTo: 'Next print file composed.',
   },
   {
+    key: 'activityKeepDays', column: 'activity_keep_days', group: 'Print production settings', label: 'Keep finished Activity tasks for', type: 'integer', unit: 'days', min: 1, max: 365,
+    description: 'How long a finished task (done, failed or abandoned) stays in the Activity record before it is deleted. Tasks still running are never deleted.',
+    usedBy: 'Folder watcher: it clears old finished tasks when it starts and then every hour.',
+    appliesTo: 'The watcher re-reads this every minute; the next hourly clean-up uses it. Nothing is deleted at the moment you save.',
+  },
+  {
+    key: 'activityRowsShown', column: 'activity_rows_shown', group: 'Print production settings', label: 'Finished tasks shown on the Activity screen', type: 'integer', unit: 'tasks', min: 10, max: 500,
+    description: 'How many of the most recent finished tasks the Activity screen lists. Older ones are still kept until the number of days above has passed.',
+    usedBy: 'The Activity screen.',
+    appliesTo: 'The next time the Activity screen refreshes (every few seconds).',
+  },
+  {
     key: 'pageWidthMm', column: 'page_width_mm', group: 'Page size', label: 'Width', type: 'number', unit: 'mm', min: 50, max: 1000, step: 0.1,
     description: 'Width of the page the marks are measured on. A4 is 210 mm. Rarely needs to change.',
     usedBy: 'Marks preview: the size of the page drawn. Print file composition: the size of a blank page when there is no page before it to copy a size from (normally a blank copies the page before it). Pages copied from the customer PDF keep their own size.',

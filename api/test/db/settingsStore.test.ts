@@ -26,7 +26,7 @@ describe.skipIf(!cs)('MssqlSettingsStore', { timeout: 120_000 }, () => {
   it('reads every setting with the right type', async () => {
     const v = await store.read();
     expect(v).toMatchObject({ a4SheetWeightG: 5.625, machineEnclosingMaxSheets: 12, machineEnclosingEnvelopeSize: 'C5', xmlFirstEnabled: true, pdfWaitMinutes: 30, alertRecipients: '',
-      autoCompose: false, maxPagesPerPdf: 10000, markSeqFontPt: 8, markDotXMm: 205.5, markDotYMm: 269, markDotDiameterMm: 2,
+      autoCompose: false, maxPagesPerPdf: 10000, activityKeepDays: 7, activityRowsShown: 30, markSeqFontPt: 8, markDotXMm: 205.5, markDotYMm: 269, markDotDiameterMm: 2,
       mrdfOcrRotationDeg: 0, pageWidthMm: 210, pageHeightMm: 297, windowLeftMm: 15, windowTopMm: 25, windowWidthMm: 90, windowHeightMm: 35 });
   });
 

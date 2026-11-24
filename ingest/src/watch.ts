@@ -52,7 +52,7 @@ log('info', `Connected to database "${dbName}"${cfg.dryRun ? ' (DRY RUN: nothing
 
 const real = new MssqlRepository(pool, (jobId, e) => log('error', `Could not price job ${jobId}; its mailpieces stay unpriced: ${(e as Error).message}`));
 // XML-first and alert settings live in the database (Settings screen) and are re-read every minute; the environment values are only the fallback.
-let live: AlertSettings = { xmlFirst: cfg.xmlFirst, pdfWaitMinutes: cfg.pdfWaitMinutes, pdfReminderMinutes: cfg.pdfReminderMinutes, alertTo: cfg.alertTo };
+let live: AlertSettings = { xmlFirst: cfg.xmlFirst, pdfWaitMinutes: cfg.pdfWaitMinutes, pdfReminderMinutes: cfg.pdfReminderMinutes, alertTo: cfg.alertTo, activityKeepDays: 7 };
 async function refreshSettings(): Promise<void> {
   try { live = await loadAlertSettings(pool); } catch (e) { log('warn', `Could not read the alert settings from the database (${(e as Error).message}); using the last known values`); }
 }
@@ -65,7 +65,7 @@ const process1 = makeProcessor({ loadReference: () => loadReferenceData(pool), r
 const attach = makeAttachProcessor({ repo: real, pdf, notify: async (_to, subject, text) => { try { await mailer.send(live.alertTo, subject, text); } catch (e) { log('error', `Could not send "${subject}": ${(e as Error).message}`); } } });
 const dbActivity = new DbActivity(pool, (m) => log('warn', m));
 const activity: ActivityLog = cfg.dryRun ? noActivity : dbActivity;
-if (!cfg.dryRun) await dbActivity.tidy();
+if (!cfg.dryRun) await dbActivity.tidy(live.activityKeepDays);
 const watcher = new FolderWatcher(cfg.dirs, {
   process: (x, p) => tracked(activity, 'Import', x, (report) => process1(x, p, report), { sizeOf: p, withPdf: true }),
   processXmlOnly: (x: string) => tracked(activity, 'Import', x, (report) => process1(x, null, report)),
@@ -93,7 +93,9 @@ if (!cfg.dryRun && !cfg.once) {
   };
   const tick = (): void => { rollJobNumbers(); void composer?.run(); refreshSettings().then(() => (live.xmlFirst ? dog.check() : 0)).catch((e) => log('error', `PDF check failed: ${(e as Error).message}`)); };
   const timer = setInterval(tick, 60_000);
-  abortSignalCleanup(timer);
+  // Finished Activity rows older than the Settings value are cleared every hour (and at start-up, above)
+  const tidyTimer = setInterval(() => { void dbActivity.tidy(live.activityKeepDays); }, 3_600_000);
+  abortSignalCleanup(timer); abortSignalCleanup(tidyTimer);
   tick();
   log('info', `XML-first import ${live.xmlFirst ? 'on' : 'OFF'}: alert after ${live.pdfWaitMinutes} min without a PDF, then every ${live.pdfReminderMinutes} min (settings are re-read every minute)`);
 }
