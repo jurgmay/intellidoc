@@ -1,0 +1,18 @@
+{
+  "name": "intellidoc-deploy",
+  "version": "1.0.0",
+  "description": "Installs IntelliDoc's API and folder watcher as Windows services",
+  "scripts": {
+    "print": "node service.mjs print",
+    "install-services": "node service.mjs install",
+    "uninstall-services": "node service.mjs uninstall",
+    "start-services": "node service.mjs start",
+    "stop-services": "node service.mjs stop",
+    "restart-services": "node service.mjs restart"
+  },
+  "dependencies": {
+    "node-windows": "^1.0.0-beta.8"
+  },
+  "private": true,
+  "type": "module"
+}
