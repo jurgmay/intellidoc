@@ -514,7 +514,7 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
   });
 
   it('reads the alert settings, with their defaults, from idoc.settings', async () => {
-    expect(await loadAlertSettings(pool)).toEqual({ xmlFirst: true, pdfWaitMinutes: 30, pdfReminderMinutes: 30, alertTo: [] });
+    expect(await loadAlertSettings(pool)).toEqual({ xmlFirst: true, pdfWaitMinutes: 30, pdfReminderMinutes: 30, alertTo: [], activityKeepDays: 7 });
     await pool.request().query(`UPDATE idoc.settings SET pdf_wait_minutes = 5, alert_recipients = N'a@x.com, b@x.com' WHERE settings_id = 1`);
     expect(await loadAlertSettings(pool)).toMatchObject({ pdfWaitMinutes: 5, alertTo: ['a@x.com', 'b@x.com'] });
     await pool.request().query('UPDATE idoc.settings SET pdf_wait_minutes = 30, alert_recipients = N\'\' WHERE settings_id = 1');

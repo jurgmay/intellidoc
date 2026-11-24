@@ -57,6 +57,8 @@ CREATE TABLE idoc.settings (
     mark_dot_y_mm                       DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_dot_y DEFAULT (269),
     mark_dot_diameter_mm                DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_dot_d DEFAULT (2),
     -- The page the marks are measured on (A4 unless the work changes): the size of blank pages the composer adds, and of the marks preview.
+    activity_keep_days                  INT           NOT NULL CONSTRAINT df_settings_act_days DEFAULT (7),     -- finished Activity rows are deleted after this many days (the watcher tidies hourly)
+    activity_rows_shown                 INT           NOT NULL CONSTRAINT df_settings_act_rows DEFAULT (30),   -- how many finished tasks the Activity screen lists
     page_width_mm                       DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_page_width DEFAULT (210),
     page_height_mm                      DECIMAL(7, 3) NOT NULL CONSTRAINT df_settings_page_height DEFAULT (297),
     -- The address window of the envelope, as it lies over the letter (same units). Only the marks preview draws it; the print files do not use it.
@@ -117,7 +119,8 @@ CREATE TABLE idoc.settings (
         AND mark_seq_left_mm >= 0 AND mark_seq_top_mm >= 0 AND mark_dm_left_mm >= 0 AND mark_dm_top_mm >= 0 AND mark_dot_x_mm >= 0 AND mark_dot_y_mm >= 0
         AND page_width_mm > 0 AND page_height_mm > 0 AND window_width_mm > 0 AND window_height_mm > 0 AND window_left_mm >= 0 AND window_top_mm >= 0),
     CONSTRAINT ck_settings_positive CHECK (a4_sheet_weight_g > 0 AND a4_sheet_thickness_mm > 0 AND machine_enclosing_min_mailpieces >= 0
-        AND machine_enclosing_max_sheets > 0 AND hand_enclosing_max_sheets > 0 AND small_batch_limit >= 0 AND pdf_wait_minutes >= 1 AND pdf_reminder_minutes >= 1)
+        AND machine_enclosing_max_sheets > 0 AND hand_enclosing_max_sheets > 0 AND small_batch_limit >= 0 AND pdf_wait_minutes >= 1 AND pdf_reminder_minutes >= 1
+        AND activity_keep_days BETWEEN 1 AND 365 AND activity_rows_shown BETWEEN 10 AND 500)
 );
 GO
 

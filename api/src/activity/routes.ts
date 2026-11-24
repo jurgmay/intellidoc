@@ -5,7 +5,9 @@ import type { ActivityDeps, ActivityResponse } from './types.js';
 /** What the Activity screen shows: the inbox, what is running now, what finished lately, the newest jobs and how long the queue should take. Cheap enough to ask every few seconds. */
 export function activityRoutes(app: FastifyInstance, { store, inbox, jobs, settings }: ActivityDeps): void {
   app.get('/api/activity', async (): Promise<ActivityResponse> => {
-    const [files, running, recent, jobRows, samples, setting] = await Promise.all([inbox.list(), store.running(), store.recent(30), jobs.list({ search: null, status: null, limit: 40 }), store.samples(40), settings.read()]);
+    const setting = await settings.read();
+    const shown = typeof setting.activityRowsShown === 'number' && setting.activityRowsShown >= 1 ? Math.min(500, Math.floor(setting.activityRowsShown)) : 30;
+    const [files, running, recent, jobRows, samples] = await Promise.all([inbox.list(), store.running(), store.recent(shown), jobs.list({ search: null, status: null, limit: 40 }), store.samples(40)]);
     const e = estimator(samples);
     const now = Date.now();
     const filesWithEstimate = files.map((f) => ({ ...f, estimateSeconds: itemSeconds(e, f) }));
