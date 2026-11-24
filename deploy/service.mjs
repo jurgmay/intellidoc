@@ -49,12 +49,16 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     svc.directory(join(root, 'deploy', 'services')); // the service wrapper files and the logs (services\daemon) go here, not beside the program's code
     svc.on('error', (e) => console.error(`${d.name}: ${e}`));
     if (command === 'install') {
-      const r = await Promise.race([wait(svc, 'install', 'alreadyinstalled', 'invalidinstallation'), new Promise((res) => setTimeout(() => res({ event: 'timeout' }), 60_000))]);
+      const done = wait(svc, 'install', 'alreadyinstalled', 'invalidinstallation');
+      svc.install();
+      const r = await Promise.race([done, new Promise((res) => setTimeout(() => res({ event: 'timeout' }), 90_000))]);
       if (r.event === 'install') {
         // If the program ever stops (for instance the database was not up yet at boot), Windows starts it again after a minute.
         try { execFileSync('sc.exe', ['failure', svc.id ?? d.name.toLowerCase(), 'reset=', '86400', 'actions=', 'restart/60000/restart/60000/restart/60000'], { stdio: 'ignore' }); } catch { console.warn(`${d.name}: could not set the restart-on-failure recovery; set it in Services > ${d.name} > Recovery.`); }
         svc.start(); console.log(`${d.name} installed and started.`);
-      } else console.log(`${d.name}: ${r.event === 'alreadyinstalled' ? 'already installed (use uninstall first to change it)' : r.event}`);
+      } else console.log(`${d.name}: ${r.event === 'alreadyinstalled' ? 'already installed (use uninstall first to change it)' : r.event === 'timeout' ? 'no answer from Windows after 90 seconds. Is this an Administrator terminal? Check Get-Service *intellidoc* before trying again.' : r.event}`);
+    } else if (!svc.exists && command !== 'uninstall') {
+      console.error(`${d.name} is not installed. Run "npm run install-services" first.`);
     } else if (command === 'uninstall') {
       svc.uninstall(); await wait(svc, 'uninstall', 'alreadyuninstalled'); console.log(`${d.name} removed.`);
     } else if (command === 'start') { svc.start(); console.log(`${d.name}: start requested.`); }
