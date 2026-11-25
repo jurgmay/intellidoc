@@ -1,5 +1,5 @@
 import type sql from 'mssql';
-import { composeJob, type ComposedBatch } from './job.js';
+import { composeJob, PdfNotFiledError, type ComposedBatch } from './job.js';
 import { jobsToCompose, loadComposeSettings } from './db.js';
 import type { GreyConverter } from './grey.js';
 import type { Mailer } from '../mail.js';
@@ -24,9 +24,10 @@ export interface AutoComposerOptions {
   /** Stand-ins for the database and the composer (tests). */
   isEnabled?: () => Promise<boolean>;
   listJobs?: () => Promise<number[]>;
-  compose?: (jobId: number) => Promise<ComposedBatch[]>;
+  compose?: (jobId: number, waitForPdf: boolean) => Promise<ComposedBatch[]>;
 }
 
+const PDF_GRACE_MINUTES = 5;     // how long a job may wait for its PDF to be filed before that counts as a failure
 const ALERT_AFTER = 3;           // consecutive failures before an e-mail
 const BACKOFF_MINUTES = [1, 2, 5, 10, 30]; // wait after the 1st, 2nd, ... failure; the last value repeats
 
@@ -36,9 +37,16 @@ const BACKOFF_MINUTES = [1, 2, 5, 10, 30]; // wait after the 1st, 2nd, ... failu
  */
 export class AutoComposer {
   private running = false;
+  private readonly waiting = new Map<number, number>();
   private readonly failures = new Map<number, { count: number; retryAt: number }>();
   constructor(private readonly o: AutoComposerOptions) {}
   private now(): number { return (this.o.now ?? Date.now)(); }
+
+  /** True once a job has waited for its PDF longer than the grace period (and so should be reported if it is still missing). */
+  private pastGrace(jobId: number): boolean {
+    const since = this.waiting.get(jobId) ?? (this.waiting.set(jobId, this.now()), this.now());
+    return this.now() - since >= PDF_GRACE_MINUTES * 60_000;
+  }
 
   /** Returns the number of jobs composed. Never throws. */
   async run(): Promise<number> {
@@ -51,12 +59,13 @@ export class AutoComposer {
         const f = this.failures.get(jobId);
         if (f && this.now() < f.retryAt) continue;
         try {
-          const batches = await (this.o.compose ?? ((id) => composeJob({ pool: this.o.pool, jobId: id, pdfDir: this.o.pdfDir, outDir: this.o.outDir, mrdfDir: this.o.mrdfDir, grey: this.o.grey, onlyNew: true, mailer: this.o.mailer, activity: this.o.activity, onRunSheetEmail: (r) => this.o.log(r.sent ? 'info' : 'warn', r.sent ? `Job ${id}: run sheets e-mailed to ${[...r.to, ...r.cc].join(', ')}` : `Job ${id}: run sheets not e-mailed: ${r.error}`) })))(jobId);
+          const batches = await (this.o.compose ?? ((id, waitForPdf) => composeJob({ waitForPdf, pool: this.o.pool, jobId: id, pdfDir: this.o.pdfDir, outDir: this.o.outDir, mrdfDir: this.o.mrdfDir, grey: this.o.grey, onlyNew: true, mailer: this.o.mailer, activity: this.o.activity, onRunSheetEmail: (r) => this.o.log(r.sent ? 'info' : 'warn', r.sent ? `Job ${id}: run sheets e-mailed to ${[...r.to, ...r.cc].join(', ')}` : `Job ${id}: run sheets not e-mailed: ${r.error}`) })))(jobId, !this.pastGrace(jobId));
           const made = batches.filter((b) => b.files.length > 0);
           this.o.log('info', `Job ${jobId}: print files made for ${made.length} batch${made.length === 1 ? '' : 'es'} (${made.flatMap((b) => b.files).length} files)`);
-          this.failures.delete(jobId);
+          this.failures.delete(jobId); this.waiting.delete(jobId);
           done++;
         } catch (e) {
+          if (e instanceof PdfNotFiledError && !this.pastGrace(jobId)) continue; // the watcher has not filed the PDF yet; try again next minute
           const count = (f?.count ?? 0) + 1;
           this.failures.set(jobId, { count, retryAt: this.now() + BACKOFF_MINUTES[Math.min(count, BACKOFF_MINUTES.length) - 1]! * 60_000 });
           const msg = (e as Error).message;
