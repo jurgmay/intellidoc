@@ -91,7 +91,7 @@ paper.batch_name | sorted insert stock ids | batching_value | enclosing_route
 
 ## 7. Open items
 
-1. `anonymous_addressee`: global list for now, editable on the Settings page (Anonymous addressees tab). The seed values need your review, and say if any account needs its own.
+1. `anonymous_addressee`: global list for now, editable on the Settings page (Anonymous addressees card on the General tab). The seed values need your review, and say if any account needs its own.
 2. Postal format limits in the seed data are now Royal Mail's published maximums for all four formats (weight, length, width, thickness). Check them against your carrier contracts; they can be corrected on the Settings page (Postal formats tab).
 3. `sheet_count` for duplex packs where the last page is blank (National Grid shows 47 near-blank fourth pages).
 4. `Coverage` is ignored, as in FileMaker.

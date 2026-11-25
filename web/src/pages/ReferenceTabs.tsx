@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Alert, Button, Group, Loader, Modal, Paper, Stack, Table, Text, TextInput } from '@mantine/core';
+import { Alert, Button, Group, Loader, Modal, Paper, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { IconAlertCircle, IconPlus } from '@tabler/icons-react';
 import {
   addAnonymous, addInsertSize, deleteAnonymous, deleteInsertSize, deletePaper, getInsertSizes, getAnonymous, getFormats, getPapers, getReferenceHistory, saveFormat, savePaper,
@@ -123,7 +123,7 @@ export function PostalFormatsTab() {
   const [edit, setEdit] = useState<PostalFormat | null>(null);
   return (
     <Shell what="the postal formats" state={s} history={s.history}
-      intro={<>The size limits of each postal format. At import a mailpiece is put in the smallest format whose limits it is within (weight, thickness and sheets), then the next one up. These are Royal Mail's definitions: length is the longer side and width the shorter, so a 240 x 165 mm letter is the same either way round. Larger formats cannot have lower limits than smaller ones. Length and width are recorded for each format but the import does not check them yet. The names are fixed because the app refers to them. A change applies to the next job imported.</>}>
+      intro={<>The size limits of each postal format. At import a mailpiece is put in the smallest format whose limits it is within (weight, thickness and sheets), then the next one up. These are Royal Mail's definitions: length is the longer side and width the shorter, so a 240 x 165 mm letter is the same either way round. Larger formats cannot have lower limits than smaller ones. Length and width are recorded for each format but the import does not check them yet. The names are fixed because the app refers to them. A change applies to the next job imported. Add and Remove take effect at once; they do not wait for Save changes.</>}>
       <Table withTableBorder striped verticalSpacing="xs">
         <Table.Thead><Table.Tr><Table.Th>Format</Table.Th><Table.Th ta="center">Maximum weight</Table.Th><Table.Th ta="center">Maximum thickness</Table.Th><Table.Th ta="center">Maximum sheets</Table.Th><Table.Th ta="center">Maximum length</Table.Th><Table.Th ta="center">Maximum width</Table.Th><Table.Th ta="center">Services</Table.Th><Table.Th /></Table.Tr></Table.Thead>
         <Table.Tbody>
@@ -144,8 +144,8 @@ export function PostalFormatsTab() {
   );
 }
 
-// ---- Anonymous addressees ----
-export function AnonymousTab() {
+// ---- Anonymous addressees (a card on Settings > General) ----
+export function AnonymousAddressees() {
   const s = useLoaded(useCallback(async () => (await getAnonymous()).names, []));
   const [text, setText] = useState(''); const [err, setErr] = useState<string | null>(null); const [del, setDel] = useState<string | null>(null);
   const add = async () => {
@@ -153,7 +153,9 @@ export function AnonymousTab() {
     if (res.ok) { setText(''); setErr(null); s.reload(); } else setErr(res.fieldErrors?.['text'] ?? res.message ?? null);
   };
   return (
-    <Shell what="the anonymous addressees" state={s} history={s.history}
+    <Paper withBorder p="lg">
+    <Title order={4} mb="md" c="brand.6">Anonymous addressees</Title>
+    <Shell what="the anonymous addressees" state={s} history={[]}
       intro={<>Mail addressed to one of these, such as &ldquo;The Occupier&rdquo;, is never merged with other mail: each gets its own envelope. Type a name in any spelling; it is stored in capitals with spaces and punctuation removed, which is how addressees are compared. A change applies to the next job imported.</>}>
       <Group align="flex-end">
         <TextInput label="New anonymous addressee" placeholder="e.g. The Homeowner" value={text} onChange={(e) => setText(e.currentTarget.value)} error={err} onKeyDown={(e) => { if (e.key === 'Enter') void add(); }} w={320} />
@@ -170,6 +172,7 @@ export function AnonymousTab() {
       </Table>
       {del && <ConfirmDelete label={del} onClose={() => setDel(null)} onConfirm={async () => { const r = await run(() => deleteAnonymous(del), 'Removed'); if (r.ok) { setDel(null); s.reload(); } return r; }} />}
     </Shell>
+    </Paper>
   );
 }
 

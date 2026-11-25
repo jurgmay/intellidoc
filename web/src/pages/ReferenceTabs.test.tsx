@@ -4,7 +4,7 @@ import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { theme } from '../theme';
-import { AnonymousTab, PaperTab, PostalFormatsTab } from './ReferenceTabs';
+import { AnonymousAddressees, PaperTab, PostalFormatsTab } from './ReferenceTabs';
 
 let calls: { url: string; method: string; body?: any }[]; // eslint-disable-line @typescript-eslint/no-explicit-any
 let failNext: Response | null;
@@ -108,9 +108,9 @@ describe('PostalFormatsTab', () => {
   });
 });
 
-describe('AnonymousTab', () => {
+describe('AnonymousAddressees', () => {
   it('lists the stored names and adds one by what was typed', async () => {
-    wrap(<AnonymousTab />);
+    wrap(<AnonymousAddressees />);
     expect(await screen.findByText('THEOCCUPIER')).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText('New anonymous addressee'), 'The Home-Owner');
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));
@@ -119,7 +119,7 @@ describe('AnonymousTab', () => {
     await waitFor(() => expect(screen.getByLabelText('New anonymous addressee')).toHaveValue(''));
   });
   it('shows why an addition was refused and keeps the text', async () => {
-    wrap(<AnonymousTab />);
+    wrap(<AnonymousAddressees />);
     await userEvent.type(await screen.findByLabelText('New anonymous addressee'), 'the occupier');
     failNext = new Response(JSON.stringify({ error: 'THEOCCUPIER is already on the list.' }), { status: 409 });
     await userEvent.click(screen.getByRole('button', { name: 'Add' }));
@@ -127,7 +127,7 @@ describe('AnonymousTab', () => {
     expect(screen.getByLabelText('New anonymous addressee')).toHaveValue('the occupier');
   });
   it('removes a name after a confirmation, encoding it in the URL', async () => {
-    wrap(<AnonymousTab />);
+    wrap(<AnonymousAddressees />);
     await userEvent.click(within((await screen.findByText('THERESIDENT')).closest('tr')!).getByRole('button', { name: 'Remove' }));
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(sent('DELETE')).toHaveLength(1));

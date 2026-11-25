@@ -43,6 +43,8 @@ beforeEach(() => {
     }
     if (url === '/api/settings/marks-preview') return new Response(new Uint8Array([137, 80, 78, 71]), { status: 200, headers: { 'Content-Type': 'image/png' } });
     if (url.startsWith('/api/settings/audit')) return new Response(JSON.stringify({ rows: [] }), { status: 200 });
+    if (url === '/api/reference/anonymous') return new Response(JSON.stringify({ names: ['THEOCCUPIER'] }), { status: 200 });
+    if (url === '/api/reference/history') return new Response(JSON.stringify({ rows: [] }), { status: 200 });
     return new Response(JSON.stringify(payload), { status: 200 });
   }));
 });
@@ -60,8 +62,15 @@ describe('SettingsPage', () => {
   it('names the first tab General and opens on it', async () => {
     wrap();
     const tabs = await screen.findAllByRole('tab');
-    expect(tabs.map((t) => t.textContent)).toEqual(['General', 'Control marks', 'Network', 'Connectivity', 'Postal rates', 'Postal formats', 'Paper', 'Insert sizes', 'Anonymous addressees', 'Change log']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['General', 'Control marks', 'Network', 'Connectivity', 'Postal rates', 'Postal formats', 'Paper', 'Insert sizes', 'Change log']);
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+  });
+  it('shows the anonymous addressees on the General tab, not on a tab of their own', async () => {
+    wrap();
+    expect(await screen.findByRole('heading', { name: 'Anonymous addressees' })).toBeInTheDocument();
+    expect(await screen.findByText('THEOCCUPIER')).toBeInTheDocument();
+    expect(screen.getByLabelText('New anonymous addressee')).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Anonymous addressees' })).toBeNull();
   });
   it('puts the mark positions on the Control marks tab and the rest on General, with one save bar for both', async () => {
     wrap();
