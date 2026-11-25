@@ -23,7 +23,7 @@ It reads the customer's PDF from the watcher's `processed` folder, so a job is c
 
 ## Activity screen
 
-**Activity** in the web app is a live list (it refreshes every 3 seconds), in the order the work happens:
+**Activity** in the web app is a live list (it refreshes every 1.5 seconds while files are waiting or being worked on, and every 3 seconds when idle), in the order the work happens:
 
 1. **Making print files** and **Processing**: what the watcher or the API is doing now. Print files show a bar counting **mailpieces** (so a batch of thousands takes as much of the bar as it should, and the bar keeps moving while a big batch is built) and the step ("1 of 5 batches. Batch 81899 (2 of 5): file 3 of 13 built"); an import or PDF check shows how long it has been running.
 2. **Waiting**: the XML files in the watcher's `inbox`, in the order the watcher takes them (smallest XML first), each with **PDF: Arrived / Not yet**. A PDF with no XML shows as waiting for its XML.

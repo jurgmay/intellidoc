@@ -9,24 +9,30 @@ import { buildLines, clock, COLOUR, duration, durationText, ORDER, type Stage } 
 const BADGE_FULL = { root: { overflow: 'visible', maxWidth: 'none' }, label: { overflow: 'visible', textOverflow: 'clip' } } as const;
 
 /** What the watcher is doing: the inbox, what is being imported or printed, and what has finished. Refreshes itself. */
-export function ActivityPage({ refreshMs = 3000 }: { refreshMs?: number }) {
+export const ACTIVE_REFRESH_MS = 1500;
+export const IDLE_REFRESH_MS = 3000;
+
+/** Active means something is waiting in the inbox or being worked on now. */
+export const isBusy = (d: ActivityData | null): boolean => d !== null && (d.inbox.length > 0 || d.running.length > 0);
+
+/** What the watcher is doing: the inbox, what is being imported or printed, and what has finished. Refreshes itself: quicker while busy, slower when idle. `refreshMs` forces one rate (used by tests). */
+export function ActivityPage({ refreshMs }: { refreshMs?: number }) {
   const [data, setData] = useState<ActivityData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
     let live = true;
-    let inFlight = false;   // per effect run: React's development double-run must not leave the second run waiting on the first's discarded request
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let busy = false;
+    // The next refresh is booked only when the last one has finished, so slow answers never pile up.
     const load = async () => {
-      if (inFlight) return;
-      inFlight = true;
-      try { const d = await getActivity(); if (live) { setData(d); setError(null); setNow(Date.now()); } }
+      try { const d = await getActivity(); if (live) { setData(d); setError(null); setNow(Date.now()); busy = isBusy(d); } }
       catch (e) { if (live) setError((e as Error).message); }
-      finally { inFlight = false; }
+      if (live) timer = setTimeout(() => { void load(); }, refreshMs ?? (busy ? ACTIVE_REFRESH_MS : IDLE_REFRESH_MS));
     };
     void load();
-    const t = setInterval(() => { void load(); }, refreshMs);
-    return () => { live = false; clearInterval(t); };
+    return () => { live = false; clearTimeout(timer); };
   }, [refreshMs]);
 
   const lines = data ? buildLines(data, now) : [];
@@ -34,7 +40,7 @@ export function ActivityPage({ refreshMs = 3000 }: { refreshMs?: number }) {
   return (
     <Stack>
       <Group justify="space-between"><Title order={2}>Activity</Title></Group>
-      <Text size="sm" c="dimmed">Updates every few seconds. The inbox is taken smallest XML first.</Text>
+      <Text size="sm" c="dimmed">Updates every second or two while busy, and every few seconds when idle. The inbox is taken smallest XML first.</Text>
       {error && <Alert color="red" icon={<IconAlertCircle size={16} />}>{error}</Alert>}
       {data && data.autoCompose === false && (
         <Alert color="yellow" icon={<IconAlertCircle size={16} />} title="Print files are not made automatically">
