@@ -2,7 +2,7 @@ import sql from 'mssql';
 import { ConflictError, NotFoundError } from '../errors.js';
 import * as D from './describe.js';
 import { checkFormatLimits, paperInUse } from './rules.js';
-import type { FormatInput, FormatView, HistoryEntry, PaperInput, PaperView, ReferenceStore } from './types.js';
+import type { InsertSizeView, FormatInput, FormatView, HistoryEntry, PaperInput, PaperView, ReferenceStore } from './types.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type R = Record<string, any>;
@@ -88,6 +88,28 @@ export class MssqlReferenceStore implements ReferenceStore {
       const r = await new sql.Request(t).input('n', sql.NVarChar(200), text).query('DELETE FROM idoc.anonymous_addressee WHERE normalised_text = @n');
       if (!r.rowsAffected[0]) throw new NotFoundError('Not on the list');
       await this.audit(t, by, D.describeAnonymousDeleted(text));
+    });
+  }
+
+  async insertSizes(): Promise<InsertSizeView[]> {
+    const rows = (await this.pool.request().query(`SELECT z.insert_size_id, z.name, (SELECT COUNT(*) FROM idoc.stock_item s WHERE s.insert_size_id = z.insert_size_id) AS used FROM idoc.insert_size z ORDER BY z.name`)).recordset as R[];
+    return rows.map((r) => ({ id: r.insert_size_id, name: r.name, usedBy: r.used }));
+  }
+  async addInsertSize(name: string, by: string): Promise<InsertSizeView> {
+    return this.tx(async (t) => {
+      if ((await new sql.Request(t).input('n', sql.NVarChar(30), name).query('SELECT 1 AS x FROM idoc.insert_size WHERE name = @n')).recordset.length) throw new ConflictError(`${name} is already on the list.`);
+      const id = (await new sql.Request(t).input('n', sql.NVarChar(30), name).query('INSERT INTO idoc.insert_size (name) OUTPUT INSERTED.insert_size_id AS id VALUES (@n)')).recordset[0].id as number;
+      await this.audit(t, by, D.describeInsertSizeAdded(name));
+      return { id, name, usedBy: 0 };
+    });
+  }
+  async deleteInsertSize(id: number, by: string): Promise<void> {
+    await this.tx(async (t) => {
+      const z = (await new sql.Request(t).input('i', sql.Int, id).query('SELECT name, (SELECT COUNT(*) FROM idoc.stock_item s WHERE s.insert_size_id = @i) AS used FROM idoc.insert_size WHERE insert_size_id = @i')).recordset[0] as R | undefined;
+      if (!z) throw new NotFoundError('Size not found');
+      if (z.used > 0) throw new ConflictError(`${z.name} is used by ${z.used} insert${z.used === 1 ? '' : 's'}, so it cannot be removed. Change those inserts first.`);
+      await new sql.Request(t).input('i', sql.Int, id).query('DELETE FROM idoc.insert_size WHERE insert_size_id = @i');
+      await this.audit(t, by, D.describeInsertSizeDeleted(z.name));
     });
   }
 

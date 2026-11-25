@@ -1,11 +1,11 @@
 import { ConflictError, NotFoundError, ValidationError } from '../errors.js';
-import { describeBecameCustomer, describeBecameSubAccount, describeDetailsChange, describeEnvelope, describeMode, describeLeftAsCustomer, describeMatchRules, describeSequenceRules, describeSubAccountOf, noChildCustomers } from './describe.js';
+import { describeBecameCustomer, describeBecameSubAccount, describeDetailsChange, describeEnvelope, describeInsert, describeInsertChange, describeMode, describeLeftAsCustomer, describeMatchRules, describeSequenceRules, describeSubAccountOf, noChildCustomers } from './describe.js';
 import type {
-  AuditEntry, CustomerDetail, CustomerDetailsInput, CustomerRow, CustomerStore, EnvelopeInput, InheritMode, EnvelopeView, InheritedEnvelopeView, InheritedSettings, FlagKey, Lookups, MatchRule, ParentView, SequenceRule, SettingKey,
+  AuditEntry, InheritedInsertView, InsertInput, InsertView, CustomerDetail, CustomerDetailsInput, CustomerRow, CustomerStore, EnvelopeInput, InheritMode, EnvelopeView, InheritedEnvelopeView, InheritedSettings, FlagKey, Lookups, MatchRule, ParentView, SequenceRule, SettingKey,
 } from './types.js';
-import { FLAGS, SETTINGS } from './types.js';
+import { FLAGS, SETTINGS, marginOf } from './types.js';
 
-interface Cust extends Omit<CustomerDetail, 'accounts' | 'brands' | 'envelopes' | 'parent' | 'children' | 'pendingJobNumber' | 'pendingFrom' | 'invoicing' | 'invoicingOptions' | 'inheritedEnvelopes' | 'inherited'> {
+interface Cust extends Omit<CustomerDetail, 'accounts' | 'brands' | 'envelopes' | 'parent' | 'children' | 'pendingJobNumber' | 'pendingFrom' | 'invoicing' | 'invoicingOptions' | 'inheritedEnvelopes' | 'inherited' | 'inserts' | 'inheritedInserts'> {
   parentId: number | null; invoicingAccountId: number | null; pendingJobNumber: string | null; pendingFrom: string | null; jobNumberRolloverDay: number;
 }
 
@@ -19,6 +19,7 @@ export function nextRollover(today: string, rollDay: number): string {
 /** `rehomedFrom`: the customer this account belonged to before that customer became a sub-account (so that undoing it can give the account back). */
 interface Acct { id: number; customerId: number; code: string; name: string; isDeleted: boolean; rehomedFrom?: number }
 interface Brand { id: number; customerId: number; name: string }
+interface Ins extends InsertInput { id: number; customerId: number; isActive: boolean; parentId: number | null }
 interface Env extends EnvelopeInput { id: number; customerId: number; isDeleted: boolean }
 
 const noModes = (): Record<SettingKey, InheritMode> => Object.fromEntries(SETTINGS.map((k) => [k, 'OWN'])) as Record<SettingKey, InheritMode>;
@@ -32,10 +33,12 @@ export class MemoryCustomerStore implements CustomerStore {
   accounts: Acct[] = [];
   brands: Brand[] = [];
   envelopes: Env[] = [];
+  inserts: Ins[] = [];
   audit: (AuditEntry & { customerId: number })[] = [];
   lookupData: Lookups = {
     passthroughKeys: ['Department', 'Doc Type'],
     customers: [],
+    insertSizes: [{ id: 1, name: 'A4' }, { id: 2, name: 'A3' }, { id: 3, name: 'DL' }],
     deliveryBands: ['1st Class', '2nd Class', 'Signed For'],
     postalRates: [
       { id: 1, label: 'Royal Mail – 2nd Class (Letter), up to 100g', format: 'Letter' },
@@ -102,6 +105,8 @@ export class MemoryCustomerStore implements CustomerStore {
       brands: this.brands.filter((b) => b.customerId === id).map((b) => ({ id: b.id, name: b.name, usage: this.brandUsage(b.id) })),
       envelopes: this.envelopes.filter((e) => e.customerId === id && !e.isDeleted).map((e) => this.envelopeView(e)),
       modes: { ...c.modes },
+      inserts: this.inserts.filter((x) => x.customerId === id && x.isActive).map((x) => this.insertView(x)),
+      inheritedInserts: this.inheritedInserts(id),
       inheritedEnvelopes: this.inheritedEnvelopes(id),
       inherited: this.inheritedSettings(id),
     };
@@ -113,6 +118,25 @@ export class MemoryCustomerStore implements CustomerStore {
       id: e.id, brandId: e.brandId, brandName: this.brands.find((b) => b.id === e.brandId)?.name ?? null, deliveryBand: e.deliveryBand, postalRateId: e.postalRateId, rateLabel: r.label,
       stockItemId: e.stockItemId, stockCode: s.code, stockDescription: s.description, reference: e.reference, externalName: e.externalName, isOversticker: e.isOversticker,
     };
+  }
+
+  private insertView(x: Ins): InsertView {
+    const parent = x.parentId === null ? null : this.inserts.find((p) => p.id === x.parentId) ?? null;
+    return {
+      id: x.id, stockCode: x.stockCode, brandId: x.brandId, brandName: this.brands.find((b) => b.id === x.brandId)?.name ?? null, reference: x.reference, description: x.description,
+      hpodGuid: x.hpodGuid, insertSizeId: x.insertSizeId, sizeName: this.lookupData.insertSizes.find((z) => z.id === x.insertSizeId)?.name ?? null, widthMm: x.widthMm, heightMm: x.heightMm,
+      thicknessMm: x.thicknessMm, weightG: x.weightG, isChargeable: x.isChargeable, costPrice: x.costPrice, sellPrice: x.sellPrice, margin: marginOf(x.costPrice, x.sellPrice),
+      linkedIds: this.inserts.filter((c) => c.isActive && c.parentId === x.id).map((c) => c.id), parent: parent ? { id: parent.id, stockCode: parent.stockCode, description: parent.description } : null,
+    };
+  }
+  private inheritedInserts(id: number): InheritedInsertView[] {
+    const out: InheritedInsertView[] = [];
+    for (const src of this.sources(id, 'inserts')) {
+      if (src === id) continue;
+      const c = this.cust(src);
+      for (const x of this.inserts.filter((i) => i.customerId === src && i.isActive)) out.push({ ...this.insertView(x), from: { id: c.id, code: c.code, name: c.name } });
+    }
+    return out;
   }
 
   /** The customers whose rows make up this customer's settings of one group, nearest first (itself included when it contributes). */
@@ -319,6 +343,65 @@ export class MemoryCustomerStore implements CustomerStore {
     if (!e) throw new NotFoundError('Envelope setting not found');
     e.isDeleted = true;
     this.log(e.customerId, by, `Removed envelope: ${this.envText(e)}`);
+  }
+
+  private checkInsert(customerId: number, i: InsertInput, selfId: number | null): void {
+    const errs: Record<string, string> = {};
+    if (i.brandId !== null && !this.brands.some((b) => b.id === i.brandId && b.customerId === customerId)) errs['brandId'] = 'That brand does not belong to this customer';
+    if (i.insertSizeId !== null && !this.lookupData.insertSizes.some((z) => z.id === i.insertSizeId)) errs['insertSizeId'] = 'Size not found';
+    const code = i.stockCode.toLowerCase();
+    if (this.inserts.some((x) => x.id !== selfId && x.stockCode.toLowerCase() === code)) throw new ConflictError(`Stock code ${i.stockCode} is already in use`);
+    if (i.hpodGuid !== null && this.inserts.some((x) => x.id !== selfId && x.hpodGuid === i.hpodGuid)) throw new ConflictError('That H-POD GUID is already used by another insert');
+    if (i.linkedIds.length > 0) {
+      const self = selfId === null ? null : this.inserts.find((x) => x.id === selfId) ?? null;
+      if (self?.parentId != null) errs['linkedIds'] = 'This insert is itself linked under another insert, so it cannot have linked inserts of its own';
+      for (const l of i.linkedIds) {
+        const c = this.inserts.find((x) => x.id === l && x.isActive && x.customerId === customerId);
+        if (!c || l === selfId) errs['linkedIds'] = 'Linked inserts must be other inserts of this customer';
+        else if (this.inserts.some((x) => x.isActive && x.parentId === l)) errs['linkedIds'] = `${c.stockCode} has linked inserts of its own, so it cannot be linked under another`;
+        else if (c.parentId !== null && c.parentId !== selfId) errs['linkedIds'] = `${c.stockCode} is already linked under another insert`;
+      }
+    }
+    if (Object.keys(errs).length) throw new ValidationError(errs);
+  }
+  private setLinks(parentId: number, ids: number[]): void {
+    for (const x of this.inserts) { if (x.parentId === parentId) x.parentId = null; }
+    for (const x of this.inserts) if (ids.includes(x.id)) x.parentId = parentId;
+  }
+  private asInput(x: Ins): InsertInput {
+    const { id: _id, customerId: _c, isActive: _a, parentId: _p, linkedIds: _l, ...rest } = x;
+    return { ...rest, linkedIds: this.inserts.filter((c) => c.isActive && c.parentId === x.id).map((c) => c.id) };
+  }
+  private insertNames(i: InsertInput): { brand: string | null; size: string | null } {
+    return { brand: this.brands.find((b) => b.id === i.brandId)?.name ?? null, size: this.lookupData.insertSizes.find((z) => z.id === i.insertSizeId)?.name ?? null };
+  }
+
+  async addInsert(customerId: number, input: InsertInput, by: string): Promise<number> {
+    this.cust(customerId); this.checkInsert(customerId, input, null);
+    const id = this.nextId();
+    this.inserts.push({ id, customerId, ...input, isActive: true, parentId: null });
+    this.setLinks(id, input.linkedIds);
+    this.log(customerId, by, `Added insert: ${describeInsert(input)}`);
+    return id;
+  }
+
+  async updateInsert(insertId: number, input: InsertInput, by: string): Promise<void> {
+    const x = this.inserts.find((i) => i.id === insertId && i.isActive);
+    if (!x) throw new NotFoundError('Insert not found');
+    this.checkInsert(x.customerId, input, insertId);
+    const was = this.asInput(x); const wasNames = this.insertNames(was);
+    const { linkedIds, ...fields } = input;
+    Object.assign(x, fields); this.setLinks(insertId, linkedIds);
+    const changes = describeInsertChange(was, input, { was: wasNames, next: this.insertNames(input) });
+    if (changes.length) this.log(x.customerId, by, `Changed insert ${input.stockCode}: ${changes.join('; ')}`);
+  }
+
+  async deleteInsert(insertId: number, by: string): Promise<void> {
+    const x = this.inserts.find((i) => i.id === insertId && i.isActive);
+    if (!x) throw new NotFoundError('Insert not found');
+    x.isActive = false; x.parentId = null;
+    for (const c of this.inserts) if (c.parentId === insertId) c.parentId = null;
+    this.log(x.customerId, by, `Removed insert: ${describeInsert(x)}`);
   }
 
   async setMatchRules(customerId: number, rules: MatchRule[], by: string): Promise<void> {

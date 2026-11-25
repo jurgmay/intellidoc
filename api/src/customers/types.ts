@@ -16,11 +16,33 @@ export interface EnvelopeView {
   id: number; brandId: number | null; brandName: string | null; deliveryBand: string; postalRateId: number; rateLabel: string;
   stockItemId: number; stockCode: string | null; stockDescription: string; reference: string | null; externalName: string | null; isOversticker: boolean;
 }
+/** An insert: a leaflet, reply envelope, brochure or other stock that goes in with the letter. Held by the customer that owns it. */
+export interface InsertView {
+  id: number; stockCode: string | null; brandId: number | null; brandName: string | null; reference: string | null; description: string; hpodGuid: string | null;
+  insertSizeId: number | null; sizeName: string | null; widthMm: number | null; heightMm: number | null; thicknessMm: number; weightG: number;
+  isChargeable: boolean; costPrice: number | null; sellPrice: number | null;
+  /** Sell price less cost; null unless both are set. Always worked out, never stored. */
+  margin: number | null;
+  /** The inserts that are also shown on the run sheet (and counted in the weight) whenever this one is used. */
+  linkedIds: number[];
+  /** Set when this insert is itself linked under another insert. */
+  parent: { id: number; stockCode: string | null; description: string } | null;
+}
+export interface InheritedInsertView extends InsertView { from: ParentView }
+export interface InsertInput {
+  stockCode: string; brandId: number | null; reference: string | null; description: string; hpodGuid: string | null; insertSizeId: number | null;
+  widthMm: number | null; heightMm: number | null; thicknessMm: number; weightG: number; isChargeable: boolean; costPrice: number | null; sellPrice: number | null;
+  /** The customer's own inserts that come with this one. */
+  linkedIds: number[];
+}
+/** Sell price less cost, to 4 decimal places; null unless both are set. */
+export const marginOf = (cost: number | null, sell: number | null): number | null => (cost === null || sell === null ? null : Math.round((sell - cost) * 10_000) / 10_000);
+
 /** Where a group of settings comes from: its own rows, its parent's, or the parent's plus its own. */
 export const INHERIT_MODES = ['OWN', 'INHERIT', 'EXTEND'] as const;
 export type InheritMode = (typeof INHERIT_MODES)[number];
-/** The groups that can each take their own choice. matching = address matching on/off, batching key and matching rules; sequence = pack sequence key and rules. */
-export const SETTINGS = ['envelopes', 'brands', 'matching', 'sequence', 'emails'] as const;
+/** The groups that can each take their own choice. inserts = the insert list (leaflets, reply envelopes, ...); matching = address matching on/off, batching key and matching rules; sequence = pack sequence key and rules. */
+export const SETTINGS = ['envelopes', 'brands', 'matching', 'sequence', 'emails', 'inserts'] as const;
 export type SettingKey = (typeof SETTINGS)[number];
 export type Modes = Record<SettingKey, InheritMode>;
 export interface InheritedEnvelopeView extends EnvelopeView { from: ParentView }
@@ -59,11 +81,13 @@ export interface CustomerDetail extends ProductionFields {
   invoicing: ParentView | null;
   /** The accounts that can be chosen: this customer first, then each ancestor up the tree. */
   invoicingOptions: ParentView[];
-  accounts: AccountView[]; brands: BrandView[]; envelopes: EnvelopeView[];
+  accounts: AccountView[]; brands: BrandView[]; envelopes: EnvelopeView[]; inserts: InsertView[];
   /** Where each group of settings comes from. All OWN when there is no parent. */
   modes: Modes;
   /** Envelope settings that come from the parent customers (read only here), nearest first; one that this customer also has is left out. */
   inheritedEnvelopes: InheritedEnvelopeView[];
+  /** Inserts that come from the parent customers (read only here), nearest first. */
+  inheritedInserts: InheritedInsertView[];
   matchRules: MatchRule[]; sequenceRules: SequenceRule[]; emails: string[];
   inherited: InheritedSettings;
 }
@@ -86,6 +110,7 @@ export interface Lookups {
   customers: { id: number; code: string; name: string }[];
   deliveryBands: string[];
   postalRates: { id: number; label: string; format: string }[];
+  insertSizes: { id: number; name: string }[];
   envelopeStock: { id: number; code: string | null; description: string; size: string | null }[];
 }
 export interface AuditEntry { id: number; changedAt: string; changedBy: string; summary: string }
@@ -104,6 +129,10 @@ export interface CustomerStore {
   addEnvelope(customerId: number, input: EnvelopeInput, by: string): Promise<number>;
   updateEnvelope(envelopeId: number, input: EnvelopeInput, by: string): Promise<void>;
   deleteEnvelope(envelopeId: number, by: string): Promise<void>;
+  addInsert(customerId: number, input: InsertInput, by: string): Promise<number>;
+  updateInsert(insertId: number, input: InsertInput, by: string): Promise<void>;
+  /** Retires the insert: it leaves the list, but jobs that used it keep it. */
+  deleteInsert(insertId: number, by: string): Promise<void>;
   setMode(customerId: number, setting: SettingKey, mode: InheritMode, by: string): Promise<void>;
   /** The customer stops holding its own settings and takes everything from its parent, like any other sub-account. Its own settings are kept, but not used. */
   makeSubAccount(customerId: number, by: string): Promise<void>;

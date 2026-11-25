@@ -22,3 +22,5 @@ export function describeFormatChange(old: FormatView, next: FormatInput): string
 
 export const describeAnonymousAdded = (n: string): string => `Anonymous addressee ${n} added`;
 export const describeAnonymousDeleted = (n: string): string => `Anonymous addressee ${n} removed`;
+export const describeInsertSizeAdded = (n: string): string => `Insert size ${n} added`;
+export const describeInsertSizeDeleted = (n: string): string => `Insert size ${n} removed`;

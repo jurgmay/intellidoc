@@ -26,6 +26,9 @@ export interface FormatView {
 }
 export interface FormatInput { maxWeightG: number; maxThicknessMm: number | null; maxSheets: number | null; maxLengthMm: number; maxWidthMm: number }
 
+/** A size an insert can be shown as (A4, A3, DL ...). */
+export interface InsertSizeView { id: number; name: string; /** Inserts using it. A size that is used cannot be removed. */ usedBy: number }
+
 export interface HistoryEntry { id: number; changedAt: string; changedBy: string; summary: string }
 
 export interface ReferenceStore {
@@ -39,5 +42,8 @@ export interface ReferenceStore {
   /** Normalises the text and adds it; returns what was stored. */
   addAnonymous(text: string, by: string): Promise<string>;
   deleteAnonymous(normalised: string, by: string): Promise<void>;
+  insertSizes(): Promise<InsertSizeView[]>;
+  addInsertSize(name: string, by: string): Promise<InsertSizeView>;
+  deleteInsertSize(id: number, by: string): Promise<void>;
   history(limit: number): Promise<HistoryEntry[]>;
 }

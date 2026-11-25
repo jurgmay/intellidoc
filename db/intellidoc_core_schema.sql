@@ -258,6 +258,8 @@ CREATE TABLE idoc.account (
     emails_mode                NVARCHAR(10)       NOT NULL CONSTRAINT df_account_emailsmode DEFAULT (N'OWN'),
     -- Which costing model prices this account's mail: its own (OWN) or the nearest ancestor's (INHERIT). No EXTEND: a price list is not merged.
     costing_mode               NVARCHAR(10)       NOT NULL CONSTRAINT df_account_costingmode DEFAULT (N'OWN'),
+    -- Where this account's inserts (leaflets, reply envelopes, brochures: stock_item rows with is_insert = 1) come from: OWN, INHERIT (the parent's effective list) or EXTEND (both).
+    inserts_mode               NVARCHAR(10)       NOT NULL CONSTRAINT df_account_insmode DEFAULT (N'OWN'),
     -- The account that is invoiced for this account's mail and whose job number is printed on the run sheet. Must be this account or an
     -- ancestor (checked by the API and the import). NULL = the account that holds the settings. See idoc.v_account_invoicing.
     invoicing_account_id       INT                NULL CONSTRAINT fk_account_invoicing REFERENCES idoc.account (account_id),
@@ -297,6 +299,7 @@ CREATE TABLE idoc.account (
     CONSTRAINT ck_account_envmode CHECK (envelopes_mode IN (N'OWN', N'INHERIT', N'EXTEND') AND (envelopes_mode = N'OWN' OR parent_account_id IS NOT NULL)),
     CONSTRAINT ck_account_modes CHECK (brands_mode IN (N'OWN', N'INHERIT', N'EXTEND') AND matching_mode IN (N'OWN', N'INHERIT', N'EXTEND') AND sequence_mode IN (N'OWN', N'INHERIT', N'EXTEND') AND emails_mode IN (N'OWN', N'INHERIT', N'EXTEND')
         AND (parent_account_id IS NOT NULL OR (brands_mode = N'OWN' AND matching_mode = N'OWN' AND sequence_mode = N'OWN' AND emails_mode = N'OWN'))),
+    CONSTRAINT ck_account_insmode CHECK (inserts_mode IN (N'OWN', N'INHERIT', N'EXTEND') AND (inserts_mode = N'OWN' OR parent_account_id IS NOT NULL)),
     CONSTRAINT ck_account_costing CHECK (costing_mode IN (N'OWN', N'INHERIT') AND (costing_mode = N'OWN' OR parent_account_id IS NOT NULL)),
     CONSTRAINT ck_account_rollday CHECK (job_number_rollover_day BETWEEN 1 AND 28),
     CONSTRAINT ck_account_pending CHECK ((pending_mis_job_number IS NULL AND pending_job_number_from IS NULL) OR (pending_mis_job_number IS NOT NULL AND pending_job_number_from IS NOT NULL))
@@ -316,7 +319,7 @@ WITH up AS (
 SELECT account_id, node_id AS owner_account_id FROM up WHERE inherits = 0;
 GO
 
--- For every account and settings group (envelopes, brands, matching, sequence, emails, costing), the accounts whose rows make up its effective settings, nearest first
+-- For every account and settings group (envelopes, brands, matching, sequence, emails, costing, inserts), the accounts whose rows make up its effective settings, nearest first
 -- (depth 0 = the account itself). An inheriting account passes straight through to its parent. Otherwise OWN stops here, INHERIT contributes nothing and
 -- goes up, EXTEND contributes and goes up. The single values of a group (address matching, the keys) come from the nearest source.
 CREATE VIEW idoc.v_account_setting_source AS
@@ -325,9 +328,9 @@ WITH node AS (
            CASE WHEN a.inherits_settings = 0 AND m.setting_mode <> N'INHERIT' THEN 1 ELSE 0 END AS adds_self,
            CASE WHEN a.inherits_settings = 1 OR m.setting_mode <> N'OWN' THEN 1 ELSE 0 END AS goes_up
     FROM idoc.account AS a
-    CROSS JOIN (VALUES (N'envelopes'), (N'brands'), (N'matching'), (N'sequence'), (N'emails'), (N'costing')) AS g(setting)
+    CROSS JOIN (VALUES (N'envelopes'), (N'brands'), (N'matching'), (N'sequence'), (N'emails'), (N'costing'), (N'inserts')) AS g(setting)
     CROSS APPLY (SELECT CASE g.setting WHEN N'envelopes' THEN a.envelopes_mode WHEN N'brands' THEN a.brands_mode WHEN N'matching' THEN a.matching_mode
-                                       WHEN N'sequence' THEN a.sequence_mode WHEN N'costing' THEN a.costing_mode ELSE a.emails_mode END AS setting_mode) AS m),
+                                       WHEN N'sequence' THEN a.sequence_mode WHEN N'costing' THEN a.costing_mode WHEN N'inserts' THEN a.inserts_mode ELSE a.emails_mode END AS setting_mode) AS m),
 walk AS (
     SELECT account_id AS origin, account_id AS node_id, parent_account_id AS next_id, setting, 0 AS depth, adds_self, goes_up FROM node
     UNION ALL
@@ -395,6 +398,13 @@ CREATE TABLE idoc.anonymous_addressee (
 );
 GO
 
+-- The sizes an insert can be shown as (A4, A3, DL, ...). A list kept in Settings.
+CREATE TABLE idoc.insert_size (
+    insert_size_id INT IDENTITY(1, 1) NOT NULL CONSTRAINT pk_insert_size PRIMARY KEY,
+    name           NVARCHAR(30)       NOT NULL CONSTRAINT uq_insert_size_name UNIQUE
+);
+GO
+
 CREATE TABLE idoc.stock_item (
     stock_item_id        INT IDENTITY(1, 1) NOT NULL CONSTRAINT pk_stock_item PRIMARY KEY,
     parent_stock_item_id INT                NULL CONSTRAINT fk_stock_parent REFERENCES idoc.stock_item (stock_item_id), -- linked items
@@ -417,6 +427,12 @@ CREATE TABLE idoc.stock_item (
     height_mm            DECIMAL(7, 2)      NULL,
     window_width_mm      DECIMAL(7, 2)      NULL,
     window_height_mm     DECIMAL(7, 2)      NULL,
+    -- Inserts only (is_insert = 1): the size it is shown as, its H-POD id, whether the customer is charged for it, and what it costs and sells for (margin = sell - cost).
+    insert_size_id       INT                NULL CONSTRAINT fk_stock_insize REFERENCES idoc.insert_size (insert_size_id),
+    hpod_guid            UNIQUEIDENTIFIER   NULL,
+    is_chargeable        BIT                NOT NULL CONSTRAINT df_stock_chargeable DEFAULT (0),
+    cost_price           DECIMAL(10, 4)     NULL,
+    sell_price           DECIMAL(10, 4)     NULL,
     is_stock_managed     BIT                NOT NULL CONSTRAINT df_stock_managed DEFAULT (0),
     is_active            BIT                NOT NULL CONSTRAINT df_stock_active DEFAULT (1),
     -- 'WH' codes are warehouse-managed stock; other codes are provisional until stock management assigns one
@@ -425,6 +441,7 @@ CREATE TABLE idoc.stock_item (
 GO
 CREATE UNIQUE INDEX uq_stock_code ON idoc.stock_item (stock_code) WHERE stock_code IS NOT NULL;
 CREATE UNIQUE INDEX ux_stock_legacy ON idoc.stock_item (legacy_id) WHERE legacy_id IS NOT NULL;
+CREATE UNIQUE INDEX ux_stock_hpod ON idoc.stock_item (hpod_guid) WHERE hpod_guid IS NOT NULL;
 GO
 
 -- Customer envelope configuration (FileMaker 'Envelopes', replaces envelopesJSON).
@@ -824,6 +841,7 @@ GO
    8. SEED DATA
    =========================================================================== */
 INSERT INTO idoc.settings (settings_id) VALUES (1);
+INSERT INTO idoc.insert_size (name) VALUES (N'A3'), (N'A4'), (N'A5'), (N'A6'), (N'DL');
 
 INSERT INTO idoc.postal_format (name, rank_order, max_weight_g, max_thickness_mm, max_sheets, max_length_mm, max_width_mm) VALUES
     (N'Letter',        1,  100,  5.00,   16, 240, 165),

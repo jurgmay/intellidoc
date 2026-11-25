@@ -64,3 +64,10 @@ export function parseAnonymous(body: Body): string {
   if (!/[A-Z0-9]/.test(n)) throw new ValidationError({ text: 'Addressee must contain letters or numbers' });
   return n;
 }
+
+export function parseInsertSize(body: Body): string {
+  const errs: Record<string, string> = {};
+  const name = text(errs, body?.['name'], 'name', 'Size', 30, true);
+  done(errs);
+  return name!;
+}

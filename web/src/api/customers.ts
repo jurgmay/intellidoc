@@ -10,7 +10,7 @@ export interface CustomerRow {
 }
 /** Where a group of settings comes from: its own, the parent's, or the parent's plus its own. */
 export type InheritMode = 'OWN' | 'INHERIT' | 'EXTEND';
-export type SettingKey = 'envelopes' | 'brands' | 'matching' | 'sequence' | 'emails';
+export type SettingKey = 'envelopes' | 'brands' | 'matching' | 'sequence' | 'emails' | 'inserts';
 export type Modes = Record<SettingKey, InheritMode>;
 export interface ParentView { id: number; code: string; name: string }
 export interface ChildView { id: number; code: string; name: string; isDeleted: boolean }
@@ -21,6 +21,18 @@ export interface EnvelopeView {
   stockItemId: number; stockCode: string | null; stockDescription: string; reference: string | null; externalName: string | null; isOversticker: boolean;
 }
 export interface InheritedEnvelopeView extends EnvelopeView { from: ParentView }
+/** An insert (leaflet, reply envelope, brochure ...). Margin is sell price less cost, worked out by the API. */
+export interface InsertView {
+  id: number; stockCode: string | null; brandId: number | null; brandName: string | null; reference: string | null; description: string; hpodGuid: string | null;
+  insertSizeId: number | null; sizeName: string | null; widthMm: number | null; heightMm: number | null; thicknessMm: number; weightG: number;
+  isChargeable: boolean; costPrice: number | null; sellPrice: number | null; margin: number | null;
+  linkedIds: number[]; parent: { id: number; stockCode: string | null; description: string } | null;
+}
+export interface InheritedInsertView extends InsertView { from: ParentView }
+export interface InsertInput {
+  stockCode: string; brandId: number | null; reference: string | null; description: string; hpodGuid: string | null; insertSizeId: number | null;
+  widthMm: number | null; heightMm: number | null; thicknessMm: number; weightG: number; isChargeable: boolean; costPrice: number | null; sellPrice: number | null; linkedIds: number[];
+}
 export interface MatchRule { isInclude: boolean; key: string; value: string | null }
 export interface SequenceRule { value: string; number: number }
 /** Settings that come from the parents, read only here. */
@@ -46,7 +58,7 @@ export interface CustomerDetail {
   parent: ParentView | null; children: ChildView[];
   /** null = the customer itself. */
   invoicing: ParentView | null; invoicingOptions: ParentView[];
-  accounts: AccountView[]; brands: BrandView[]; envelopes: EnvelopeView[]; modes: Modes; inheritedEnvelopes: InheritedEnvelopeView[]; matchRules: MatchRule[]; sequenceRules: SequenceRule[]; emails: string[]; inherited: InheritedSettings;
+  accounts: AccountView[]; brands: BrandView[]; envelopes: EnvelopeView[]; inserts: InsertView[]; inheritedInserts: InheritedInsertView[]; modes: Modes; inheritedEnvelopes: InheritedEnvelopeView[]; matchRules: MatchRule[]; sequenceRules: SequenceRule[]; emails: string[]; inherited: InheritedSettings;
 }
 export type DetailsInput = Pick<CustomerDetail, 'code' | 'name' | 'misJobNumber' | 'pendingJobNumber' | 'jobNumberRolloverDay' | 'returnAddress' | 'archiveCustomerTag' | 'archiveProviderTag' | 'archiveDirectoryTag' | 'logo1' | 'logo2' | 'colourMode' | 'flags' | 'batchingKey' | 'packSequenceKey'> & { parentId: number | null; invoicingAccountId: number | null };
 export interface EnvelopeInput {
@@ -55,6 +67,7 @@ export interface EnvelopeInput {
 export interface Lookups {
   passthroughKeys: string[]; customers: { id: number; code: string; name: string }[]; deliveryBands: string[]; flagLabels: Record<FlagKey, string>;
   postalRates: { id: number; label: string; format: string }[];
+  insertSizes: { id: number; name: string }[];
   envelopeStock: { id: number; code: string | null; description: string; size: string | null }[];
 }
 export interface HistoryRow { id: number; changedAt: string; changedBy: string; summary: string }
@@ -81,3 +94,6 @@ export const deleteEnvelope = (id: number) => api(`/api/envelopes/${id}`, { meth
 export const saveMatchRules = (id: number, rules: MatchRule[]) => api(`/api/customers/${id}/match-rules`, { method: 'PUT', body: { rules } });
 export const saveSequenceRules = (id: number, rules: SequenceRule[]) => api(`/api/customers/${id}/sequence-rules`, { method: 'PUT', body: { rules } });
 export const saveEmails = (id: number, emails: string[]) => api(`/api/customers/${id}/emails`, { method: 'PUT', body: { emails } });
+export const addInsert = (id: number, body: InsertInput) => api(`/api/customers/${id}/inserts`, { method: 'POST', body });
+export const updateInsert = (id: number, body: InsertInput) => api(`/api/inserts/${id}`, { method: 'PUT', body });
+export const deleteInsert = (id: number) => api(`/api/inserts/${id}`, { method: 'DELETE' });
