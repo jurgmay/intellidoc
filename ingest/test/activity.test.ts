@@ -20,11 +20,14 @@ describe('tracked', () => {
     expect(await tracked(a, 'Import', 'C:\\inbox\\job-1.xml', async () => out)).toBe(out);
     expect(a.events).toEqual(['start Import job-1.xml', 'finish Done Imported']);
   });
-  it('says so for a duplicate, a failure and a retry', async () => {
-    for (const [o, want] of [[{ kind: 'duplicate' as const, summary: {} }, 'finish Done Already imported (duplicate)'], [{ kind: 'failed' as const, summary: {}, message: 'Bad XML' }, 'finish Failed Bad XML'],
-      [{ kind: 'retry' as const, message: 'database down' }, 'finish Failed Will try again: database down']] as const) {
+  it('says so for a duplicate and a failure', async () => {
+    for (const [o, want] of [[{ kind: 'duplicate' as const, summary: {} }, 'finish Done Already imported (duplicate)'], [{ kind: 'failed' as const, summary: {}, message: 'Bad XML' }, 'finish Failed Bad XML']] as const) {
       const a = new Rec(); await tracked(a, 'Import', 'x.xml', async () => o); expect(a.events[1]).toBe(want);
     }
+  });
+  it('leaves no Failed row for work that will be tried again', async () => {
+    const a = new Rec(); await tracked(a, 'Import', 'x.xml', async () => ({ kind: 'retry' as const, message: 'database down' }));
+    expect(a.events).toEqual(['start Import x.xml', 'drop']);
   });
   it('leaves no trace of a lone PDF that no job was waiting for', async () => {
     const a = new Rec(); await tracked(a, 'PDF check', 'x.pdf', async () => ({ kind: 'unmatched' as const }));
