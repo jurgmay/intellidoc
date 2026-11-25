@@ -7,14 +7,14 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActivityData } from '../api/activity';
 import { theme } from '../theme';
-import { buildLines, duration, durationText, elapsed } from './activityLines';
+import { buildLines, durationText, elapsed } from './activityLines';
 import { ActivityPage, ACTIVE_REFRESH_MS, IDLE_REFRESH_MS, isBusy } from './ActivityPage';
 
 const job = (id: number, over: object = {}) => ({ id, customerCode: 'ACME', customerName: 'Acme', baseName: `j${id}`, pdfFileName: `j${id}.pdf`, receivedAt: `2026-11-22T10:0${id}:00.000Z`, status: 'Received',
   packCount: 1, pageCount: 2, pdfError: null, batchCount: 2, composedBatchCount: 2, runSheetsEmailedAt: null, ...over });
 const act = (id: number, over: object = {}) => ({ id, kind: 'Import', label: `f${id}.xml`, jobId: null, state: 'Done', detail: 'Imported', done: null, total: null,
   startedAt: '2026-11-22T21:00:00.000Z', updatedAt: '2026-11-22T21:00:20.000Z', finishedAt: '2026-11-22T21:00:20.000Z', stalled: false, ...over });
-const data = (o: { inbox?: unknown[]; inboxUnavailable?: string | null; running?: unknown[]; recent?: unknown[]; jobs?: unknown[]; queue?: unknown; autoCompose?: boolean } = {}): ActivityData => ({ inbox: [], inboxUnavailable: null, running: [], recent: [], jobs: [], queue: { basedOn: 0, seconds: null, partial: false }, autoCompose: true, ...o } as ActivityData);
+const data = (o: { inbox?: unknown[]; inboxUnavailable?: string | null; running?: unknown[]; recent?: unknown[]; jobs?: unknown[]; autoCompose?: boolean } = {}): ActivityData => ({ inbox: [], inboxUnavailable: null, running: [], recent: [], jobs: [], autoCompose: true, ...o } as ActivityData);
 const NOW = Date.parse('2026-11-22T21:05:00.000Z');
 
 describe('buildLines', () => {
@@ -48,13 +48,13 @@ describe('buildLines', () => {
 describe('times', () => {
   it('gives each line a start, an end and a duration', () => {
     const l = buildLines(data({
-      running: [act(1, { state: 'Running', label: 'run.xml', startedAt: '2026-11-22T21:03:00.000Z', finishedAt: null, remainingSeconds: 120 })],
+      running: [act(1, { state: 'Running', label: 'run.xml', startedAt: '2026-11-22T21:03:00.000Z', finishedAt: null })],
       inbox: [{ stem: 'w', xmlName: 'w.xml', xmlBytes: 1, pdfName: null, pdfBytes: null, modifiedAt: '2026-11-22T21:04:30.000Z' }],
       jobs: [job(1, { baseName: 'done', pdfFileName: 'done.pdf' })],
       recent: [act(2, { label: 'done.xml', startedAt: '2026-11-22T21:00:00.000Z', finishedAt: '2026-11-22T21:00:10.000Z' }), act(3, { kind: 'PDF check', label: 'DONE.pdf', startedAt: '2026-11-22T21:00:10.000Z', finishedAt: '2026-11-22T21:02:40.000Z' }),
         act(4, { kind: 'Print files', label: 'Job 1: done.pdf', jobId: 1, startedAt: '2026-11-22T21:03:00.000Z', finishedAt: '2026-11-22T21:03:30.000Z', detail: '2 of 2 batches made' })],
     }), NOW);
-    expect(durationText(l[0]!, NOW)).toBe('2m 0s, about 2 min left');
+    expect(durationText(l[0]!, NOW)).toBe('2m 0s');
     expect(l[0]).toMatchObject({ start: '2026-11-22T21:03:00.000Z', end: null });
     expect(durationText(l[1]!, NOW)).toBe('waiting 30s'); expect(l[1]).toMatchObject({ start: null, end: null });
     const job1 = l.find((x) => x.name === 'done.pdf')!;
@@ -112,16 +112,14 @@ describe('accounts and file names', () => {
   });
 });
 
-describe('PDF check progress and estimates', () => {
-  it('shows pages for an import or PDF check, with the time left, and the estimate for each waiting file', () => {
+describe('PDF check progress', () => {
+  it('shows pages for an import or PDF check, and no estimate for a waiting file', () => {
     const l = buildLines(data({
-      running: [act(1, { kind: 'PDF check', state: 'Running', label: 'big.pdf', detail: 'Inspecting page 1,200 of 54,000', done: 1200, total: 54000, remainingSeconds: 540 })],
-      inbox: [{ stem: 'a', xmlName: 'a.xml', xmlBytes: 1, pdfName: 'a.pdf', pdfBytes: 1, modifiedAt: '2026-11-22T21:00:00.000Z', estimateSeconds: 95 }] }), NOW);
-    expect(l[0]).toMatchObject({ stage: 'Processing', progress: { done: 1200, total: 54000, unit: 'pages' }, seconds: 540 });
-    expect(l[1]).toMatchObject({ stage: 'Waiting', seconds: 95 });
-  });
-  it('words a length of time roughly', () => {
-    expect([0.2, 45, 59.6, 90, 840, 3600, 4800, 7200].map(duration)).toEqual(['1 s', '45 s', '60 s', '2 min', '14 min', '1 h', '1 h 20 min', '2 h']);
+      running: [act(1, { kind: 'PDF check', state: 'Running', label: 'big.pdf', detail: 'Inspecting page 1,200 of 54,000', done: 1200, total: 54000 })],
+      inbox: [{ stem: 'a', xmlName: 'a.xml', xmlBytes: 1, pdfName: 'a.pdf', pdfBytes: 1, modifiedAt: '2026-11-22T21:00:00.000Z' }] }), NOW);
+    expect(l[0]).toMatchObject({ stage: 'Processing', progress: { done: 1200, total: 54000, unit: 'pages' } });
+    expect(l[0]).not.toHaveProperty('seconds');
+    expect(l[1]).toMatchObject({ stage: 'Waiting', detail: 'Ready.' });
   });
 });
 
@@ -166,27 +164,17 @@ describe('ActivityPage first load', () => {
   });
 });
 
-describe('ActivityPage estimates', () => {
-  it('shows how long the inbox should take, and what is left of the file being checked', async () => {
-    current = data({ queue: { basedOn: 40, seconds: 840, partial: false },
-      running: [act(1, { kind: 'PDF check', state: 'Running', label: 'big.pdf', detail: 'Inspecting page 1,200 of 54,000', done: 1200, total: 54000, remainingSeconds: 540 })],
-      inbox: [{ stem: 'a', xmlName: 'a.xml', xmlBytes: 1, pdfName: 'a.pdf', pdfBytes: 1, modifiedAt: new Date().toISOString(), estimateSeconds: 95 }] });
+describe('ActivityPage progress', () => {
+  it('shows the pages checked so far, with no estimate of the time left or of the inbox', async () => {
+    current = data({
+      running: [act(1, { kind: 'PDF check', state: 'Running', label: 'big.pdf', detail: 'Inspecting page 1,200 of 54,000', done: 1200, total: 54000 })],
+      inbox: [{ stem: 'a', xmlName: 'a.xml', xmlBytes: 1, pdfName: 'a.pdf', pdfBytes: 1, modifiedAt: new Date().toISOString() }] });
     show();
-    expect(await screen.findByText('14 min')).toBeInTheDocument();
-    expect(screen.getByText(/from the last 40 imports and PDF checks/)).toBeInTheDocument();
-    expect(screen.getByText('Inspecting page 1,200 of 54,000')).toBeInTheDocument();
+    expect(await screen.findByText('Inspecting page 1,200 of 54,000')).toBeInTheDocument();
     expect(screen.getByRole('progressbar', { name: '1200 of 54000 pages' })).toBeInTheDocument();
-    expect(screen.getByText(/about 9 min left/)).toBeInTheDocument();
-    expect(screen.getByText(/\(about 2 min\)/)).toBeInTheDocument();
-  });
-  it('says "at least" when some files could not be estimated, and shows nothing when there is no estimate', async () => {
-    current = data({ queue: { basedOn: 2, seconds: 120, partial: true } });
-    const { unmount } = show();
-    expect(await screen.findByText(/At least/)).toBeInTheDocument(); expect(screen.getByText(/too new to estimate/)).toBeInTheDocument();
-    unmount();
-    current = data({ queue: { basedOn: 0, seconds: null, partial: true } });
-    show(); await screen.findByText('Nothing in the inbox and nothing running.');
     expect(screen.queryByText(/to clear the inbox/)).toBeNull();
+    expect(screen.queryByText(/left/)).toBeNull();
+    expect(screen.getByText('Ready.')).toBeInTheDocument();
   });
 });
 

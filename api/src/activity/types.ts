@@ -1,5 +1,4 @@
 import type { JobRow } from '../jobs/types.js';
-import type { QueueEstimate, Sample } from './estimate.js';
 
 /** One file stem in the watcher's inbox: its XML and/or PDF. */
 export interface InboxItem {
@@ -8,8 +7,6 @@ export interface InboxItem {
   pdfName: string | null; pdfBytes: number | null;
   /** When the newest of its files was last written (ISO, UTC). */
   modifiedAt: string;
-  /** About how many seconds the watcher will take over it, from recent jobs; null when there is not enough history. */
-  estimateSeconds?: number | null;
 }
 export type ActivityKind = 'Import' | 'PDF check' | 'Print files';
 export interface ActivityRow {
@@ -17,18 +14,14 @@ export interface ActivityRow {
   detail: string | null; done: number | null; total: number | null; startedAt: string; updatedAt: string; finishedAt: string | null;
   /** Running, but nothing has been recorded for a while: the program that was doing it has probably stopped. */
   stalled: boolean;
-  /** Size of the file it is about, and whether a PDF is read as part of it (for the estimate). */
+  /** Size of the file it is about, and whether a PDF is read as part of it. */
   bytes: number | null; withPdf: boolean;
-  /** About how many seconds are left, when known. */
-  remainingSeconds?: number | null;
 }
 export interface ActivityStore {
   /** Rows still Running, oldest first. */
   running(): Promise<ActivityRow[]>;
   /** Finished rows, newest first. */
   recent(limit: number): Promise<ActivityRow[]>;
-  /** The last finished imports and PDF checks, for the time estimate. */
-  samples(limit: number): Promise<Sample[]>;
   /** One row by number, or null. */
   get(id: number): Promise<ActivityRow | null>;
   /** Takes a Failed row off the list (it was retried): it becomes Abandoned, its text is kept. Does nothing to any other row. */
@@ -50,7 +43,6 @@ export interface ActivityDeps { store: ActivityStore; inbox: InboxReader; settin
 export interface ActivityResponse {
   inbox: InboxItem[]; inboxUnavailable: string | null;
   running: ActivityRow[]; recent: ActivityRow[]; jobs: JobRow[];
-  queue: QueueEstimate;
   /** The "Make print files automatically" setting; when off, nothing makes print files until someone presses the button. */
   autoCompose: boolean;
 }

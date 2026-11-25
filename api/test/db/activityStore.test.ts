@@ -27,17 +27,6 @@ describe.skipIf(!cs)('MssqlActivityStore', { timeout: 120_000 }, () => {
     expect(running[0]).toMatchObject({ done: 2, total: 5, kind: 'Print files', bytes: null, withPdf: false });
     expect((await store.recent(10)).map((r) => r.label)).toEqual(['b.xml', 'a.xml']);
   });
-  it('gives the finished imports and PDF checks as samples for the estimate', async () => {
-    await add('PDF check', 'big.pdf', 'Done', { bytes: 70_000_000, pdf: true, seconds: 140 });
-    await add('Import', 'quick.xml', 'Done', { seconds: 3 });
-    await add('Print files', 'Job 9', 'Done', { seconds: 600 });            // not an import: left out
-    await add('PDF check', 'failed.pdf', 'Failed', { bytes: 5, pdf: true, seconds: 1 }); // failed: left out
-    const s = await store.samples(10);
-    const big = s.find((x) => x.bytes === 70_000_000)!;
-    expect(big.withPdf).toBe(true); expect(big.seconds).toBeGreaterThanOrEqual(139); expect(big.seconds).toBeLessThanOrEqual(142);
-    expect(s.some((x) => !x.withPdf)).toBe(true);
-    expect(s.every((x) => x.seconds < 500)).toBe(true);
-  });
   it('finds a row by number, and dismisses only a failed one', async () => {
     await add('Import', 'retry-me.xml', 'Failed'); await add('Import', 'leave-me.xml', 'Done');
     const all = await store.recent(50);
