@@ -57,19 +57,19 @@ export async function composeBatch(input: ComposeInput): Promise<ComposedFile[]>
 
   // Greyscale: one conversion for the whole batch
   const say = input.onProgress ?? (() => undefined);
-  say(0, 'Reading the PDF');
-  const toGrey = await colourPagesToGrey(input.source, input.plan, (d, t) => say(0.2 * (d / t), `Inspecting page ${d.toLocaleString('en-GB')} of ${t.toLocaleString('en-GB')}`));
-  say(0.2, 'Checked the colour of the pages');
+  say(0, 'Reading the PDF.');
+  const toGrey = await colourPagesToGrey(input.source, input.plan, (d, t) => say(0.2 * (d / t), `Inspecting page ${d.toLocaleString('en-GB')} of ${t.toLocaleString('en-GB')}.`));
+  say(0.2, 'Inspected the pages.');
   let greyDoc: PDFDocument | null = null;
   const greyIndex = new Map<number, number>();
   if (toGrey.length) {
     if (!input.grey) throw new Error(`${toGrey.length} colour pages must be printed mono but no greyscale converter is available (install Ghostscript)`);
     const tmp = await PDFDocument.create();
     (await tmp.copyPages(src, toGrey.map((p) => p - 1))).forEach((pg, i) => { tmp.addPage(pg); greyIndex.set(toGrey[i]!, i); });
-    say(0.2, `Converting ${toGrey.length.toLocaleString('en-GB')} colour pages to grey`);
+    say(0.2, `Converting ${toGrey.length.toLocaleString('en-GB')} colour pages to mono.`);
     greyDoc = await PDFDocument.load(await input.grey.convert(await tmp.save()));
   }
-  say(0.3, 'Building the files');
+  say(0.3, 'Composing the files.');
 
   const font = await loadOcrbFont();
   const files: ComposedFile[] = [];
@@ -80,7 +80,7 @@ export async function composeBatch(input: ComposeInput): Promise<ComposedFile[]>
     const from = 0.3 + 0.7 * (piecesDone / totalPieces), span = 0.7 * (seg.mailpieces.length / totalPieces);
     files.push(await composeSegment(input, seg, { src, runDoc, greyDoc, greyIndex, font, progress: (f, what) => say(from + span * f, what.replace('{file}', `file ${files.length + 1} of ${input.plan.segments.length}`)) }));
     piecesDone += seg.mailpieces.length;
-    say(0.3 + 0.7 * (piecesDone / totalPieces), `Built file ${files.length} of ${input.plan.segments.length}`);
+    say(0.3 + 0.7 * (piecesDone / totalPieces), `Built file ${files.length} of ${input.plan.segments.length}.`);
     input.onFile?.(files.length, input.plan.segments.length);
   }
   return files;
@@ -102,12 +102,12 @@ async function composeSegment(input: ComposeInput, seg: PlannedSegment,
     return { from: 'src' as const, at: fromSrc.push(p.sourcePage! - 1) - 1 };
   });
   const step = ctx.progress ?? (() => undefined);
-  step(0, 'Copying pages for {file}');
+  step(0, 'Copying pages for {file}.');
   const srcPages = fromSrc.length ? await out.copyPages(ctx.src, fromSrc) : [];
   const greyPages = fromGrey.length ? await out.copyPages(ctx.greyDoc!, fromGrey) : [];
   const runPages = fromRun.length ? await out.copyPages(ctx.runDoc!, fromRun) : [];
 
-  step(0.4, 'Placing pages in {file}');
+  step(0.4, 'Placing pages in {file}.');
   const placed: PDFPage[] = [];
   const pageSize = input.pageSize ?? DEFAULT_PAGE_MM;
   let last: [number, number] = [pageSize.widthMm * MM, pageSize.heightMm * MM];
@@ -127,7 +127,7 @@ async function composeSegment(input: ComposeInput, seg: PlannedSegment,
   let lastYield = Date.now();
   for (const [i, p] of seg.pages.entries()) {
     // A file can be thousands of pages of synchronous drawing: report and let the program breathe about every 200 ms.
-    if (Date.now() - lastYield > 200) { step(0.5 + 0.4 * (i / seg.pages.length), 'Adding marks to {file}'); await new Promise((r) => setImmediate(r)); lastYield = Date.now(); }
+    if (Date.now() - lastYield > 200) { step(0.5 + 0.4 * (i / seg.pages.length), 'Adding control marks to {file}.'); await new Promise((r) => setImmediate(r)); lastYield = Date.now(); }
     if (!p.mailpieceStart) continue;
     const seq = p.mailpieceStart.sequenceNumber;
     const matrix = dataMatrixText(input.batchCode, seq);
@@ -159,7 +159,7 @@ async function composeSegment(input: ComposeInput, seg: PlannedSegment,
   info.set(PDFName.of('GTS_PDFXVersion'), PDFString.of('PDF/X-4'));
   info.set(PDFName.of('Trapped'), PDFName.of('False'));
 
-  step(0.9, 'Saving {file}');
+  step(0.9, 'Saving {file}.');
   const bytes = await out.save({ useObjectStreams: false });
   return {
     segmentNumber: seg.segmentNumber, fileName, bytes, pageCount: seg.pages.length, mailpieceCount: seg.mailpieces.length,

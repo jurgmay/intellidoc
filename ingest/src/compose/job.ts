@@ -110,7 +110,7 @@ async function composeJobBatches(o: ComposeJobOptions, job: Awaited<ReturnType<t
     batchNo++;
     const at = `Processing batch ${batchNo} of ${todo}.`;
     const size = b.mailpieces.length;
-    await step(piecesDone, `${at} Preparing`, true);
+    await step(piecesDone, `${at} Preparing.`, true);
     const input = runInputs.find((r) => Number(r.batchCode) === b.batchCode);
     if (!input) throw new Error(`No run sheet data for batch ${b.batchCode}`);
     const runData = buildRunSheet(input);
@@ -127,18 +127,18 @@ async function composeJobBatches(o: ComposeJobOptions, job: Awaited<ReturnType<t
       // Building the files is 90% of a batch; writing, saving and the MRDF file take the rest.
       onProgress: (f, what) => { void step(piecesDone + size * 0.9 * f, `${at} ${what}`); },
     });
-    await step(piecesDone + size * 0.9, `${at} Writing the files`, true);
+    await step(piecesDone + size * 0.9, `${at} Writing the files.`, true);
     const old = await recordedFiles(o.pool, b.batchId);
     for (const f of files) await writeFile(join(o.outDir, f.fileName), f.bytes);
-    await step(piecesDone + size * 0.94, `${at} Saving to the database`, true);
+    await step(piecesDone + size * 0.94, `${at} Saving to the database.`, true);
     await saveComposition(o.pool, b.batchId, plan, files);
     for (const name of old) if (!files.some((f) => f.fileName === name)) await rm(join(o.outDir, name), { force: true });
     let mrdfFile: string | undefined;
-    if (b.mrdf && o.mrdfDir) await step(piecesDone + size * 0.98, `${at} Writing the MRDF file`, true);
+    if (b.mrdf && o.mrdfDir) await step(piecesDone + size * 0.98, `${at} Writing the MRDF file.`, true);
     if (b.mrdf && o.mrdfDir) mrdfFile = await writeMrdfFile(o.pool, o.mrdfDir, b, plan);
     result.push({ batchCode: b.batchCode, files: files.map((f) => join(o.outDir, f.fileName)), ...(mrdfFile ? { mrdfFile } : {}) });
     piecesDone += size;
-    await step(piecesDone, `Finished batch ${batchNo} of ${todo}`, true);
+    await step(piecesDone, `Finished batch ${batchNo} of ${todo}.`, true);
   }
   if (o.mailer && result.some((r) => r.files.length > 0)) await maybeEmailRunSheets(o, (d) => step(pieces, `All ${todo} batches made. E-mailing the run sheets: ${d}`, true), rendered);
   return result;
