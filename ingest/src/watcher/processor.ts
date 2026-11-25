@@ -71,7 +71,7 @@ export function makeAttachProcessor(d: AttachDeps): (pdfPath: string, progress?:
     try {
       const job = await d.repo.findAwaitingPdf(baseName);
       if (!job) return { kind: 'unmatched' };
-      progress?.(0, null, 'Counting the pages');
+      progress?.(0, null, 'Counting the pages.');
       const pages = await d.pdf.pageCount(pdfPath);
       const errors = validatePageRanges(job.packs, pages).filter((i) => i.severity === 'error');
       if (errors.length > 0) {

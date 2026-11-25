@@ -55,7 +55,7 @@ export async function ingest(
   const parsed = parseHpodV6(xml);
   // XML-first: with no PDF yet the job is saved from the XML alone. The ranges are still checked for gaps and overlaps against
   // themselves; they are checked against the real PDF when it arrives (attachPdf).
-  if (pdfPath !== null) opts.progress?.(0, null, 'Counting the pages');
+  if (pdfPath !== null) opts.progress?.(0, null, 'Counting the pages.');
   const pdfPages = pdfPath === null ? parsed.reduce((m, p) => Math.max(m, p.endPage), 0) : await pdf.pageCount(pdfPath);
   issues.push(...validatePageRanges(parsed, pdfPages));
   // What each page carries (colour, mono, blank), for pricing. A PDF that cannot be read this way does not stop the job: its packs just have no counts yet.

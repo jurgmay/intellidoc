@@ -29,8 +29,8 @@ describe('buildLines', () => {
     expect(l[0]!.progress).toEqual({ done: 120, total: 5000, unit: 'mailpieces' });
     expect(l[2]).toMatchObject({ pdf: 'arrived', bytes: 10 });
     expect(l[3]).toMatchObject({ pdf: 'waiting' });
-    expect(l[7]!.detail).toMatch(/^Ready; print files not made yet for:/);
-    expect(l[8]!.detail).toMatch(/^Print files made for:/);
+    expect(l[7]!.detail).toMatch(/^Waiting to create print files\./);
+    expect(l[8]!.detail).toMatch(/^Print files created\./);
   });
   it('does not list a file twice while it is being imported, and drops old failures', () => {
     const d = data({ running: [act(1, { state: 'Running', label: 'a.xml' })], inbox: [{ stem: 'a', xmlName: 'a.xml', xmlBytes: 1, pdfName: 'a.pdf', pdfBytes: 1, modifiedAt: '2026-11-22T21:00:00.000Z' }],
@@ -95,9 +95,9 @@ describe('accounts and file names', () => {
     const by = (n: string) => l.find((x) => x.name === n)!;
     expect(by('j3.pdf')).toMatchObject({ stage: 'Making print files', account: 'Acme' });
     expect(by('new.xml').account).toBeNull();
-    expect(by('j2.pdf')).toMatchObject({ account: 'Zurich', detail: 'XML imported; waiting for the PDF for:' });
-    expect(by('j1.pdf')).toMatchObject({ account: 'Uinsure', detail: 'Print files made for:' });
-    expect(by('j5.pdf').detail).toBe('Print files made for 1 of 2 batches of:');
+    expect(by('j2.pdf')).toMatchObject({ account: 'Zurich', detail: 'Data imported; waiting for the PDF file.' });
+    expect(by('j1.pdf')).toMatchObject({ account: 'Uinsure', detail: 'Print files created.' });
+    expect(by('j5.pdf').detail).toBe('Print files created for 1 of 2 batches.');
     expect(l.map((x) => x.detail).join('|')).not.toMatch(/Job \d|Acme|Zurich|Uinsure/);
   });
   it('shows the account column, with the file name under the status in the Progress column', async () => {
@@ -106,7 +106,7 @@ describe('accounts and file names', () => {
     await screen.findByText('statements.pdf');
     const row = screen.getAllByRole('row').find((r) => within(r).queryByText('statements.pdf'))!;
     expect(within(row).getByText('Uinsure')).toBeInTheDocument();
-    expect(within(row).getByText('Print files made for:')).toBeInTheDocument();
+    expect(within(row).getByText('Print files created.')).toBeInTheDocument();
   });
 });
 

@@ -52,16 +52,16 @@ export function buildLines(d: ActivityData, now: number = Date.now()): ActivityL
   for (const r of d.running) {
     busy.add(r.label.toLowerCase());
     const printing = r.kind === 'Print files';
-    lines.push({ key: `r${r.id}`, stage: printing ? 'Making print files' : 'Processing', name: fileOf(r), account: jobOf(r)?.customerName ?? null, bytes: null, pdf: 'none', detail: r.stalled ? 'No progress for a while; the program doing this may have stopped' : r.detail ?? (printing ? 'Starting' : r.kind === 'PDF check' ? 'Checking the PDF' : 'Importing the XML'),
+    lines.push({ key: `r${r.id}`, stage: printing ? 'Making print files' : 'Processing', name: fileOf(r), account: jobOf(r)?.customerName ?? null, bytes: null, pdf: 'none', detail: r.stalled ? 'No progress for a while; the program doing this may have stopped.' : r.detail ?? (printing ? 'Starting.' : r.kind === 'PDF check' ? 'Checking the PDF.' : 'Importing the data.'),
       progress: r.total ? { done: r.done ?? 0, total: r.total, unit: printing ? 'mailpieces' : 'pages' } : null, seconds: r.remainingSeconds ?? null, start: r.startedAt, end: null, waitingSince: null, stalled: r.stalled });
   }
   for (const f of d.inbox) {
     if ((f.xmlName && busy.has(f.xmlName.toLowerCase())) || (f.pdfName && busy.has(f.pdfName.toLowerCase()))) continue;
     lines.push({ key: `i${f.stem}`, stage: 'Waiting', name: f.xmlName ?? f.pdfName ?? f.stem, account: jobByStem.get(f.stem.toLowerCase())?.customerName ?? null, bytes: f.xmlBytes ?? f.pdfBytes, pdf: f.pdfName ? 'arrived' : 'waiting',
-      detail: f.xmlName ? (f.pdfName ? 'Both files are here' : 'XML will be imported; the PDF has not arrived yet') + (f.estimateSeconds ? ` (about ${duration(f.estimateSeconds)}):` : ':') : 'PDF is here; its XML has not arrived yet:', progress: null, seconds: f.estimateSeconds ?? null, start: null, end: null, waitingSince: f.modifiedAt, stalled: false });
+      detail: f.xmlName ? (f.pdfName ? 'Ready' : 'Waiting for the PDF') + (f.estimateSeconds ? ` (about ${duration(f.estimateSeconds)}).` : '.') : 'Waiting for the data.', progress: null, seconds: f.estimateSeconds ?? null, start: null, end: null, waitingSince: f.modifiedAt, stalled: false });
   }
   for (const j of d.jobs.filter((x) => x.status === 'Awaiting PDF')) {
-    lines.push({ key: `j${j.id}`, stage: 'Awaiting PDF', name: j.pdfFileName, account: j.customerName, bytes: null, pdf: 'waiting', detail: 'XML imported; waiting for the PDF for:', progress: null, seconds: null, start: null, end: null, waitingSince: j.receivedAt, stalled: false });
+    lines.push({ key: `j${j.id}`, stage: 'Awaiting PDF', name: j.pdfFileName, account: j.customerName, bytes: null, pdf: 'waiting', detail: 'Data imported; waiting for the PDF file.', progress: null, seconds: null, start: null, end: null, waitingSince: j.receivedAt, stalled: false });
   }
   for (const r of d.recent.filter((x) => x.state === 'Failed' && now - Date.parse(x.finishedAt ?? x.updatedAt) < FAILED_SHOWN_FOR_MS)) {
     lines.push({ key: `f${r.id}`, stage: 'Failed', name: fileOf(r), account: jobOf(r)?.customerName ?? null, bytes: null, pdf: 'none', detail: r.detail, progress: null, seconds: null, start: r.startedAt, end: r.finishedAt ?? r.updatedAt, waitingSince: null, stalled: false });
@@ -69,7 +69,7 @@ export function buildLines(d: ActivityData, now: number = Date.now()): ActivityL
   for (const j of d.jobs.filter((x) => x.status !== 'Awaiting PDF').sort((a, b) => b.id - a.id)) {
     const made = j.batchCount > 0 && j.composedBatchCount === j.batchCount;
     lines.push({ key: `c${j.id}`, stage: j.status === 'PDF Rejected' ? 'Failed' : 'Completed', name: j.pdfFileName, account: j.customerName, bytes: null, pdf: 'arrived',
-      detail: j.status === 'PDF Rejected' ? `PDF rejected (${j.pdfError ?? 'no reason given'}) for:` : made ? 'Print files made for:' : j.composedBatchCount > 0 ? `Print files made for ${j.composedBatchCount} of ${j.batchCount} batches of:` : 'Ready; print files not made yet for:',
+      detail: j.status === 'PDF Rejected' ? `PDF rejected (${j.pdfError ?? 'no reason given'}).` : made ? 'Print files created.' : j.composedBatchCount > 0 ? `Print files created for ${j.composedBatchCount} of ${j.batchCount} batches.` : 'Waiting to create print files.',
       progress: null, seconds: null, ...jobTimes(j.id, doneByStem.get(j.baseName.toLowerCase()), j.receivedAt), waitingSince: null, stalled: false });
   }
   // Stable: keep the order built above within a stage (the inbox is already in the watcher's order), and show the stages in ORDER.
