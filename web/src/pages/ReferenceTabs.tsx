@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { Alert, Button, Group, Loader, Modal, Paper, Stack, Table, Text, TextInput } from '@mantine/core';
 import { IconAlertCircle, IconPlus } from '@tabler/icons-react';
 import {
-  addAnonymous, deleteAnonymous, deletePaper, getAnonymous, getFormats, getPapers, getReferenceHistory, saveFormat, savePaper,
-  type Paper as PaperRow, type PostalFormat, type ReferenceHistoryRow,
+  addAnonymous, addInsertSize, deleteAnonymous, deleteInsertSize, deletePaper, getInsertSizes, getAnonymous, getFormats, getPapers, getReferenceHistory, saveFormat, savePaper,
+  type InsertSize, type Paper as PaperRow, type PostalFormat, type ReferenceHistoryRow,
 } from '../api/reference';
 import { orNull, run } from './customer/shared';
 
@@ -169,6 +169,34 @@ export function AnonymousTab() {
         </Table.Tbody>
       </Table>
       {del && <ConfirmDelete label={del} onClose={() => setDel(null)} onConfirm={async () => { const r = await run(() => deleteAnonymous(del), 'Removed'); if (r.ok) { setDel(null); s.reload(); } return r; }} />}
+    </Shell>
+  );
+}
+
+export function InsertSizesTab() {
+  const s = useLoaded(useCallback(async () => (await getInsertSizes()).sizes, []));
+  const [name, setName] = useState(''); const [err, setErr] = useState<string | null>(null); const [del, setDel] = useState<InsertSize | null>(null);
+  const add = async () => {
+    const res = await run(() => addInsertSize(name), 'Added');
+    if (res.ok) { setName(''); setErr(null); s.reload(); } else setErr(res.fieldErrors?.['name'] ?? res.message ?? null);
+  };
+  return (
+    <Shell what="the insert sizes" state={s} history={s.history}
+      intro={<>The sizes an insert can be shown as, chosen from a list on the Inserts tab of each customer (for example A4, A3 or DL). A size that inserts use cannot be removed.</>}>
+      <Group align="flex-end">
+        <TextInput label="New size" placeholder="e.g. A5" value={name} onChange={(e) => setName(e.currentTarget.value)} error={err} onKeyDown={(e) => { if (e.key === 'Enter') void add(); }} />
+        <Button leftSection={<IconPlus size={14} />} onClick={add}>Add</Button>
+      </Group>
+      <Table withTableBorder striped verticalSpacing="xs" maw={520}>
+        <Table.Thead><Table.Tr><Table.Th>Size</Table.Th><Table.Th>Inserts using it</Table.Th><Table.Th /></Table.Tr></Table.Thead>
+        <Table.Tbody>
+          {(s.data ?? []).map((z) => (
+            <Table.Tr key={z.id}><Table.Td>{z.name}</Table.Td><Table.Td>{z.usedBy}</Table.Td><Table.Td><Group justify="flex-end"><Button size="xs" variant="subtle" color="red" onClick={() => setDel(z)}>Remove</Button></Group></Table.Td></Table.Tr>
+          ))}
+          {s.data?.length === 0 && <Table.Tr><Table.Td colSpan={3}><Text c="dimmed" ta="center" py="sm">No sizes yet.</Text></Table.Td></Table.Tr>}
+        </Table.Tbody>
+      </Table>
+      {del && <ConfirmDelete label={del.name} onClose={() => setDel(null)} onConfirm={async () => { const r = await run(() => deleteInsertSize(del.id), 'Removed'); if (r.ok) { setDel(null); s.reload(); } return r; }} />}
     </Shell>
   );
 }

@@ -10,7 +10,7 @@ import { MarksPreviewModal } from './MarksPreviewModal';
 import { TestButton } from './TestButton';
 import { ChangeLog } from './ChangeLog';
 import { PostalRatesTab } from './PostalRatesTab';
-import { AnonymousTab, PaperTab, PostalFormatsTab } from './ReferenceTabs';
+import { AnonymousTab, InsertSizesTab, PaperTab, PostalFormatsTab } from './ReferenceTabs';
 
 /** The settings on the Control marks tab: the page and envelope window, where the marks go on the page (sequence number, Data Matrix, pack start dot) and the MRDF page codes (Data Matrix, OCR code). */
 /** The settings on the Network tab: network access, the workflow server, the IntelliDoc and Bluecrest folders and postal docketing. */
@@ -114,6 +114,7 @@ export function SettingsPage() {
           <Tabs.Tab value="postal">Postal rates</Tabs.Tab>
           <Tabs.Tab value="formats">Postal formats</Tabs.Tab>
           <Tabs.Tab value="papers">Paper</Tabs.Tab>
+          <Tabs.Tab value="insertSizes">Insert sizes</Tabs.Tab>
           <Tabs.Tab value="anonymous">Anonymous addressees</Tabs.Tab>
           <Tabs.Tab value="log">Change log</Tabs.Tab>
         </Tabs.List>
@@ -152,6 +153,7 @@ export function SettingsPage() {
         <Tabs.Panel value="postal" pt="lg">{seen.has('postal') && <PostalRatesTab />}</Tabs.Panel>
         <Tabs.Panel value="formats" pt="lg">{seen.has('formats') && <PostalFormatsTab />}</Tabs.Panel>
         <Tabs.Panel value="papers" pt="lg">{seen.has('papers') && <PaperTab />}</Tabs.Panel>
+        <Tabs.Panel value="insertSizes" pt="lg">{seen.has('insertSizes') && <InsertSizesTab />}</Tabs.Panel>
         <Tabs.Panel value="anonymous" pt="lg">{seen.has('anonymous') && <AnonymousTab />}</Tabs.Panel>
         <Tabs.Panel value="log" pt="lg"><ChangeLog version={logVersion} /></Tabs.Panel>
       </Tabs>

@@ -3,7 +3,7 @@ import { NotFoundError } from '../errors.js';
 import { userOf } from '../settings/routes.js';
 import { FLAG_LABELS } from './describe.js';
 import type { CustomerStore } from './types.js';
-import { parseAccountUpdate, parseBrandName, parseDetails, parseEmailList, parseEnvelope, parseInheritance, parseMatchRules, parseNewAccount, parseSequenceRules } from './validate.js';
+import { parseAccountUpdate, parseBrandName, parseDetails, parseEmailList, parseEnvelope, parseInheritance, parseInsert, parseMatchRules, parseNewAccount, parseSequenceRules } from './validate.js';
 
 type Body = Record<string, unknown> | null;
 type IdParams = { id: string };
@@ -86,6 +86,20 @@ export function customerRoutes(app: FastifyInstance, store: CustomerStore): void
   });
   app.delete<{ Params: IdParams }>('/api/envelopes/:id', async (req, reply) => {
     await store.deleteEnvelope(idOf(req.params.id), userOf(req));
+    return reply.code(204).send();
+  });
+
+  // Inserts
+  app.post<{ Params: IdParams }>('/api/customers/:id/inserts', async (req, reply) => {
+    const id = idOf(req.params.id);
+    return reply.code(201).send({ id: await store.addInsert(id, parseInsert(req.body as Body), userOf(req)) });
+  });
+  app.put<{ Params: IdParams }>('/api/inserts/:id', async (req, reply) => {
+    await store.updateInsert(idOf(req.params.id), parseInsert(req.body as Body), userOf(req));
+    return reply.code(204).send();
+  });
+  app.delete<{ Params: IdParams }>('/api/inserts/:id', async (req, reply) => {
+    await store.deleteInsert(idOf(req.params.id), userOf(req));
     return reply.code(204).send();
   });
 

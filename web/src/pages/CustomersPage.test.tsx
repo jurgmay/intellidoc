@@ -10,7 +10,7 @@ import { CustomersPage } from './CustomersPage';
 
 const flags = { isAddressMatching: true, isArchiveMailpieces: false, isCreateOutputFiles: false, isSso: false, isSameDayService: false, isUseMrdf: false, isTesting: false, isDeleted: false };
 const detail = () => ({
-  id: 7, code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', pendingJobNumber: '24601', pendingFrom: '2026-12-01', jobNumberRolloverDay: 1, modes: { envelopes: 'OWN', brands: 'OWN', matching: 'OWN', sequence: 'OWN', emails: 'OWN' }, inheritedEnvelopes: [], inherited: { brands: [], matchRules: [], sequenceRules: [], emails: [], matching: null, sequence: null }, invoicing: null, invoicingOptions: [{ id: 7, code: 'ACME', name: 'Acme Energy Ltd' }], returnAddress: 'PO Box 1', colourMode: 'ORIGINAL', flags, batchingKey: 'Department', packSequenceKey: null,
+  id: 7, code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', pendingJobNumber: '24601', pendingFrom: '2026-12-01', jobNumberRolloverDay: 1, modes: { envelopes: 'OWN', brands: 'OWN', matching: 'OWN', sequence: 'OWN', emails: 'OWN', inserts: 'OWN' }, inheritedEnvelopes: [], inserts: [], inheritedInserts: [], inherited: { brands: [], matchRules: [], sequenceRules: [], emails: [], matching: null, sequence: null }, invoicing: null, invoicingOptions: [{ id: 7, code: 'ACME', name: 'Acme Energy Ltd' }], returnAddress: 'PO Box 1', colourMode: 'ORIGINAL', flags, batchingKey: 'Department', packSequenceKey: null,
   parent: null, children: [{ id: 9, code: 'ACME-HL', name: 'Highline Solicitors', isDeleted: false }],
   accounts: [{ id: 8, code: 'ACME-SC', name: 'Acme Scotland', isDeleted: false }],
   brands: [{ id: 21, name: 'Home', usage: 1 }, { id: 22, name: 'Business', usage: 0 }],
@@ -20,6 +20,7 @@ const detail = () => ({
 const lookups = {
   passthroughKeys: ['Department'], customers: [{ id: 7, code: 'ACME', name: 'Acme Energy Ltd' }, { id: 5, code: 'ODEVO', name: 'Odevo' }], deliveryBands: ['1st Class', '2nd Class'], flagLabels: Object.fromEntries(Object.keys(flags).map((k) => [k, k])),
   postalRates: [{ id: 1, label: 'Royal Mail – 2nd Class (Letter), up to 100g', format: 'Letter' }, { id: 2, label: 'Royal Mail – 1st Class (Letter), up to 100g', format: 'Letter' }],
+  insertSizes: [{ id: 1, name: 'A4' }, { id: 2, name: 'DL' }],
   envelopeStock: [{ id: 10, code: 'WH0101', description: 'C5 white window', size: 'C5' }],
 };
 const row = { id: 7, code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', pendingJobNumber: '24601' as string | null, parentId: null as number | null, parentCode: null as string | null, isAddressMatching: true, isUseMrdf: false, isSso: false, isTesting: false, isDeleted: false, accountCount: 1, brandCount: 2, envelopeCount: 1 };
@@ -225,6 +226,80 @@ describe('Invoicing account', () => {
     await userEvent.click(within(document.getElementById(combo.getAttribute('aria-controls')!)!).getByRole('option', { name: 'Odevo (ODEVO)', hidden: true }));
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(calls.find((c) => c.method === 'PUT')?.body).toMatchObject({ invoicingAccountId: 5 }));
+  });
+});
+
+describe('Inserts tab', () => {
+  const insert = (id: number, over: Record<string, unknown> = {}) => ({ id, stockCode: `WH${id}`, brandId: null, brandName: null, reference: null, description: `Leaflet ${id}`, hpodGuid: null, insertSizeId: 1, sizeName: 'A4', widthMm: 210, heightMm: 297, thicknessMm: 0.1, weightG: 5, isChargeable: true, costPrice: 0.04, sellPrice: 0.1, margin: 0.06, linkedIds: [], parent: null, ...over });
+  const withInserts = (inserts: unknown[], over: Record<string, unknown> = {}) => {
+    respond = ((prev) => (url, method, body) => (url === '/api/customers/7' && method === 'GET' ? { status: 200, json: { ...detail(), inserts, ...over } } : prev(url, method, body)))(respond);
+  };
+  const open = async () => { wrap('/customers/7'); await userEvent.click(await screen.findByRole('tab', { name: /Inserts/ })); };
+
+  it('lists inserts with cost, sell price and the margin, and counts them in the tab', async () => {
+    withInserts([insert(1), insert(2, { costPrice: null, margin: null, isChargeable: false })]);
+    await open();
+    const rows = (await screen.findAllByRole('row')).map((r) => r.textContent ?? '');
+    expect(rows.some((t) => t.includes('WH1') && t.includes('Leaflet 1') && t.includes('A4') && t.includes('210 × 297 × 0.1') && t.includes('£0.04') && t.includes('£0.10') && t.includes('£0.06') && t.includes('Yes'))).toBe(true);
+    expect(rows.some((t) => t.includes('WH2') && t.includes('£–') === false && t.includes('No'))).toBe(true);
+    expect(screen.getByRole('tab', { name: 'Inserts (2)' })).toBeInTheDocument();
+  });
+  it('filters by brand', async () => {
+    withInserts([insert(1, { brandId: 21, brandName: 'Home' }), insert(2, { brandId: 22, brandName: 'Business' }), insert(3)]);
+    await open();
+    const text = () => screen.getAllByRole('row').map((r) => r.textContent ?? '').join('|');
+    expect(text()).toContain('WH1'); expect(text()).toContain('WH3');
+    const box = await screen.findByRole('combobox', { name: 'Show brand' });
+    await userEvent.click(box);
+    await userEvent.click(within(document.getElementById(box.getAttribute('aria-controls')!)!).getByRole('option', { name: 'Business', hidden: true }));
+    expect(text()).toContain('WH2'); expect(text()).not.toContain('WH1'); expect(text()).not.toContain('WH3');
+    expect(screen.getByText('Showing 1 of 3')).toBeInTheDocument();
+  });
+  it('adds an insert with the chosen values, and shows the margin as the prices are typed', async () => {
+    await open();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add insert' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText(/Stock code/), 'WH9001');
+    await userEvent.type(within(dialog).getByLabelText(/Description/), 'Spring leaflet');
+    const size = within(dialog).getByLabelText('Display size');
+    await userEvent.click(size);
+    await userEvent.click(within(document.getElementById(size.getAttribute('aria-controls')!)!).getByRole('option', { name: 'DL', hidden: true }));
+    await userEvent.type(within(dialog).getByLabelText(/Weight \(g\)/), '4.5');
+    await userEvent.click(within(dialog).getByRole('switch', { name: /Chargeable/ }));
+    await userEvent.type(within(dialog).getByLabelText(/Cost/), '0.04');
+    await userEvent.type(within(dialog).getByLabelText(/Sell price/), '0.1');
+    expect((within(dialog).getByLabelText(/Margin/) as HTMLInputElement).value).toBe('£0.06');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.find((c) => c.url === '/api/customers/7/inserts')?.body).toEqual({
+      stockCode: 'WH9001', description: 'Spring leaflet', brandId: null, reference: null, hpodGuid: null, insertSizeId: 2, widthMm: null, heightMm: null, thicknessMm: 0, weightG: 4.5,
+      isChargeable: true, costPrice: 0.04, sellPrice: 0.1, linkedIds: [],
+    }));
+  });
+  it('only offers inserts that can be linked, and shows the field error the API gives', async () => {
+    withInserts([insert(1), insert(2, { parent: { id: 9, stockCode: 'OTHER', description: 'x' } }), insert(3, { linkedIds: [4] }), insert(4, { parent: { id: 3, stockCode: 'WH3', description: 'x' } }), insert(5)]);
+    respond = ((prev) => (url, method, body) => (url === '/api/inserts/1' && method === 'PUT' ? { status: 422, json: { errors: { stockCode: 'Stock code WH1 is already in use' } } } : prev(url, method, body)))(respond);
+    await open();
+    await userEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[0]!);
+    const dialog = await screen.findByRole('dialog');
+    const linked = within(dialog).getByLabelText('Linked inserts');
+    await userEvent.click(linked);
+    const options = within(document.getElementById(linked.getAttribute('aria-controls')!)!).getAllByRole('option', { hidden: true }).map((o) => o.textContent);
+    expect(options).toEqual(['WH5 – Leaflet 5']); // not 2 (linked under another), 3 (has links), 4 (is linked) or itself
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(await within(dialog).findByText('Stock code WH1 is already in use')).toBeInTheDocument();
+  });
+  it('removes an insert after asking', async () => {
+    withInserts([insert(1)]);
+    await open();
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove' }));
+    await userEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Remove' }));
+    await waitFor(() => expect(calls.some((c) => c.method === 'DELETE' && c.url === '/api/inserts/1')).toBe(true));
+  });
+  it("shows the parent's inserts read only", async () => {
+    withInserts([], { parent: { id: 5, code: 'ODEVO', name: 'Odevo' }, modes: { ...detail().modes, inserts: 'EXTEND' }, inheritedInserts: [{ ...insert(50, { stockCode: 'PAR1', description: 'Parent leaflet' }), from: { id: 5, code: 'ODEVO', name: 'Odevo' } }] });
+    await open();
+    expect(await screen.findByText('From the parent')).toBeInTheDocument();
+    expect(screen.getAllByRole('row').some((r) => (r.textContent ?? '').includes('PAR1') && (r.textContent ?? '').includes('Odevo'))).toBe(true);
   });
 });
 
@@ -477,7 +552,7 @@ describe('Sub-account', () => {
 
 describe('Inheritance of brands, matching, pack order and e-mails', () => {
   const odevo = { id: 5, code: 'ODEVO', name: 'Odevo' };
-  const modes = (over: Record<string, string> = {}) => ({ envelopes: 'OWN', brands: 'OWN', matching: 'OWN', sequence: 'OWN', emails: 'OWN', ...over });
+  const modes = (over: Record<string, string> = {}) => ({ envelopes: 'OWN', brands: 'OWN', matching: 'OWN', sequence: 'OWN', emails: 'OWN', inserts: 'OWN', ...over });
   const withParent = (over: Record<string, unknown> = {}) => {
     respond = ((prev) => (url, method, body) => (url === '/api/customers/7' && method === 'GET' ? { status: 200, json: { ...detail(), parent: odevo, ...over } } : prev(url, method, body)))(respond);
   };

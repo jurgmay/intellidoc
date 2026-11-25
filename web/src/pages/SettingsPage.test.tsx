@@ -60,7 +60,7 @@ describe('SettingsPage', () => {
   it('names the first tab General and opens on it', async () => {
     wrap();
     const tabs = await screen.findAllByRole('tab');
-    expect(tabs.map((t) => t.textContent)).toEqual(['General', 'Control marks', 'Network', 'Connectivity', 'Postal rates', 'Postal formats', 'Paper', 'Anonymous addressees', 'Change log']);
+    expect(tabs.map((t) => t.textContent)).toEqual(['General', 'Control marks', 'Network', 'Connectivity', 'Postal rates', 'Postal formats', 'Paper', 'Insert sizes', 'Anonymous addressees', 'Change log']);
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
   });
   it('puts the mark positions on the Control marks tab and the rest on General, with one save bar for both', async () => {

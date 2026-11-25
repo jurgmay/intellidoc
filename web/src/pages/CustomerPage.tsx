@@ -8,6 +8,7 @@ import { BrandsTab } from './customer/BrandsTab';
 import { CostingTab } from './customer/CostingTab';
 import { DetailsTab } from './customer/DetailsTab';
 import { EnvelopesTab } from './customer/EnvelopesTab';
+import { InsertsTab } from './customer/InsertsTab';
 import { HistoryTab } from './customer/HistoryTab';
 import { MatchingTab } from './customer/MatchingTab';
 import { NotificationsTab } from './customer/NotificationsTab';
@@ -60,6 +61,7 @@ export function CustomerPage() {
           <Tabs.Tab value="accounts">Accounts ({detail.accounts.filter((a) => !a.isDeleted).length + detail.children.filter((c) => !c.isDeleted).length})</Tabs.Tab>
           <Tabs.Tab value="brands">Brands ({detail.brands.length})</Tabs.Tab>
           <Tabs.Tab value="envelopes">Envelopes ({detail.envelopes.length})</Tabs.Tab>
+          <Tabs.Tab value="inserts">Inserts ({detail.inserts.length})</Tabs.Tab>
           <Tabs.Tab value="matching">Matching &amp; batching</Tabs.Tab>
           <Tabs.Tab value="costing">Costing</Tabs.Tab>
           <Tabs.Tab value="notifications">Notifications</Tabs.Tab>
@@ -69,6 +71,7 @@ export function CustomerPage() {
         <Tabs.Panel value="accounts" pt="lg"><AccountsTab {...props} /></Tabs.Panel>
         <Tabs.Panel value="brands" pt="lg"><BrandsTab {...props} /></Tabs.Panel>
         <Tabs.Panel value="envelopes" pt="lg"><EnvelopesTab {...props} /></Tabs.Panel>
+        <Tabs.Panel value="inserts" pt="lg"><InsertsTab {...props} /></Tabs.Panel>
         <Tabs.Panel value="matching" pt="lg"><MatchingTab key={version} {...props} /></Tabs.Panel>
         <Tabs.Panel value="costing" pt="lg"><CostingTab key={version} {...props} /></Tabs.Panel>
         <Tabs.Panel value="notifications" pt="lg"><NotificationsTab key={version} {...props} /></Tabs.Panel>

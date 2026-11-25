@@ -1,4 +1,4 @@
-import { FLAGS, type ColourMode, type InheritMode, type SettingKey, type CustomerDetail, type CustomerDetailsInput, type EnvelopeInput, type FlagKey, type MatchRule, type SequenceRule } from './types.js';
+import { FLAGS, type InsertInput, type ColourMode, type InheritMode, type SettingKey, type CustomerDetail, type CustomerDetailsInput, type EnvelopeInput, type FlagKey, type MatchRule, type SequenceRule } from './types.js';
 
 /** Plain-English names for the account flags, shared by the audit log and (via the API) the screen. */
 export const FLAG_LABELS: Record<FlagKey, string> = {
@@ -42,7 +42,7 @@ export function describeDetailsChange(old: CustomerDetail, next: CustomerDetails
 
 const SETTING_LABELS: Record<SettingKey, { name: string; noun: string }> = {
   envelopes: { name: 'Envelopes', noun: 'list' }, brands: { name: 'Brands', noun: 'list' }, matching: { name: 'Matching', noun: 'settings' },
-  sequence: { name: 'Pack sequence', noun: 'settings' }, emails: { name: 'Notification e-mails', noun: 'list' },
+  sequence: { name: 'Pack sequence', noun: 'settings' }, emails: { name: 'Notification e-mails', noun: 'list' }, inserts: { name: 'Inserts', noun: 'list' },
 };
 export const describeMode = (setting: SettingKey, from: InheritMode, to: InheritMode): string => {
   const { name, noun } = SETTING_LABELS[setting];
@@ -66,3 +66,19 @@ export const describeBecameCustomer = (code: string, name: string): string => `A
 export const describeSubAccountOf = (code: string, name: string): string => `Account ${code} "${name}" became a sub-account of this customer`;
 export const describeLeftAsCustomer = (code: string, name: string): string => `Account ${code} "${name}" left, to hold its own settings as a customer`;
 export const noChildCustomers = (names: string[]): string => `${names.length} customer${names.length === 1 ? ' is' : 's are'} placed under this one (${names.slice(0, 3).join(', ')}${names.length > 3 ? ', …' : ''}). Move ${names.length === 1 ? 'it' : 'them'} to another parent first.`;
+
+export const describeInsert = (i: Pick<InsertInput, 'stockCode' | 'description'>): string => `${i.stockCode} – ${i.description}`;
+
+/** What changed on an insert, one phrase per field; empty when nothing did. `brand` and `size` are the names, looked up by the caller. */
+export function describeInsertChange(was: InsertInput, next: InsertInput, names: { was: { brand: string | null; size: string | null }; next: { brand: string | null; size: string | null } }): string[] {
+  const out: string[] = [];
+  const text = (label: string, a: string | number | null, b: string | number | null): void => { if ((a ?? null) !== (b ?? null)) out.push(`${label}: ${show(a === null ? null : String(a))} → ${show(b === null ? null : String(b))}`); };
+  text('Stock code', was.stockCode, next.stockCode); text('Brand', names.was.brand, names.next.brand); text('Reference', was.reference, next.reference); text('Description', was.description, next.description);
+  text('H-POD GUID', was.hpodGuid, next.hpodGuid); text('Size', names.was.size, names.next.size);
+  text('Width (mm)', was.widthMm, next.widthMm); text('Height (mm)', was.heightMm, next.heightMm); text('Thickness (mm)', was.thicknessMm, next.thicknessMm); text('Weight (g)', was.weightG, next.weightG);
+  if (was.isChargeable !== next.isChargeable) out.push(`Chargeable: ${was.isChargeable ? 'yes' : 'no'} → ${next.isChargeable ? 'yes' : 'no'}`);
+  text('Cost', was.costPrice, next.costPrice); text('Sell price', was.sellPrice, next.sellPrice);
+  const a = [...was.linkedIds].sort().join(','), b = [...next.linkedIds].sort().join(',');
+  if (a !== b) out.push(`Linked inserts: ${was.linkedIds.length} → ${next.linkedIds.length}`);
+  return out;
+}
