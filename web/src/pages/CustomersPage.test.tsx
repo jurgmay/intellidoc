@@ -228,6 +228,29 @@ describe('Invoicing account', () => {
   });
 });
 
+describe('Envelope brand filter', () => {
+  const env = (id: number, brandId: number | null, brandName: string | null, stockCode: string) => ({ ...detail().envelopes[0]!, id, brandId, brandName, stockCode });
+  it('shows only the chosen brand, or only the settings with no brand, and says how many', async () => {
+    respond = ((prev) => (url, method, body) => (url === '/api/customers/7' && method === 'GET' ? { status: 200, json: { ...detail(), envelopes: [env(1, 21, 'Home', 'HOME1'), env(2, 22, 'Business', 'BUS1'), env(3, 22, 'Business', 'BUS2'), env(4, null, null, 'ANY1')] } } : prev(url, method, body)))(respond);
+    wrap('/customers/7');
+    await userEvent.click(await screen.findByRole('tab', { name: /Envelopes/ }));
+    const text = () => screen.getAllByRole('row').map((r) => r.textContent ?? '').join('|');
+    expect(text()).toContain('HOME1'); expect(text()).toContain('BUS2'); expect(text()).toContain('ANY1');
+    const pick = async (name: string) => {
+      const box = screen.getByRole('combobox', { name: 'Show brand' });
+      await userEvent.click(box);
+      await userEvent.click(within(document.getElementById(box.getAttribute('aria-controls')!)!).getByRole('option', { name, hidden: true }));
+    };
+    await pick('Business');
+    expect(text()).toContain('BUS1'); expect(text()).toContain('BUS2'); expect(text()).not.toContain('HOME1'); expect(text()).not.toContain('ANY1');
+    expect(screen.getByText('Showing 2 of 4')).toBeInTheDocument();
+    await pick('No brand (any brand)');
+    expect(text()).toContain('ANY1'); expect(text()).not.toContain('BUS1');
+    await pick('All brands');
+    expect(text()).toContain('HOME1'); expect(screen.queryByText(/Showing \d+ of/)).toBeNull();
+  });
+});
+
 describe('Envelope inheritance', () => {
   const inherited = { id: 90, brandId: null, brandName: null, deliveryBand: '2nd Class', postalRateId: 1, rateLabel: 'Royal Mail – 2nd Class (Letter), up to 100g', stockItemId: 10, stockCode: 'WH0101', stockDescription: 'C5 white window', reference: null, externalName: null, isOversticker: false, from: { id: 5, code: 'ODEVO', name: 'Odevo' } };
   const withParent = (over: Record<string, unknown> = {}) => {
@@ -322,8 +345,9 @@ describe('Customer page', () => {
     expect(await screen.findByText(/WH0101 – C5 white window/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Add envelope' }));
     const dialog = await screen.findByRole('dialog');
-    await userEvent.click(within(dialog).getByLabelText(/^Brand/));
-    await userEvent.click(await screen.findByRole('option', { name: 'Business', hidden: true }));
+    const brand = within(dialog).getByLabelText(/^Brand/);
+    await userEvent.click(brand);
+    await userEvent.click(within(document.getElementById(brand.getAttribute('aria-controls')!)!).getByRole('option', { name: 'Business', hidden: true }));
     await userEvent.type(within(dialog).getByLabelText(/Delivery band/), '1st Class');
     await userEvent.click(within(dialog).getByLabelText(/^Postal service/));
     await userEvent.click(await screen.findByRole('option', { name: /1st Class \(Letter\)/, hidden: true }));
