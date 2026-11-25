@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
@@ -249,6 +249,30 @@ describe('SettingsPage', () => {
       expect(body.values).toMatchObject({ markSeqFontPt: 9, windowWidthMm: 90, pageWidthMm: 210 });
       expect(body.values).not.toHaveProperty('autoCompose');
       expect(calls.some((c) => c.method === 'PUT')).toBe(false); // previewing saves nothing
+    });
+    it('zooms the picture in and out and back to the whole page', async () => {
+      const user = userEvent.setup(); wrap(); await open(user);
+      const img = await screen.findByRole('img');
+      const level = () => screen.getByLabelText('Zoom level').textContent;
+      expect(level()).toBe('100%');
+      expect(screen.getByRole('button', { name: 'Zoom out' })).toBeDisabled();
+      await user.click(screen.getByRole('button', { name: 'Zoom in' }));
+      await user.click(screen.getByRole('button', { name: 'Zoom in' }));
+      expect(level()).toBe('156%');
+      expect(img.style.width).toBe('156.25%'); // no measured size in jsdom, so a share of the box
+      await user.click(screen.getByRole('button', { name: 'Zoom out' }));
+      expect(level()).toBe('125%');
+      await user.click(screen.getByRole('button', { name: 'Fit page' }));
+      expect(level()).toBe('100%');
+      expect(screen.getByRole('button', { name: 'Fit page' })).toBeDisabled();
+    });
+    it('zooms with Ctrl and the mouse wheel, and leaves the plain wheel to scroll', async () => {
+      const user = userEvent.setup(); wrap(); await open(user);
+      const box = (await screen.findByRole('img')).parentElement!;
+      fireEvent.wheel(box, { deltaY: 100 });
+      expect(screen.getByLabelText('Zoom level').textContent).toBe('100%');
+      fireEvent.wheel(box, { deltaY: -100, ctrlKey: true });
+      expect(screen.getByLabelText('Zoom level').textContent).toBe('125%');
     });
     it('draws the MRDF page when asked', async () => {
       const user = userEvent.setup(); wrap(); await open(user);

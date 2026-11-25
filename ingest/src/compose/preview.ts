@@ -95,7 +95,7 @@ export interface PngRenderer { png(pdf: Uint8Array): Promise<Uint8Array> }
 
 export class GhostscriptPng implements PngRenderer {
   /** `GS_PATH` names the executable (gswin64c on Windows, gs elsewhere), the same as for the greyscale conversion. */
-  constructor(private readonly exe: string = process.env['GS_PATH'] || (process.platform === 'win32' ? 'gswin64c' : 'gs'), private readonly dpi = 110) {}
+  constructor(private readonly exe: string = process.env['GS_PATH'] || (process.platform === 'win32' ? 'gswin64c' : 'gs'), private readonly dpi = 200) {}
 
   async png(pdf: Uint8Array): Promise<Uint8Array> {
     const dir = await mkdtemp(join(tmpdir(), 'idoc-preview-'));
