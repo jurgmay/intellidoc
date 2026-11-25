@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { Alert, Button, Group, Loader, Modal, Paper, Stack, Table, Text, TextInput, Title } from '@mantine/core';
+import { Alert, Button, Group, Loader, Modal, NumberInput, Paper, Stack, Table, Text, TextInput, Title } from '@mantine/core';
 import { IconAlertCircle, IconPlus } from '@tabler/icons-react';
 import {
-  addAnonymous, addInsertSize, deleteAnonymous, deleteInsertSize, deletePaper, getInsertSizes, getAnonymous, getFormats, getPapers, getReferenceHistory, saveFormat, savePaper,
+  addAnonymous, addInsertSize, deleteAnonymous, deleteInsertSize, deletePaper, getInsertSizes, getAnonymous, getFormats, getPapers, getReferenceHistory, saveFormat, savePaper, updateInsertSize,
   type InsertSize, type Paper as PaperRow, type PostalFormat, type ReferenceHistoryRow,
 } from '../api/reference';
 import { orNull, run } from './customer/shared';
@@ -176,29 +176,54 @@ export function AnonymousAddressees() {
   );
 }
 
+/** Sets the width and height (mm) of an insert size; either can be left empty. */
+function EditInsertSize({ size, onClose, onSaved }: { size: InsertSize; onClose: () => void; onSaved: () => void }) {
+  const [w, setW] = useState<number | string>(size.widthMm ?? ''); const [h, setH] = useState<number | string>(size.heightMm ?? '');
+  const [errors, setErrors] = useState<Record<string, string>>({}); const [msg, setMsg] = useState<string | null>(null);
+  const num = (v: number | string): number | null => (v === '' ? null : Number(v));
+  const save = async () => {
+    const res = await run(() => updateInsertSize(size.id, num(w), num(h)), 'Saved');
+    if (res.ok) onSaved(); else { setErrors(res.fieldErrors ?? {}); setMsg(res.fieldErrors ? null : res.message ?? 'Could not save'); }
+  };
+  return (
+    <Modal opened onClose={onClose} title={`Edit size ${size.name}`}>
+      <Stack>
+        {msg && <Alert color="red">{msg}</Alert>}
+        <Text size="sm" c="dimmed">Filled into an insert's width and height when {size.name} is chosen for it. Leave a box empty to fill in nothing.</Text>
+        <Group grow align="flex-start">
+          <NumberInput label="Width (mm)" min={0} decimalScale={2} value={w} onChange={setW} error={errors['widthMm']} />
+          <NumberInput label="Height (mm)" min={0} decimalScale={2} value={h} onChange={setH} error={errors['heightMm']} />
+        </Group>
+        <Group justify="flex-end"><Button variant="default" onClick={onClose}>Cancel</Button><Button onClick={save}>Save</Button></Group>
+      </Stack>
+    </Modal>
+  );
+}
+
 export function InsertSizesTab() {
   const s = useLoaded(useCallback(async () => (await getInsertSizes()).sizes, []));
-  const [name, setName] = useState(''); const [err, setErr] = useState<string | null>(null); const [del, setDel] = useState<InsertSize | null>(null);
+  const [name, setName] = useState(''); const [err, setErr] = useState<string | null>(null); const [del, setDel] = useState<InsertSize | null>(null); const [edit, setEdit] = useState<InsertSize | null>(null);
   const add = async () => {
     const res = await run(() => addInsertSize(name), 'Added');
     if (res.ok) { setName(''); setErr(null); s.reload(); } else setErr(res.fieldErrors?.['name'] ?? res.message ?? null);
   };
   return (
     <Shell what="the insert sizes" state={s} history={s.history}
-      intro={<>The sizes an insert can be shown as, chosen from a list on the Inserts tab of each customer (for example A4, A3 or DL). A size that inserts use cannot be removed.</>}>
+      intro={<>The sizes an insert can be shown as, chosen from a list on the Inserts tab of each customer (for example A4, A3 or DL). The width and height (mm) are filled into an insert when its size is chosen, and can still be changed for that insert. A size that inserts use cannot be removed.</>}>
       <Group align="flex-end">
         <TextInput label="New size" placeholder="e.g. A5" value={name} onChange={(e) => setName(e.currentTarget.value)} error={err} onKeyDown={(e) => { if (e.key === 'Enter') void add(); }} />
         <Button leftSection={<IconPlus size={14} />} onClick={add}>Add</Button>
       </Group>
       <Table withTableBorder striped verticalSpacing="xs" maw={520}>
-        <Table.Thead><Table.Tr><Table.Th>Size</Table.Th><Table.Th>Inserts using it</Table.Th><Table.Th /></Table.Tr></Table.Thead>
+        <Table.Thead><Table.Tr><Table.Th>Size</Table.Th><Table.Th ta="right">Width (mm)</Table.Th><Table.Th ta="right">Height (mm)</Table.Th><Table.Th>Inserts using it</Table.Th><Table.Th /></Table.Tr></Table.Thead>
         <Table.Tbody>
           {(s.data ?? []).map((z) => (
-            <Table.Tr key={z.id}><Table.Td>{z.name}</Table.Td><Table.Td>{z.usedBy}</Table.Td><Table.Td><Group justify="flex-end"><Button size="xs" variant="subtle" color="red" onClick={() => setDel(z)}>Remove</Button></Group></Table.Td></Table.Tr>
+            <Table.Tr key={z.id}><Table.Td>{z.name}</Table.Td><Table.Td ta="right">{z.widthMm ?? ''}</Table.Td><Table.Td ta="right">{z.heightMm ?? ''}</Table.Td><Table.Td>{z.usedBy}</Table.Td><Table.Td><Group justify="flex-end" gap="xs"><Button size="xs" variant="subtle" onClick={() => setEdit(z)}>Edit</Button><Button size="xs" variant="subtle" color="red" onClick={() => setDel(z)}>Remove</Button></Group></Table.Td></Table.Tr>
           ))}
-          {s.data?.length === 0 && <Table.Tr><Table.Td colSpan={3}><Text c="dimmed" ta="center" py="sm">No sizes yet.</Text></Table.Td></Table.Tr>}
+          {s.data?.length === 0 && <Table.Tr><Table.Td colSpan={5}><Text c="dimmed" ta="center" py="sm">No sizes yet.</Text></Table.Td></Table.Tr>}
         </Table.Tbody>
       </Table>
+      {edit && <EditInsertSize size={edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); s.reload(); }} />}
       {del && <ConfirmDelete label={del.name} onClose={() => setDel(null)} onConfirm={async () => { const r = await run(() => deleteInsertSize(del.id), 'Removed'); if (r.ok) { setDel(null); s.reload(); } return r; }} />}
     </Shell>
   );

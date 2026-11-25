@@ -16,9 +16,10 @@ export const getAnonymous = () => api<{ names: string[] }>('/api/reference/anony
 export const addAnonymous = (text: string) => api<{ text: string }>('/api/reference/anonymous', { method: 'POST', body: { text } });
 export const deleteAnonymous = (text: string) => api<unknown>(`/api/reference/anonymous/${encodeURIComponent(text)}`, { method: 'DELETE' });
 
-export interface InsertSize { id: number; name: string; usedBy: number }
+export interface InsertSize { id: number; name: string; widthMm: number | null; heightMm: number | null; usedBy: number }
 export const getInsertSizes = () => api<{ sizes: InsertSize[] }>('/api/reference/insert-sizes');
 export const addInsertSize = (name: string) => api<InsertSize>('/api/reference/insert-sizes', { method: 'POST', body: { name } });
+export const updateInsertSize = (id: number, widthMm: number | null, heightMm: number | null) => api<unknown>(`/api/reference/insert-sizes/${id}`, { method: 'PUT', body: { widthMm, heightMm } });
 export const deleteInsertSize = (id: number) => api<unknown>(`/api/reference/insert-sizes/${id}`, { method: 'DELETE' });
 
 export const getReferenceHistory = () => api<{ rows: ReferenceHistoryRow[] }>('/api/reference/history');

@@ -67,7 +67,7 @@ export interface EnvelopeInput {
 export interface Lookups {
   passthroughKeys: string[]; customers: { id: number; code: string; name: string }[]; deliveryBands: string[]; flagLabels: Record<FlagKey, string>;
   postalRates: { id: number; label: string; format: string }[];
-  insertSizes: { id: number; name: string }[];
+  insertSizes: { id: number; name: string; widthMm: number | null; heightMm: number | null }[];
   envelopeStock: { id: number; code: string | null; description: string; size: string | null }[];
 }
 export interface HistoryRow { id: number; changedAt: string; changedBy: string; summary: string }

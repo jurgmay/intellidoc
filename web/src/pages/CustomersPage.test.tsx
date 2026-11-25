@@ -20,7 +20,7 @@ const detail = () => ({
 const lookups = {
   passthroughKeys: ['Department'], customers: [{ id: 7, code: 'ACME', name: 'Acme Energy Ltd' }, { id: 5, code: 'ODEVO', name: 'Odevo' }], deliveryBands: ['1st Class', '2nd Class'], flagLabels: Object.fromEntries(Object.keys(flags).map((k) => [k, k])),
   postalRates: [{ id: 1, label: 'Royal Mail – 2nd Class (Letter), up to 100g', format: 'Letter' }, { id: 2, label: 'Royal Mail – 1st Class (Letter), up to 100g', format: 'Letter' }],
-  insertSizes: [{ id: 1, name: 'A4' }, { id: 2, name: 'DL' }],
+  insertSizes: [{ id: 1, name: 'A4', widthMm: 210, heightMm: 297 }, { id: 2, name: 'DL', widthMm: null, heightMm: null }],
   envelopeStock: [{ id: 10, code: 'WH0101', description: 'C5 white window', size: 'C5' }],
 };
 const row = { id: 7, code: 'ACME', name: 'Acme Energy Ltd', misJobNumber: '24518', pendingJobNumber: '24601' as string | null, parentId: null as number | null, parentCode: null as string | null, isAddressMatching: true, isUseMrdf: false, isSso: false, isTesting: false, isDeleted: false, accountCount: 1, brandCount: 2, envelopeCount: 1 };
@@ -274,6 +274,23 @@ describe('Inserts tab', () => {
       stockCode: 'WH9001', description: 'Spring leaflet', brandId: null, reference: null, hpodGuid: null, insertSizeId: 2, widthMm: null, heightMm: null, thicknessMm: 0, weightG: 4.5,
       isChargeable: true, costPrice: 0.04, sellPrice: 0.1, linkedIds: [],
     }));
+  });
+  it('fills in the width and height of a chosen size, which can still be changed, and leaves them alone for a size without them', async () => {
+    await open();
+    await userEvent.click(await screen.findByRole('button', { name: 'Add insert' }));
+    const dialog = await screen.findByRole('dialog');
+    const choose = async (name: string) => {
+      const size = within(dialog).getByLabelText('Display size');
+      await userEvent.click(size);
+      await userEvent.click(within(document.getElementById(size.getAttribute('aria-controls')!)!).getByRole('option', { name, hidden: true }));
+    };
+    const value = (label: RegExp) => (within(dialog).getByLabelText(label) as HTMLInputElement).value;
+    await choose('A4');
+    expect(value(/Width \(mm\)/)).toBe('210'); expect(value(/Height \(mm\)/)).toBe('297');
+    await userEvent.clear(within(dialog).getByLabelText(/Width \(mm\)/));
+    await userEvent.type(within(dialog).getByLabelText(/Width \(mm\)/), '205');
+    await choose('DL');                                   // DL has no size set in Settings: what is typed stays
+    expect(value(/Width \(mm\)/)).toBe('205'); expect(value(/Height \(mm\)/)).toBe('297');
   });
   it('only offers inserts that can be linked, and shows the field error the API gives', async () => {
     withInserts([insert(1), insert(2, { parent: { id: 9, stockCode: 'OTHER', description: 'x' } }), insert(3, { linkedIds: [4] }), insert(4, { parent: { id: 3, stockCode: 'WH3', description: 'x' } }), insert(5)]);

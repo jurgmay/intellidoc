@@ -1,7 +1,7 @@
 import { ConflictError, NotFoundError } from '../errors.js';
 import * as D from './describe.js';
 import { checkFormatLimits, paperInUse } from './rules.js';
-import type { InsertSizeView, FormatInput, FormatView, HistoryEntry, PaperInput, PaperView, ReferenceStore } from './types.js';
+import type { InsertSizeInput, InsertSizeView, FormatInput, FormatView, HistoryEntry, PaperInput, PaperView, ReferenceStore } from './types.js';
 
 /** In-memory store for tests and the stub server. */
 export class MemoryReferenceStore implements ReferenceStore {
@@ -15,7 +15,7 @@ export class MemoryReferenceStore implements ReferenceStore {
     { id: 3, name: 'Small Parcel', rank: 3, maxWeightG: 2000, maxThicknessMm: 160, maxSheets: null, maxLengthMm: 450, maxWidthMm: 350, usedBy: 0 },
   ];
   names = ['THEOCCUPIER', 'THERESIDENT'];
-  sizeRows: InsertSizeView[] = [{ id: 1, name: 'A4', usedBy: 2 }, { id: 2, name: 'DL', usedBy: 0 }];
+  sizeRows: InsertSizeView[] = [{ id: 1, name: 'A4', widthMm: 210, heightMm: 297, usedBy: 2 }, { id: 2, name: 'DL', widthMm: null, heightMm: null, usedBy: 0 }];
   log: HistoryEntry[] = [];
   private next = 1;
   now = (): string => new Date().toISOString();
@@ -46,8 +46,14 @@ export class MemoryReferenceStore implements ReferenceStore {
   async insertSizes(): Promise<InsertSizeView[]> { return this.sizeRows.map((z) => ({ ...z })).sort((a, b) => a.name.localeCompare(b.name)); }
   async addInsertSize(name: string, by: string): Promise<InsertSizeView> {
     if (this.sizeRows.some((z) => z.name.toLowerCase() === name.toLowerCase())) throw new ConflictError(`${name} is already on the list.`);
-    const z = { id: Math.max(0, ...this.sizeRows.map((x) => x.id)) + 1, name, usedBy: 0 };
+    const z = { id: Math.max(0, ...this.sizeRows.map((x) => x.id)) + 1, name, widthMm: null, heightMm: null, usedBy: 0 };
     this.sizeRows.push(z); this.note(by, D.describeInsertSizeAdded(name)); return { ...z };
+  }
+  async updateInsertSize(id: number, input: InsertSizeInput, by: string): Promise<void> {
+    const z = this.sizeRows.find((x) => x.id === id); if (!z) throw new NotFoundError('Size not found');
+    const line = D.describeInsertSizeChange(z, input);
+    z.widthMm = input.widthMm; z.heightMm = input.heightMm;
+    if (line) this.note(by, line);
   }
   async deleteInsertSize(id: number, by: string): Promise<void> {
     const z = this.sizeRows.find((x) => x.id === id); if (!z) throw new NotFoundError('Size not found');

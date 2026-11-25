@@ -24,3 +24,9 @@ export const describeAnonymousAdded = (n: string): string => `Anonymous addresse
 export const describeAnonymousDeleted = (n: string): string => `Anonymous addressee ${n} removed`;
 export const describeInsertSizeAdded = (n: string): string => `Insert size ${n} added`;
 export const describeInsertSizeDeleted = (n: string): string => `Insert size ${n} removed`;
+export function describeInsertSizeChange(old: { name: string; widthMm: number | null; heightMm: number | null }, next: { widthMm: number | null; heightMm: number | null }): string | null {
+  const parts: string[] = [];
+  if (old.widthMm !== next.widthMm) parts.push(`width ${old.widthMm === null ? '(none)' : `${old.widthMm} mm`} -> ${next.widthMm === null ? '(none)' : `${next.widthMm} mm`}`);
+  if (old.heightMm !== next.heightMm) parts.push(`height ${old.heightMm === null ? '(none)' : `${old.heightMm} mm`} -> ${next.heightMm === null ? '(none)' : `${next.heightMm} mm`}`);
+  return parts.length ? `Insert size ${old.name}: ${parts.join(', ')}` : null;
+}

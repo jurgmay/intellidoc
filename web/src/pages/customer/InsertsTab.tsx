@@ -53,6 +53,11 @@ export function InsertsTab({ detail, lookups, reload }: TabProps) {
     if (res.ok) await reload();
   };
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }));
+  /** Choosing a size fills in its width and height (Settings > Insert sizes) where it has them; they can still be changed. */
+  const chooseSize = (v: string | null) => setForm((f) => {
+    const z = v === null ? undefined : lookups.insertSizes.find((x) => String(x.id) === v);
+    return { ...f, insertSizeId: v, widthMm: z?.widthMm ?? f.widthMm, heightMm: z?.heightMm ?? f.heightMm };
+  });
 
   const mode = detail.modes.inserts;
   const filterName = brandFilter === 'all' || brandFilter === 'none' ? null : detail.brands.find((b) => String(b.id) === brandFilter)?.name.toLowerCase() ?? null;
@@ -125,7 +130,7 @@ export function InsertsTab({ detail, lookups, reload }: TabProps) {
           <TextInput label="Description" required value={form.description} onChange={(e) => set('description', e.currentTarget.value)} error={errors['description']} />
           <Group grow align="flex-start">
             <Select label="Brand" placeholder="Any brand" clearable data={detail.brands.map((b) => ({ value: String(b.id), label: b.name }))} value={form.brandId} onChange={(v) => set('brandId', v)} error={errors['brandId']} />
-            <Select label="Display size" placeholder="Not set" clearable data={lookups.insertSizes.map((z) => ({ value: String(z.id), label: z.name }))} value={form.insertSizeId} onChange={(v) => set('insertSizeId', v)} error={errors['insertSizeId']} />
+            <Select label="Display size" placeholder="Not set" clearable data={lookups.insertSizes.map((z) => ({ value: String(z.id), label: z.name }))} value={form.insertSizeId} onChange={chooseSize} error={errors['insertSizeId']} />
           </Group>
           <TextInput label="H-POD GUID" placeholder="e.g. 3f2b8c1e-5d4a-4e7b-9a10-2c6d8e0f1a23" value={form.hpodGuid} onChange={(e) => set('hpodGuid', e.currentTarget.value)} error={errors['hpodGuid']} />
           <Group grow align="flex-start">

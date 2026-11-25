@@ -382,14 +382,14 @@ export class MssqlCustomerStore implements CustomerStore {
       this.pool.request().query('SELECT account_id, account_code, name FROM idoc.account WHERE inherits_settings = 0 AND is_deleted = 0 ORDER BY name'),
       this.pool.request().query(`SELECT s.stock_item_id, s.stock_code, s.description, z.code AS size FROM idoc.stock_item s LEFT JOIN idoc.envelope_size z ON z.envelope_size_id = s.envelope_size_id
         WHERE s.is_envelope = 1 AND s.is_active = 1 AND s.envelope_size_id IS NOT NULL ORDER BY s.description`),
-      this.pool.request().query('SELECT insert_size_id, name FROM idoc.insert_size ORDER BY name'),
+      this.pool.request().query('SELECT insert_size_id, name, width_mm, height_mm FROM idoc.insert_size ORDER BY name'),
     ]);
     return {
       passthroughKeys: (keys.recordset as R[]).map((r) => r.name),
       customers: (custs.recordset as R[]).map((r) => ({ id: r.account_id, code: r.account_code, name: r.name })),
       deliveryBands: [...new Set(['1st Class', '2nd Class', ...(bands.recordset as R[]).map((r) => r.delivery_band as string)])].sort(),
       postalRates: (rates.recordset as R[]).map((r) => ({ id: r.postal_rate_id, label: rateLabel(r), format: r.format })),
-      insertSizes: (sizes.recordset as R[]).map((r) => ({ id: r.insert_size_id, name: r.name })),
+      insertSizes: (sizes.recordset as R[]).map((r) => ({ id: r.insert_size_id, name: r.name, widthMm: r.width_mm === null ? null : Number(r.width_mm), heightMm: r.height_mm === null ? null : Number(r.height_mm) })),
       envelopeStock: (stock.recordset as R[]).map((r) => ({ id: r.stock_item_id, code: r.stock_code, description: r.description, size: r.size })),
     };
   }
