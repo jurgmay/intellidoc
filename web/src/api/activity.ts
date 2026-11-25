@@ -9,4 +9,8 @@ export interface ActivityRow {
 }
 export interface QueueEstimate { basedOn: number; seconds: number | null; partial: boolean }
 export interface ActivityData { inbox: InboxItem[]; inboxUnavailable: string | null; running: ActivityRow[]; recent: ActivityRow[]; jobs: JobRow[]; queue: QueueEstimate; /** The "Make print files automatically" setting. */ autoCompose: boolean }
+/** Puts a failed import or PDF check back in the inbox for the watcher to take again. */
+export const retryActivity = (id: number): Promise<{ restored: string[] }> => api(`/api/activity/${id}/retry`, { method: 'POST' });
+/** Takes a failed row off the list. */
+export const dismissActivity = (id: number): Promise<{ ok: boolean }> => api(`/api/activity/${id}/dismiss`, { method: 'POST' });
 export const getActivity = (): Promise<ActivityData> => api('/api/activity');

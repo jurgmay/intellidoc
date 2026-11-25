@@ -1,6 +1,8 @@
 import { StrictMode } from 'react';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { MantineProvider } from '@mantine/core';
+import { Notifications } from '@mantine/notifications';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActivityData } from '../api/activity';
@@ -250,5 +252,49 @@ describe('ActivityPage refresh rate', () => {
     expect(await countAfter(data(), 1600)).toBe(0);
     cleanup();
     expect(await countAfter(data(), 3100)).toBe(1);
+  });
+});
+
+describe('ActivityPage retry', () => {
+  const failedRow = (id: number, o: object = {}) => act(id, { state: 'Failed', detail: 'Bad XML', finishedAt: new Date().toISOString(), ...o });
+  let posts: { url: string; body: unknown }[]; let reply: (url: string) => { status: number; json: unknown };
+  beforeEach(() => {
+    posts = []; reply = () => ({ status: 200, json: { ok: true, restored: ['f1.xml'] } });
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
+      if (init?.method === 'POST') { posts.push({ url, body: init.body ? JSON.parse(init.body) : undefined }); const r = reply(url); return new Response(JSON.stringify(r.json), { status: r.status }); }
+      return new Response(JSON.stringify(current), { status: 200 });
+    }));
+  });
+  const page = () => render(<MantineProvider theme={theme}><Notifications /><MemoryRouter><ActivityPage refreshMs={60_000} /></MemoryRouter></MantineProvider>);
+
+  it('offers a retry only on failed rows that can be tried again', () => {
+    const l = buildLines(data({ recent: [failedRow(5, { label: 'f1.xml' })], jobs: [job(1, { status: 'PDF Rejected', pdfError: 'Wrong pages' }), job(2)] }), Date.now());
+    expect(l.filter((x) => x.retry).map((x) => [x.name, x.retry])).toEqual([['f1.xml', { id: 5, kind: 'Import', jobId: null }]]);
+    expect(l.some((x) => x.stage === 'Failed' && !x.retry)).toBe(true);   // the rejected job has no activity row to retry
+    expect(l.filter((x) => x.stage === 'Completed').every((x) => !x.retry)).toBe(true);
+  });
+  it('puts a failed import back in the inbox and the failed row goes at once', async () => {
+    current = data({ recent: [failedRow(5, { label: 'f1.xml' })] });
+    reply = () => { current = data({ recent: [act(5, { label: 'f1.xml', state: 'Abandoned', detail: 'Bad XML' })] }); return { status: 200, json: { restored: ['f1.xml'] } }; };   // the server has dismissed the row by the time the page asks again
+    page();
+    await userEvent.click(await screen.findByRole('button', { name: 'Retry f1.xml' }));
+    await waitFor(() => expect(posts).toEqual([{ url: '/api/activity/5/retry', body: undefined }]));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry f1.xml' })).toBeNull());
+    expect(await screen.findByText('Back in the inbox')).toBeInTheDocument();
+  });
+  it('makes failed print files again for the job (only batches without files), then clears the failed row', async () => {
+    current = data({ jobs: [job(7)], recent: [failedRow(9, { kind: 'Print files', label: 'Job 7: j7.pdf', jobId: 7, detail: 'Out of memory' })] });
+    page();
+    await userEvent.click(await screen.findByRole('button', { name: 'Retry j7.pdf' }));
+    await waitFor(() => expect(posts.map((p) => p.url)).toEqual(['/api/jobs/7/compose', '/api/activity/9/dismiss']));
+    expect(posts[0]!.body).toEqual({ onlyNew: true });
+  });
+  it('shows why it could not retry and leaves the row', async () => {
+    current = data({ recent: [failedRow(5, { label: 'f1.xml' })] });
+    reply = () => ({ status: 409, json: { error: 'f1.xml is not in the failed folder. It may already have been moved.' } });
+    page();
+    await userEvent.click(await screen.findByRole('button', { name: 'Retry f1.xml' }));
+    expect(await screen.findByText(/not in the failed folder/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry f1.xml' })).toBeInTheDocument();
   });
 });
