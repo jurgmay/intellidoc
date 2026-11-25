@@ -44,7 +44,7 @@ describe('GET /api/activity', () => {
   });
   it('returns the inbox, what is running, what finished lately and the newest jobs', async () => {
     inbox.items = [{ stem: 'a', xmlName: 'a.xml', xmlBytes: 10, pdfName: null, pdfBytes: null, modifiedAt: '2026-11-22T21:00:00.000Z' }];
-    store.rows = [row(1), row(2, { kind: 'Print files', state: 'Running', detail: 'Batch 7 (1 of 3): file 2 of 5 built', done: 0, total: 3 }), row(3, { state: 'Failed', detail: 'Bad XML' })];
+    store.rows = [row(1), row(2, { kind: 'Print files', state: 'Running', detail: 'Processing batch 1 of 3. Built file 2 of 5', done: 0, total: 3 }), row(3, { state: 'Failed', detail: 'Bad XML' })];
     const r = (await app.inject({ method: 'GET', url: '/api/activity' })).json();
     expect(r.inbox).toHaveLength(1);
     expect(r.inboxUnavailable).toBeNull();
