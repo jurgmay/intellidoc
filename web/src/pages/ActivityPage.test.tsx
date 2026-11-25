@@ -1,12 +1,12 @@
 import { StrictMode } from 'react';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { MantineProvider } from '@mantine/core';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActivityData } from '../api/activity';
 import { theme } from '../theme';
 import { buildLines, duration, durationText, elapsed } from './activityLines';
-import { ActivityPage } from './ActivityPage';
+import { ActivityPage, ACTIVE_REFRESH_MS, IDLE_REFRESH_MS, isBusy } from './ActivityPage';
 
 const job = (id: number, over: object = {}) => ({ id, customerCode: 'ACME', customerName: 'Acme', baseName: `j${id}`, pdfFileName: `j${id}.pdf`, receivedAt: `2026-11-22T10:0${id}:00.000Z`, status: 'Received',
   packCount: 1, pageCount: 2, pdfError: null, batchCount: 2, composedBatchCount: 2, runSheetsEmailedAt: null, ...over });
@@ -221,5 +221,34 @@ describe('ActivityPage', () => {
   it('says so when there is nothing to show', async () => {
     show();
     expect(await screen.findByText('Nothing in the inbox and nothing running.')).toBeInTheDocument();
+  });
+});
+
+describe('ActivityPage refresh rate', () => {
+  it('is 1.5 seconds while something is waiting or running and 3 seconds when idle', () => {
+    expect([ACTIVE_REFRESH_MS, IDLE_REFRESH_MS]).toEqual([1500, 3000]);
+    expect(isBusy(null)).toBe(false);
+    expect(isBusy(data())).toBe(false);
+    expect(isBusy(data({ running: [act(1, { state: 'Running' })] }))).toBe(true);
+    expect(isBusy(data({ inbox: [{ stem: 'a', xmlName: 'a.xml', xmlBytes: 1, pdfName: null, pdfBytes: null, modifiedAt: '2026-11-22T21:00:00.000Z' }] }))).toBe(true);
+  });
+  const countAfter = async (d: ActivityData, ms: number) => {
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    try {
+      current = d; fetches = 0;
+      render(<MantineProvider theme={theme}><MemoryRouter><ActivityPage /></MemoryRouter></MantineProvider>);
+      await vi.advanceTimersByTimeAsync(0);
+      const first = fetches;
+      await vi.advanceTimersByTimeAsync(ms);
+      return fetches - first;
+    } finally { vi.useRealTimers(); }
+  };
+  it('asks again after 1.5 seconds while busy', async () => {
+    expect(await countAfter(data({ running: [act(1, { state: 'Running' })] }), 1600)).toBe(1);
+  });
+  it('waits the full 3 seconds when idle', async () => {
+    expect(await countAfter(data(), 1600)).toBe(0);
+    cleanup();
+    expect(await countAfter(data(), 3100)).toBe(1);
   });
 });
