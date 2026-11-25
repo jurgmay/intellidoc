@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { NotFoundError } from '../errors.js';
 import { userOf } from '../settings/routes.js';
 import type { ReferenceStore } from './types.js';
-import { parseAnonymous, parseFormat, parseInsertSize, parsePaper } from './validate.js';
+import { parseAnonymous, parseFormat, parseInsertSize, parseInsertSizeDims, parsePaper } from './validate.js';
 
 type Body = Record<string, unknown> | null;
 type IdParams = { id: string };
@@ -26,6 +26,7 @@ export function referenceRoutes(app: FastifyInstance, store: ReferenceStore): vo
 
   app.get('/api/reference/insert-sizes', async () => ({ sizes: await store.insertSizes() }));
   app.post('/api/reference/insert-sizes', async (req, reply) => reply.code(201).send(await store.addInsertSize(parseInsertSize(req.body as Body), userOf(req))));
+  app.put<{ Params: IdParams }>('/api/reference/insert-sizes/:id', async (req, reply) => { await store.updateInsertSize(idOf(req.params.id), parseInsertSizeDims(req.body as Body), userOf(req)); return reply.code(204).send(); });
   app.delete<{ Params: IdParams }>('/api/reference/insert-sizes/:id', async (req, reply) => { await store.deleteInsertSize(idOf(req.params.id), userOf(req)); return reply.code(204).send(); });
 
   app.get('/api/reference/history', async (req) => {

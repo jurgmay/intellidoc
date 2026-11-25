@@ -128,4 +128,25 @@ describe('insert sizes', () => {
     expect((await list()).map((z) => z.name)).toEqual(['A4', 'DL']);
     expect((await get('/api/reference/history')).json().rows.map((r: { summary: string }) => r.summary)).toEqual(expect.arrayContaining(['Insert size A5 added', 'Insert size A5 removed']));
   });
+  it('keeps a width and height for each size, which can be changed or cleared and are audited', async () => {
+    const list = async () => (await get('/api/reference/insert-sizes')).json().sizes as { id: number; name: string; widthMm: number | null; heightMm: number | null }[];
+    expect((await list()).find((z) => z.name === 'A4')).toMatchObject({ widthMm: 210, heightMm: 297 });
+    expect((await list()).find((z) => z.name === 'DL')).toMatchObject({ widthMm: null, heightMm: null });
+    expect((await put('/api/reference/insert-sizes/2', { widthMm: 99, heightMm: 210 })).statusCode).toBe(204);
+    expect((await list()).find((z) => z.name === 'DL')).toMatchObject({ widthMm: 99, heightMm: 210 });
+    expect((await put('/api/reference/insert-sizes/2', { widthMm: 99.5, heightMm: null })).statusCode).toBe(204);
+    expect((await list()).find((z) => z.name === 'DL')).toMatchObject({ widthMm: 99.5, heightMm: null });
+    expect((await get('/api/reference/history')).json().rows.map((r: { summary: string }) => r.summary)).toEqual(expect.arrayContaining(['Insert size DL: width (none) -> 99 mm, height (none) -> 210 mm', 'Insert size DL: width 99 mm -> 99.5 mm, height 210 mm -> (none)']));
+    const before = (await get('/api/reference/history')).json().rows.length;
+    expect((await put('/api/reference/insert-sizes/2', { widthMm: 99.5, heightMm: null })).statusCode).toBe(204);   // no change: nothing audited
+    expect((await get('/api/reference/history')).json().rows.length).toBe(before);
+  });
+  it('refuses a width or height that is not a positive number with at most 2 decimals, and an unknown size', async () => {
+    const bad = await put('/api/reference/insert-sizes/1', { widthMm: 0, heightMm: -3 });
+    expect(bad.statusCode).toBe(422);
+    expect(bad.json().errors).toMatchObject({ widthMm: 'Width must be a number above 0', heightMm: 'Height must be a number above 0' });
+    expect((await put('/api/reference/insert-sizes/1', { widthMm: 10.123, heightMm: 5 })).json().errors.widthMm).toMatch(/2 decimal/);
+    expect((await put('/api/reference/insert-sizes/1', { widthMm: '10', heightMm: 5 })).statusCode).toBe(422);
+    expect((await put('/api/reference/insert-sizes/99', { widthMm: 1, heightMm: 1 })).statusCode).toBe(404);
+  });
 });

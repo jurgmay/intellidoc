@@ -38,7 +38,7 @@ export class MemoryCustomerStore implements CustomerStore {
   lookupData: Lookups = {
     passthroughKeys: ['Department', 'Doc Type'],
     customers: [],
-    insertSizes: [{ id: 1, name: 'A4' }, { id: 2, name: 'A3' }, { id: 3, name: 'DL' }],
+    insertSizes: [{ id: 1, name: 'A4', widthMm: 210, heightMm: 297 }, { id: 2, name: 'A3', widthMm: 297, heightMm: 420 }, { id: 3, name: 'DL', widthMm: null, heightMm: null }],
     deliveryBands: ['1st Class', '2nd Class', 'Signed For'],
     postalRates: [
       { id: 1, label: 'Royal Mail – 2nd Class (Letter), up to 100g', format: 'Letter' },

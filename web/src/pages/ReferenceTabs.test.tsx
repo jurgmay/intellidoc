@@ -4,11 +4,11 @@ import { MantineProvider } from '@mantine/core';
 import { Notifications } from '@mantine/notifications';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { theme } from '../theme';
-import { AnonymousAddressees, PaperTab, PostalFormatsTab } from './ReferenceTabs';
+import { AnonymousAddressees, InsertSizesTab, PaperTab, PostalFormatsTab } from './ReferenceTabs';
 
 let calls: { url: string; method: string; body?: any }[]; // eslint-disable-line @typescript-eslint/no-explicit-any
 let failNext: Response | null;
-let papers: object[]; let formats: object[]; let names: string[];
+let papers: object[]; let formats: object[]; let names: string[]; let sizes: object[];
 
 const wrap = (ui: React.ReactElement) => render(<MantineProvider theme={theme}><Notifications />{ui}</MantineProvider>);
 beforeEach(() => {
@@ -16,10 +16,12 @@ beforeEach(() => {
   papers = [{ id: 1, name: 'A4 White', batchName: 'A4 WHITE', paperCode: null, usedBy: 3 }, { id: 2, name: 'A4 Plain', batchName: 'A4 PLAIN', paperCode: 'P1', usedBy: 0 }];
   formats = [{ id: 1, name: 'Letter', rank: 1, maxWeightG: 100, maxThicknessMm: 5, maxSheets: 16, maxLengthMm: 240, maxWidthMm: 165, usedBy: 2 }, { id: 2, name: 'Large Letter', rank: 2, maxWeightG: 750, maxThicknessMm: null, maxSheets: null, maxLengthMm: 353, maxWidthMm: 250, usedBy: 1 }];
   names = ['THEOCCUPIER', 'THERESIDENT'];
+  sizes = [{ id: 1, name: 'A4', widthMm: 210, heightMm: 297, usedBy: 2 }, { id: 2, name: 'DL', widthMm: null, heightMm: null, usedBy: 0 }];
   vi.stubGlobal('fetch', vi.fn(async (url: string, init?: { method?: string; body?: string }) => {
     calls.push({ url, method: init?.method ?? 'GET', body: init?.body ? JSON.parse(init.body) : undefined });
     if (failNext && init?.method) { const r = failNext; failNext = null; return r; }
     if (url === '/api/reference/history') return new Response(JSON.stringify({ rows: [{ id: 1, changedAt: '2026-11-20T10:00:00Z', changedBy: 'sam', summary: 'Anonymous addressee THETENANT added' }] }), { status: 200 });
+    if (url === '/api/reference/insert-sizes' && (init?.method ?? 'GET') === 'GET') return new Response(JSON.stringify({ sizes }), { status: 200 });
     if (url === '/api/reference/papers') return new Response(JSON.stringify({ papers }), { status: 200 });
     if (url === '/api/reference/postal-formats') return new Response(JSON.stringify({ formats }), { status: 200 });
     if (url === '/api/reference/anonymous' && (init?.method ?? 'GET') === 'GET') return new Response(JSON.stringify({ names }), { status: 200 });
@@ -132,5 +134,34 @@ describe('AnonymousAddressees', () => {
     await userEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(sent('DELETE')).toHaveLength(1));
     expect(sent('DELETE')[0]!.url).toBe('/api/reference/anonymous/THERESIDENT');
+  });
+});
+
+describe('InsertSizesTab', () => {
+  it('shows each size\'s width and height and edits them from the Edit button', async () => {
+    wrap(<InsertSizesTab />);
+    const a4 = (await screen.findByText('A4')).closest('tr')!;
+    expect(within(a4).getByText('210')).toBeInTheDocument(); expect(within(a4).getByText('297')).toBeInTheDocument();
+    await userEvent.click(within((await screen.findByText('DL')).closest('tr')!).getByRole('button', { name: 'Edit' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.type(within(dialog).getByLabelText('Width (mm)'), '99');
+    await userEvent.type(within(dialog).getByLabelText('Height (mm)'), '210.5');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(sent('PUT')).toHaveLength(1));
+    expect(sent('PUT')[0]).toMatchObject({ url: '/api/reference/insert-sizes/2', body: { widthMm: 99, heightMm: 210.5 } });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+  it('can clear a size\'s width and height, and shows the server\'s reason when they are refused', async () => {
+    wrap(<InsertSizesTab />);
+    await userEvent.click(within((await screen.findByText('A4')).closest('tr')!).getByRole('button', { name: 'Edit' }));
+    const dialog = await screen.findByRole('dialog');
+    await userEvent.clear(within(dialog).getByLabelText('Width (mm)'));
+    await userEvent.clear(within(dialog).getByLabelText('Height (mm)'));
+    failNext = new Response(JSON.stringify({ errors: { widthMm: 'Width must be a number above 0' } }), { status: 422 });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    expect(await within(dialog).findByText('Width must be a number above 0')).toBeInTheDocument();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(sent('PUT')).toHaveLength(2));
+    expect(sent('PUT')[1]).toMatchObject({ body: { widthMm: null, heightMm: null } });
   });
 });

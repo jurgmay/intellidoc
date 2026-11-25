@@ -1,6 +1,6 @@
 import { ValidationError } from '../errors.js';
 import { normaliseAnonymous } from './rules.js';
-import type { FormatInput, PaperInput } from './types.js';
+import type { FormatInput, InsertSizeInput, PaperInput } from './types.js';
 
 type Body = Record<string, unknown> | null | undefined;
 const done = (errs: Record<string, string>): void => { if (Object.keys(errs).length) throw new ValidationError(errs); };
@@ -70,4 +70,20 @@ export function parseInsertSize(body: Body): string {
   const name = text(errs, body?.['name'], 'name', 'Size', 30, true);
   done(errs);
   return name!;
+}
+
+/** The width and height of an insert size, in mm: each above 0 with at most 2 decimal places, or left empty. */
+export function parseInsertSizeDims(body: Body): InsertSizeInput {
+  const errs: Record<string, string> = {};
+  const dim = (key: string, label: string): number | null => {
+    const v = body?.[key];
+    if (v === undefined || v === null || v === '') return null;
+    if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0) { errs[key] = `${label} must be a number above 0`; return null; }
+    if (v >= 100000) { errs[key] = `${label} is too large`; return null; }
+    if (Math.abs(Math.round(v * 100) / 100 - v) > 1e-9) { errs[key] = `${label} can have at most 2 decimal places`; return null; }
+    return Math.round(v * 100) / 100;
+  };
+  const widthMm = dim('widthMm', 'Width'), heightMm = dim('heightMm', 'Height');
+  done(errs);
+  return { widthMm, heightMm };
 }

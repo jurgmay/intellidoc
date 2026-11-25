@@ -2,7 +2,7 @@ import sql from 'mssql';
 import { ConflictError, NotFoundError } from '../errors.js';
 import * as D from './describe.js';
 import { checkFormatLimits, paperInUse } from './rules.js';
-import type { InsertSizeView, FormatInput, FormatView, HistoryEntry, PaperInput, PaperView, ReferenceStore } from './types.js';
+import type { InsertSizeInput, InsertSizeView, FormatInput, FormatView, HistoryEntry, PaperInput, PaperView, ReferenceStore } from './types.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type R = Record<string, any>;
@@ -92,15 +92,25 @@ export class MssqlReferenceStore implements ReferenceStore {
   }
 
   async insertSizes(): Promise<InsertSizeView[]> {
-    const rows = (await this.pool.request().query(`SELECT z.insert_size_id, z.name, (SELECT COUNT(*) FROM idoc.stock_item s WHERE s.insert_size_id = z.insert_size_id) AS used FROM idoc.insert_size z ORDER BY z.name`)).recordset as R[];
-    return rows.map((r) => ({ id: r.insert_size_id, name: r.name, usedBy: r.used }));
+    const rows = (await this.pool.request().query(`SELECT z.insert_size_id, z.name, z.width_mm, z.height_mm, (SELECT COUNT(*) FROM idoc.stock_item s WHERE s.insert_size_id = z.insert_size_id) AS used FROM idoc.insert_size z ORDER BY z.name`)).recordset as R[];
+    return rows.map((r) => ({ id: r.insert_size_id, name: r.name, widthMm: num(r.width_mm), heightMm: num(r.height_mm), usedBy: r.used }));
   }
   async addInsertSize(name: string, by: string): Promise<InsertSizeView> {
     return this.tx(async (t) => {
       if ((await new sql.Request(t).input('n', sql.NVarChar(30), name).query('SELECT 1 AS x FROM idoc.insert_size WHERE name = @n')).recordset.length) throw new ConflictError(`${name} is already on the list.`);
       const id = (await new sql.Request(t).input('n', sql.NVarChar(30), name).query('INSERT INTO idoc.insert_size (name) OUTPUT INSERTED.insert_size_id AS id VALUES (@n)')).recordset[0].id as number;
       await this.audit(t, by, D.describeInsertSizeAdded(name));
-      return { id, name, usedBy: 0 };
+      return { id, name, widthMm: null, heightMm: null, usedBy: 0 };
+    });
+  }
+  async updateInsertSize(id: number, input: InsertSizeInput, by: string): Promise<void> {
+    await this.tx(async (t) => {
+      const z = (await new sql.Request(t).input('i', sql.Int, id).query('SELECT name, width_mm, height_mm FROM idoc.insert_size WHERE insert_size_id = @i')).recordset[0] as R | undefined;
+      if (!z) throw new NotFoundError('Size not found');
+      const line = D.describeInsertSizeChange({ name: z.name, widthMm: num(z.width_mm), heightMm: num(z.height_mm) }, input); if (!line) return;
+      await new sql.Request(t).input('i', sql.Int, id).input('w', sql.Decimal(7, 2), input.widthMm).input('h', sql.Decimal(7, 2), input.heightMm)
+        .query('UPDATE idoc.insert_size SET width_mm = @w, height_mm = @h WHERE insert_size_id = @i');
+      await this.audit(t, by, line);
     });
   }
   async deleteInsertSize(id: number, by: string): Promise<void> {

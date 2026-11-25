@@ -68,4 +68,17 @@ describe.skipIf(!cs)('MssqlReferenceStore', { timeout: 120_000 }, () => {
     expect(lines).toEqual(expect.arrayContaining(['Insert size Square 150 added', 'Insert size Square 150 removed']));
     await expect(store.deleteInsertSize(z.id, 'tester')).rejects.toBeInstanceOf(NotFoundError);
   });
+  it('insert sizes: seeded width and height, change them, clear them, and audit', async () => {
+    const find = async (name: string) => (await store.insertSizes()).find((x) => x.name === name)!;
+    expect(await find('A4')).toMatchObject({ widthMm: 210, heightMm: 297 });
+    const z = await store.addInsertSize('Postcard', 'tester');
+    expect(z).toMatchObject({ widthMm: null, heightMm: null });
+    await store.updateInsertSize(z.id, { widthMm: 148, heightMm: 105.5 }, 'tester');
+    expect(await find('Postcard')).toMatchObject({ widthMm: 148, heightMm: 105.5 });
+    await store.updateInsertSize(z.id, { widthMm: 148, heightMm: null }, 'tester');
+    expect(await find('Postcard')).toMatchObject({ widthMm: 148, heightMm: null });
+    expect((await store.history(10)).map((h) => h.summary)).toEqual(expect.arrayContaining(['Insert size Postcard: width (none) -> 148 mm, height (none) -> 105.5 mm']));
+    await expect(store.updateInsertSize(999999, { widthMm: 1, heightMm: 1 }, 'tester')).rejects.toBeInstanceOf(NotFoundError);
+    await store.deleteInsertSize(z.id, 'tester');
+  });
 });

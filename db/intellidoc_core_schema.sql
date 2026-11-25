@@ -398,10 +398,13 @@ CREATE TABLE idoc.anonymous_addressee (
 );
 GO
 
--- The sizes an insert can be shown as (A4, A3, DL, ...). A list kept in Settings.
+-- The sizes an insert can be shown as (A4, A3, DL, ...). A list kept in Settings. The width and height (mm, optional) fill in the insert's own
+-- width and height when the size is chosen for it.
 CREATE TABLE idoc.insert_size (
     insert_size_id INT IDENTITY(1, 1) NOT NULL CONSTRAINT pk_insert_size PRIMARY KEY,
-    name           NVARCHAR(30)       NOT NULL CONSTRAINT uq_insert_size_name UNIQUE
+    name           NVARCHAR(30)       NOT NULL CONSTRAINT uq_insert_size_name UNIQUE,
+    width_mm       DECIMAL(7, 2)      NULL CONSTRAINT ck_insert_size_w CHECK (width_mm > 0),
+    height_mm      DECIMAL(7, 2)      NULL CONSTRAINT ck_insert_size_h CHECK (height_mm > 0)
 );
 GO
 
@@ -841,7 +844,7 @@ GO
    8. SEED DATA
    =========================================================================== */
 INSERT INTO idoc.settings (settings_id) VALUES (1);
-INSERT INTO idoc.insert_size (name) VALUES (N'A3'), (N'A4'), (N'A5'), (N'A6'), (N'DL');
+INSERT INTO idoc.insert_size (name, width_mm, height_mm) VALUES (N'A3', 297, 420), (N'A4', 210, 297), (N'A5', 148, 210), (N'A6', 105, 148), (N'DL', 99, 210);
 
 INSERT INTO idoc.postal_format (name, rank_order, max_weight_g, max_thickness_mm, max_sheets, max_length_mm, max_width_mm) VALUES
     (N'Letter',        1,  100,  5.00,   16, 240, 165),
