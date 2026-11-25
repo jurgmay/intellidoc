@@ -19,6 +19,15 @@ describe.skipIf(!hasDb)('local settings file', { timeout: 120_000 }, () => {   /
     await applySettingsSql(pool, text);
     expect(await row()).toEqual(before);
   });
+  it('keeps the next batch code across a rebuild', async () => {
+    await pool.request().query('ALTER SEQUENCE idoc.batch_code_seq RESTART WITH 8123');
+    const text = await exportSettingsSql(pool);
+    expect(text).toContain('RESTART WITH 8123;');
+    await resetAndSeed(pool);
+    await applySettingsSql(pool, text);
+    const cur = (await pool.request().query(`SELECT CAST(current_value AS BIGINT) AS v FROM sys.sequences WHERE name = N'batch_code_seq'`)).recordset[0].v;
+    expect(Number(cur)).toBe(8123);
+  });
   it('names the column when the file has one the schema no longer has', async () => {
     await expect(applySettingsSql(pool, 'UPDATE idoc.settings SET gone_column = 1 WHERE settings_id = 1;')).rejects.toThrow(/"gone_column".*no longer has/);
   });

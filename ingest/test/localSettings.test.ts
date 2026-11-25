@@ -15,5 +15,10 @@ describe('local settings file', () => {
     expect(text).toContain('npm run db:rebuild');
     expect(text.slice(text.indexOf('UPDATE'))).toBe("UPDATE idoc.settings SET\n    a4_sheet_weight_g = 5.625,\n    auto_compose = 0,\n    alert_recipients = N'a@b.co',\n    page_width_mm = 210\nWHERE settings_id = 1;\n");
   });
+  it('can also set the next batch code, in a line of its own that can be edited by hand', () => {
+    const text = settingsSql({ settings_id: 1, page_width_mm: 210 }, new Date('2026-11-23T15:20:00Z'), 8001);
+    expect(text).toContain('WHERE settings_id = 1;\n\n-- The next batch code.');
+    expect(text.trimEnd().endsWith('ALTER SEQUENCE idoc.batch_code_seq RESTART WITH 8001;')).toBe(true);
+  });
   it('refuses a row with nothing to set', () => { expect(() => settingsSql({ settings_id: 1 })).toThrow(/no columns/); });
 });
