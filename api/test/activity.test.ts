@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { ActivityRow } from '../src/activity/types.js';
-import { estimator, itemSeconds, queueEstimate, remainingSeconds } from '../src/activity/estimate.js';
 import { MemoryActivityStore, MemoryInboxReader } from '../src/activity/memoryStore.js';
 import { FsInboxReader, failedPrefix } from '../src/activity/inbox.js';
 import { buildApp } from '../src/app.js';
@@ -171,44 +170,13 @@ describe('FsInboxReader.restoreFailed', () => {
   });
 });
 
-describe('time estimate', () => {
-  const sample = (withPdf: boolean, bytes: number, seconds: number) => ({ withPdf, bytes, seconds });
-  const item = (stem: string, xml: number | null, pdf: number | null) => ({ stem, xmlName: xml === null ? null : `${stem}.xml`, xmlBytes: xml, pdfName: pdf === null ? null : `${stem}.pdf`, pdfBytes: pdf, modifiedAt: '2026-11-22T21:00:00.000Z' });
-
-  it('says nothing without enough history', () => {
-    const e = estimator([sample(true, 1000, 1), sample(true, 1000, 1)]);
-    expect(e).toMatchObject({ basedOn: 2, secondsPerByte: null, xmlOnlySeconds: null });
-    expect(itemSeconds(e, item('a', 10, 1000))).toBeNull();
-    expect(queueEstimate(e, [null, null], [])).toEqual({ basedOn: 2, seconds: null, partial: true });
-  });
-  it('prices a pair by PDF size and an XML on its own by the average, from the recent jobs', () => {
-    const e = estimator([sample(true, 10_000_000, 20), sample(true, 30_000_000, 60), sample(true, 20_000_000, 40), sample(false, 5000, 2), sample(false, 5000, 4), sample(false, 5000, 3)]);
-    expect(e.secondsPerByte).toBeCloseTo(2e-6, 9);
-    expect(itemSeconds(e, item('p', 100, 50_000_000))).toBe(100);
-    expect(itemSeconds(e, item('x', 100, null))).toBe(3);
-    expect(itemSeconds(e, item('l', null, 5_000_000))).toBe(10);
-  });
-  it('estimates what is left of running work from its progress, else from its size, never below zero', () => {
-    const e = estimator([sample(true, 10_000_000, 20), sample(true, 30_000_000, 60), sample(true, 20_000_000, 40)]);
-    const now = Date.parse('2026-11-22T21:01:00.000Z');
-    const run = (o: Partial<ActivityRow>): ActivityRow => ({ ...row(1), state: 'Running', kind: 'PDF check', startedAt: '2026-11-22T21:00:00.000Z', ...o });
-    expect(remainingSeconds(e, run({ done: 100, total: 400 }), now)).toBe(180);              // 60 s for a quarter: 180 s more
-    expect(remainingSeconds(e, run({ bytes: 50_000_000, withPdf: true }), now)).toBe(40);    // 100 s expected, 60 s gone
-    expect(remainingSeconds(e, run({ bytes: 5_000_000, withPdf: true }), now)).toBe(0);      // already over
-    expect(remainingSeconds(e, run({ kind: 'Print files' }), now)).toBeNull();
-    expect(remainingSeconds(e, run({ stalled: true }), now)).toBeNull();
-  });
-  it('adds up the queue and says when it is only a minimum', () => {
-    const e = estimator([]);
-    expect(queueEstimate(e, [30, 90], [20])).toEqual({ basedOn: 0, seconds: 140, partial: false });
-    expect(queueEstimate(e, [30, null], [])).toEqual({ basedOn: 0, seconds: 30, partial: true });
-    expect(queueEstimate(e, [], [])).toEqual({ basedOn: 0, seconds: 0, partial: false });
-  });
-  it('puts the estimates in the response', async () => {
-    store.sampleRows = [sample(true, 10_000_000, 20), sample(true, 30_000_000, 60), sample(true, 20_000_000, 40), sample(false, 5000, 2), sample(false, 5000, 4), sample(false, 5000, 3)];
-    inbox.items = [item('p', 100, 50_000_000), item('x', 100, null)];
+describe('no time estimates', () => {
+  it('the response carries no estimate of how long the inbox or running work will take', async () => {
+    inbox.items = [{ stem: 'p', xmlName: 'p.xml', xmlBytes: 100, pdfName: 'p.pdf', pdfBytes: 50_000_000, modifiedAt: '2026-11-22T21:00:00.000Z' }];
+    store.rows = [row(1, { kind: 'PDF check', state: 'Running', done: 100, total: 400, finishedAt: null })];
     const r = (await app.inject({ method: 'GET', url: '/api/activity' })).json();
-    expect(r.inbox.map((f: { estimateSeconds: number }) => f.estimateSeconds)).toEqual([100, 3]);
-    expect(r.queue).toEqual({ basedOn: 6, seconds: 103, partial: false });
+    expect(r).not.toHaveProperty('queue');
+    expect(r.inbox[0]).not.toHaveProperty('estimateSeconds');
+    expect(r.running[0]).not.toHaveProperty('remainingSeconds');
   });
 });

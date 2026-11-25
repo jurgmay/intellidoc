@@ -5,7 +5,7 @@ import { ActionIcon, Alert, Anchor, Badge, Group, Loader, Paper, Progress, Stack
 import { IconAlertCircle, IconRefresh } from '@tabler/icons-react';
 import { composeJob } from '../api/jobs';
 import { dismissActivity, getActivity, retryActivity, type ActivityData } from '../api/activity';
-import { buildLines, clock, COLOUR, duration, durationText, ORDER, type ActivityLine, type Stage } from './activityLines';
+import { buildLines, clock, COLOUR, durationText, ORDER, type ActivityLine, type Stage } from './activityLines';
 
 /** Badges that always show all their text: Mantine's badge shortens its text with an ellipsis when its cell is narrow. */
 const BADGE_FULL = { root: { overflow: 'visible', maxWidth: 'none' }, label: { overflow: 'visible', textOverflow: 'clip' } } as const;
@@ -82,12 +82,6 @@ export function ActivityPage({ refreshMs }: { refreshMs?: number }) {
         </Alert>
       )}
       {data?.inboxUnavailable && <Alert color="yellow" icon={<IconAlertCircle size={16} />} title="The inbox cannot be shown">{data.inboxUnavailable}</Alert>}
-      {data && data.queue.seconds !== null && data.queue.seconds > 0 && (
-        <Alert color="blue" variant="light">
-          {data.queue.partial ? 'At least ' : 'About '}<b>{duration(data.queue.seconds)}</b> to clear the inbox
-          <Text span size="xs" c="dimmed"> (from the last {data.queue.basedOn} imports and PDF checks{data.queue.partial ? '; some files are too new to estimate' : ''})</Text>
-        </Alert>
-      )}
       {data && (
         <Group gap="xs">
           {ORDER.map((s) => <Badge key={s} color={COLOUR[s]} variant="light">{count(s)} {s.toLowerCase()}</Badge>)}

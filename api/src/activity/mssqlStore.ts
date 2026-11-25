@@ -1,5 +1,4 @@
 import sql from 'mssql';
-import type { Sample } from './estimate.js';
 import { STALLED_AFTER_MS, type ActivityRow, type ActivityStore } from './types.js';
 
 type R = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -13,11 +12,6 @@ function row(r: R, now = Date.now()): ActivityRow {
 const COLS = 'activity_id, kind, label, job_id, state, detail, step_done, step_total, bytes, with_pdf, started_at, updated_at, finished_at';
 
 export class MssqlActivityStore implements ActivityStore {
-  async samples(limit: number): Promise<Sample[]> {
-    const rs = await this.pool.request().input('n', sql.Int, limit).query(`SELECT TOP (@n) with_pdf, bytes, DATEDIFF(SECOND, started_at, finished_at) AS seconds FROM idoc.activity
-      WHERE state = N'Done' AND kind IN (N'Import', N'PDF check') AND finished_at IS NOT NULL AND (bytes > 0 OR with_pdf = 0) ORDER BY activity_id DESC`);
-    return (rs.recordset as R[]).map((r) => ({ withPdf: !!r['with_pdf'], bytes: Number(r['bytes'] ?? 0), seconds: Number(r['seconds']) }));
-  }
   constructor(private readonly pool: sql.ConnectionPool) {}
   async running(): Promise<ActivityRow[]> {
     return ((await this.pool.request().query(`SELECT ${COLS} FROM idoc.activity WHERE state = N'Running' ORDER BY activity_id`)).recordset as R[]).map((r) => row(r));

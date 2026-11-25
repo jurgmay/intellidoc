@@ -3,8 +3,6 @@ import type { ActivityData } from '../api/activity';
 export type Stage = 'Making print files' | 'Processing' | 'Waiting' | 'Awaiting PDF' | 'Failed' | 'Completed';
 export interface ActivityLine {
   key: string; stage: Stage; /** The file this is about (shown in the Progress column). */ name: string; /** The customer's account name, when it is known (not for a file that has not been imported yet). */ account: string | null; bytes: number | null; detail: string | null; progress: { done: number; total: number; unit: 'mailpieces' | 'pages' } | null;
-  /** About how long it should take (waiting) or how long is left (running), in seconds. */
-  seconds: number | null;
   /** When the work started and, once it has, ended (ISO); null when it has not started or the time is not known. */
   start: string | null; end: string | null;
   /** When a file arrived or a job started waiting (ISO), for how long it has been waiting; null when it is not waiting. */
@@ -54,22 +52,22 @@ export function buildLines(d: ActivityData, now: number = Date.now()): ActivityL
     busy.add(r.label.toLowerCase());
     const printing = r.kind === 'Print files';
     lines.push({ key: `r${r.id}`, stage: printing ? 'Making print files' : 'Processing', name: fileOf(r), account: jobOf(r)?.customerName ?? null, bytes: null, detail: r.stalled ? 'No progress for a while; the program doing this may have stopped.' : r.detail ?? (printing ? 'Starting.' : r.kind === 'PDF check' ? 'Checking the PDF.' : 'Importing the data.'),
-      progress: r.total ? { done: r.done ?? 0, total: r.total, unit: printing ? 'mailpieces' : 'pages' } : null, seconds: r.remainingSeconds ?? null, start: r.startedAt, end: null, waitingSince: null, stalled: r.stalled });
+      progress: r.total ? { done: r.done ?? 0, total: r.total, unit: printing ? 'mailpieces' : 'pages' } : null, start: r.startedAt, end: null, waitingSince: null, stalled: r.stalled });
   }
   for (const f of d.inbox) {
     if ((f.xmlName && busy.has(f.xmlName.toLowerCase())) || (f.pdfName && busy.has(f.pdfName.toLowerCase()))) continue;
-    lines.push({ key: `i${f.stem}`, stage: 'Waiting', name: f.xmlName ?? f.pdfName ?? f.stem, account: jobByStem.get(f.stem.toLowerCase())?.customerName ?? null, bytes: f.xmlBytes ?? f.pdfBytes, detail: f.xmlName ? (f.pdfName ? 'Ready' : 'Waiting for the PDF') + (f.estimateSeconds ? ` (about ${duration(f.estimateSeconds)}).` : '.') : 'Waiting for the data.', progress: null, seconds: f.estimateSeconds ?? null, start: null, end: null, waitingSince: f.modifiedAt, stalled: false });
+    lines.push({ key: `i${f.stem}`, stage: 'Waiting', name: f.xmlName ?? f.pdfName ?? f.stem, account: jobByStem.get(f.stem.toLowerCase())?.customerName ?? null, bytes: f.xmlBytes ?? f.pdfBytes, detail: f.xmlName ? (f.pdfName ? 'Ready' : 'Waiting for the PDF') + '.' : 'Waiting for the data.', progress: null, start: null, end: null, waitingSince: f.modifiedAt, stalled: false });
   }
   for (const j of d.jobs.filter((x) => x.status === 'Awaiting PDF')) {
-    lines.push({ key: `j${j.id}`, stage: 'Awaiting PDF', name: j.pdfFileName, account: j.customerName, bytes: null, detail: 'Data imported; waiting for the PDF file.', progress: null, seconds: null, start: null, end: null, waitingSince: j.receivedAt, stalled: false });
+    lines.push({ key: `j${j.id}`, stage: 'Awaiting PDF', name: j.pdfFileName, account: j.customerName, bytes: null, detail: 'Data imported; waiting for the PDF file.', progress: null, start: null, end: null, waitingSince: j.receivedAt, stalled: false });
   }
   for (const r of d.recent.filter((x) => x.state === 'Failed' && now - Date.parse(x.finishedAt ?? x.updatedAt) < FAILED_SHOWN_FOR_MS)) {
-    lines.push({ key: `f${r.id}`, stage: 'Failed', retry: { id: r.id, kind: r.kind, jobId: r.jobId }, name: fileOf(r), account: jobOf(r)?.customerName ?? null, bytes: null, detail: r.detail, progress: null, seconds: null, start: r.startedAt, end: r.finishedAt ?? r.updatedAt, waitingSince: null, stalled: false });
+    lines.push({ key: `f${r.id}`, stage: 'Failed', retry: { id: r.id, kind: r.kind, jobId: r.jobId }, name: fileOf(r), account: jobOf(r)?.customerName ?? null, bytes: null, detail: r.detail, progress: null, start: r.startedAt, end: r.finishedAt ?? r.updatedAt, waitingSince: null, stalled: false });
   }
   for (const j of d.jobs.filter((x) => x.status !== 'Awaiting PDF').sort((a, b) => b.id - a.id)) {
     const made = j.batchCount > 0 && j.composedBatchCount === j.batchCount;
     lines.push({ key: `c${j.id}`, stage: j.status === 'PDF Rejected' ? 'Failed' : 'Completed', name: j.pdfFileName, account: j.customerName, bytes: null, detail: j.status === 'PDF Rejected' ? `PDF rejected (${j.pdfError ?? 'no reason given'}).` : made ? 'Print files created.' : j.composedBatchCount > 0 ? `Print files created for ${j.composedBatchCount} of ${j.batchCount} batches.` : 'Waiting to create print files.',
-      progress: null, seconds: null, ...jobTimes(j.id, doneByStem.get(j.baseName.toLowerCase()), j.receivedAt), waitingSince: null, stalled: false });
+      progress: null, ...jobTimes(j.id, doneByStem.get(j.baseName.toLowerCase()), j.receivedAt), waitingSince: null, stalled: false });
   }
   // Stable: keep the order built above within a stage (the inbox is already in the watcher's order), and show the stages in ORDER.
   return lines.map((l, i) => ({ l, i })).sort((a, b) => ORDER.indexOf(a.l.stage) - ORDER.indexOf(b.l.stage) || a.i - b.i).map((x) => x.l);
@@ -77,15 +75,9 @@ export function buildLines(d: ActivityData, now: number = Date.now()): ActivityL
 
 export const COLOUR: Record<Stage, string> = { 'Making print files': 'blue', Processing: 'blue', Waiting: 'gray', 'Awaiting PDF': 'yellow', Failed: 'red', Completed: 'green' };
 export const clock = (iso: string | null): string => (iso ? new Date(iso).toLocaleTimeString('en-GB', { timeZone: 'Europe/London', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '');
-/** "45 s", "14 min", "1 h 20 min": a rough length of time. */
-export function duration(seconds: number): string {
-  if (seconds < 60) return `${Math.max(1, Math.round(seconds))} s`;
-  const m = Math.round(seconds / 60);
-  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`;
-}
 /** The Duration column: how long it has been running or waiting, or how long it took. */
 export function durationText(l: ActivityLine, now: number): string {
-  if (l.stage === 'Making print files' || l.stage === 'Processing') return l.start ? `${elapsed(l.start, now)}${l.seconds !== null ? `, about ${duration(l.seconds)} left` : ''}` : '';
+  if (l.stage === 'Making print files' || l.stage === 'Processing') return l.start ? elapsed(l.start, now) : '';
   if (l.waitingSince) return `waiting ${elapsed(l.waitingSince, now)}`;
   return l.start && l.end ? elapsed(l.start, Date.parse(l.end)) : '';
 }
