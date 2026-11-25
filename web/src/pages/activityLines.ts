@@ -1,9 +1,8 @@
 import type { ActivityData } from '../api/activity';
 
 export type Stage = 'Making print files' | 'Processing' | 'Waiting' | 'Awaiting PDF' | 'Failed' | 'Completed';
-export type PdfState = 'arrived' | 'waiting' | 'none';
 export interface ActivityLine {
-  key: string; stage: Stage; /** The file this is about (shown in the Progress column). */ name: string; /** The customer's account name, when it is known (not for a file that has not been imported yet). */ account: string | null; bytes: number | null; pdf: PdfState; detail: string | null; progress: { done: number; total: number; unit: 'mailpieces' | 'pages' } | null;
+  key: string; stage: Stage; /** The file this is about (shown in the Progress column). */ name: string; /** The customer's account name, when it is known (not for a file that has not been imported yet). */ account: string | null; bytes: number | null; detail: string | null; progress: { done: number; total: number; unit: 'mailpieces' | 'pages' } | null;
   /** About how long it should take (waiting) or how long is left (running), in seconds. */
   seconds: number | null;
   /** When the work started and, once it has, ended (ISO); null when it has not started or the time is not known. */
@@ -52,24 +51,22 @@ export function buildLines(d: ActivityData, now: number = Date.now()): ActivityL
   for (const r of d.running) {
     busy.add(r.label.toLowerCase());
     const printing = r.kind === 'Print files';
-    lines.push({ key: `r${r.id}`, stage: printing ? 'Making print files' : 'Processing', name: fileOf(r), account: jobOf(r)?.customerName ?? null, bytes: null, pdf: 'none', detail: r.stalled ? 'No progress for a while; the program doing this may have stopped.' : r.detail ?? (printing ? 'Starting.' : r.kind === 'PDF check' ? 'Checking the PDF.' : 'Importing the data.'),
+    lines.push({ key: `r${r.id}`, stage: printing ? 'Making print files' : 'Processing', name: fileOf(r), account: jobOf(r)?.customerName ?? null, bytes: null, detail: r.stalled ? 'No progress for a while; the program doing this may have stopped.' : r.detail ?? (printing ? 'Starting.' : r.kind === 'PDF check' ? 'Checking the PDF.' : 'Importing the data.'),
       progress: r.total ? { done: r.done ?? 0, total: r.total, unit: printing ? 'mailpieces' : 'pages' } : null, seconds: r.remainingSeconds ?? null, start: r.startedAt, end: null, waitingSince: null, stalled: r.stalled });
   }
   for (const f of d.inbox) {
     if ((f.xmlName && busy.has(f.xmlName.toLowerCase())) || (f.pdfName && busy.has(f.pdfName.toLowerCase()))) continue;
-    lines.push({ key: `i${f.stem}`, stage: 'Waiting', name: f.xmlName ?? f.pdfName ?? f.stem, account: jobByStem.get(f.stem.toLowerCase())?.customerName ?? null, bytes: f.xmlBytes ?? f.pdfBytes, pdf: f.pdfName ? 'arrived' : 'waiting',
-      detail: f.xmlName ? (f.pdfName ? 'Ready' : 'Waiting for the PDF') + (f.estimateSeconds ? ` (about ${duration(f.estimateSeconds)}).` : '.') : 'Waiting for the data.', progress: null, seconds: f.estimateSeconds ?? null, start: null, end: null, waitingSince: f.modifiedAt, stalled: false });
+    lines.push({ key: `i${f.stem}`, stage: 'Waiting', name: f.xmlName ?? f.pdfName ?? f.stem, account: jobByStem.get(f.stem.toLowerCase())?.customerName ?? null, bytes: f.xmlBytes ?? f.pdfBytes, detail: f.xmlName ? (f.pdfName ? 'Ready' : 'Waiting for the PDF') + (f.estimateSeconds ? ` (about ${duration(f.estimateSeconds)}).` : '.') : 'Waiting for the data.', progress: null, seconds: f.estimateSeconds ?? null, start: null, end: null, waitingSince: f.modifiedAt, stalled: false });
   }
   for (const j of d.jobs.filter((x) => x.status === 'Awaiting PDF')) {
-    lines.push({ key: `j${j.id}`, stage: 'Awaiting PDF', name: j.pdfFileName, account: j.customerName, bytes: null, pdf: 'waiting', detail: 'Data imported; waiting for the PDF file.', progress: null, seconds: null, start: null, end: null, waitingSince: j.receivedAt, stalled: false });
+    lines.push({ key: `j${j.id}`, stage: 'Awaiting PDF', name: j.pdfFileName, account: j.customerName, bytes: null, detail: 'Data imported; waiting for the PDF file.', progress: null, seconds: null, start: null, end: null, waitingSince: j.receivedAt, stalled: false });
   }
   for (const r of d.recent.filter((x) => x.state === 'Failed' && now - Date.parse(x.finishedAt ?? x.updatedAt) < FAILED_SHOWN_FOR_MS)) {
-    lines.push({ key: `f${r.id}`, stage: 'Failed', name: fileOf(r), account: jobOf(r)?.customerName ?? null, bytes: null, pdf: 'none', detail: r.detail, progress: null, seconds: null, start: r.startedAt, end: r.finishedAt ?? r.updatedAt, waitingSince: null, stalled: false });
+    lines.push({ key: `f${r.id}`, stage: 'Failed', name: fileOf(r), account: jobOf(r)?.customerName ?? null, bytes: null, detail: r.detail, progress: null, seconds: null, start: r.startedAt, end: r.finishedAt ?? r.updatedAt, waitingSince: null, stalled: false });
   }
   for (const j of d.jobs.filter((x) => x.status !== 'Awaiting PDF').sort((a, b) => b.id - a.id)) {
     const made = j.batchCount > 0 && j.composedBatchCount === j.batchCount;
-    lines.push({ key: `c${j.id}`, stage: j.status === 'PDF Rejected' ? 'Failed' : 'Completed', name: j.pdfFileName, account: j.customerName, bytes: null, pdf: 'arrived',
-      detail: j.status === 'PDF Rejected' ? `PDF rejected (${j.pdfError ?? 'no reason given'}).` : made ? 'Print files created.' : j.composedBatchCount > 0 ? `Print files created for ${j.composedBatchCount} of ${j.batchCount} batches.` : 'Waiting to create print files.',
+    lines.push({ key: `c${j.id}`, stage: j.status === 'PDF Rejected' ? 'Failed' : 'Completed', name: j.pdfFileName, account: j.customerName, bytes: null, detail: j.status === 'PDF Rejected' ? `PDF rejected (${j.pdfError ?? 'no reason given'}).` : made ? 'Print files created.' : j.composedBatchCount > 0 ? `Print files created for ${j.composedBatchCount} of ${j.batchCount} batches.` : 'Waiting to create print files.',
       progress: null, seconds: null, ...jobTimes(j.id, doneByStem.get(j.baseName.toLowerCase()), j.receivedAt), waitingSince: null, stalled: false });
   }
   // Stable: keep the order built above within a stage (the inbox is already in the watcher's order), and show the stages in ORDER.
