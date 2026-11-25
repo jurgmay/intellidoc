@@ -478,7 +478,7 @@ describe('inheritance of brands, matching, pack sequence and notification e-mail
 
   it('every group starts on its own list with nothing inherited', async () => {
     const d = await detail(child);
-    expect(d.modes).toEqual({ envelopes: 'OWN', brands: 'OWN', matching: 'OWN', sequence: 'OWN', emails: 'OWN' });
+    expect(d.modes).toEqual({ envelopes: 'OWN', brands: 'OWN', matching: 'OWN', sequence: 'OWN', emails: 'OWN', inserts: 'OWN' });
     expect(d.inherited).toEqual({ brands: [], matchRules: [], sequenceRules: [], emails: [], matching: null, sequence: null });
   });
   it('INHERIT shows the parent’s brands, rules and addresses read only, with where each comes from', async () => {
@@ -532,8 +532,92 @@ describe('inheritance of brands, matching, pack sequence and notification e-mail
   it('removing the parent puts every group back on its own and says so', async () => {
     await mode(child, 'brands', 'INHERIT'); await mode(child, 'emails', 'EXTEND');
     await call('PUT', `/api/customers/${child}`, details({ code: 'CHILD', name: 'Child Co', parentId: null }));
-    expect((await detail(child)).modes).toEqual({ envelopes: 'OWN', brands: 'OWN', matching: 'OWN', sequence: 'OWN', emails: 'OWN' });
+    expect((await detail(child)).modes).toEqual({ envelopes: 'OWN', brands: 'OWN', matching: 'OWN', sequence: 'OWN', emails: 'OWN', inserts: 'OWN' });
     const lines = (await call('GET', `/api/customers/${child}/history`)).json().rows.map((r: { summary: string }) => r.summary);
     expect(lines).toEqual(expect.arrayContaining(["Brands: the parent's list → its own list", "Notification e-mails: the parent's list plus its own → its own list"]));
+  });
+});
+
+describe('inserts', () => {
+  const ins = (over: Record<string, unknown> = {}) => ({ stockCode: 'WH5001', brandId: null, reference: null, description: 'Spring leaflet', hpodGuid: null, insertSizeId: 1, widthMm: 210, heightMm: 297, thicknessMm: 0.1, weightG: 5, isChargeable: true, costPrice: 0.04, sellPrice: 0.1, linkedIds: [], ...over });
+  const detail = async (id: number) => (await call('GET', `/api/customers/${id}`)).json();
+  const add = async (over: Record<string, unknown> = {}, customer = acme) => (await call('POST', `/api/customers/${customer}/inserts`, ins(over))).json().id as number;
+
+  it('adds an insert, works out its margin and records it in the history', async () => {
+    const r = await call('POST', `/api/customers/${acme}/inserts`, ins());
+    expect(r.statusCode).toBe(201);
+    const [one] = (await detail(acme)).inserts;
+    expect(one).toMatchObject({ stockCode: 'WH5001', description: 'Spring leaflet', sizeName: 'A4', isChargeable: true, costPrice: 0.04, sellPrice: 0.1, margin: 0.06, linkedIds: [], parent: null });
+    expect((await call('GET', `/api/customers/${acme}/history`)).json().rows[0].summary).toBe('Added insert: WH5001 – Spring leaflet');
+  });
+  it('leaves the margin empty unless both cost and sell price are set', async () => {
+    await add({ costPrice: null });
+    expect((await detail(acme)).inserts[0].margin).toBeNull();
+  });
+  it('refuses missing or bad values, naming the field', async () => {
+    const bad = async (over: Record<string, unknown>) => (await call('POST', `/api/customers/${acme}/inserts`, ins(over)));
+    expect((await bad({ stockCode: '' })).json().errors).toHaveProperty('stockCode');
+    expect((await bad({ description: ' ' })).json().errors).toHaveProperty('description');
+    expect((await bad({ weightG: -1 })).json().errors).toHaveProperty('weightG');
+    expect((await bad({ thicknessMm: null })).json().errors).toHaveProperty('thicknessMm');
+    expect((await bad({ hpodGuid: 'not-a-guid' })).json().errors).toHaveProperty('hpodGuid');
+    expect((await bad({ isChargeable: 'yes' })).json().errors).toHaveProperty('isChargeable');
+    expect((await bad({ insertSizeId: 99 })).json().errors).toHaveProperty('insertSizeId');
+    expect((await bad({ brandId: 99 })).json().errors).toHaveProperty('brandId');
+  });
+  it('keeps stock codes and H-POD GUIDs unique', async () => {
+    const guid = '3f2b8c1e-5d4a-4e7b-9a10-2c6d8e0f1a23';
+    await add({ hpodGuid: guid });
+    expect((await call('POST', `/api/customers/${acme}/inserts`, ins({ hpodGuid: null }))).statusCode).toBe(409);
+    expect((await call('POST', `/api/customers/${acme}/inserts`, ins({ stockCode: 'WH5002', hpodGuid: guid.toUpperCase() }))).statusCode).toBe(409);
+    expect((await call('POST', `/api/customers/${acme}/inserts`, ins({ stockCode: 'WH5002' }))).statusCode).toBe(201);
+  });
+  it('edits an insert and describes what changed', async () => {
+    const id = await add();
+    const r = await call('PUT', `/api/inserts/${id}`, ins({ description: 'Summer leaflet', sellPrice: 0.12 }));
+    expect(r.statusCode).toBe(204);
+    expect((await detail(acme)).inserts[0]).toMatchObject({ description: 'Summer leaflet', margin: 0.08 });
+    expect((await call('GET', `/api/customers/${acme}/history`)).json().rows[0].summary).toBe('Changed insert WH5001: Description: "Spring leaflet" → "Summer leaflet"; Sell price: "0.1" → "0.12"');
+  });
+  it('links inserts under a parent, and refuses links that would nest or share', async () => {
+    const leaflet = await add({ stockCode: 'L1' }); const reply = await add({ stockCode: 'R1' }); const other = await add({ stockCode: 'O1' });
+    expect((await call('PUT', `/api/inserts/${leaflet}`, ins({ stockCode: 'L1', linkedIds: [reply] }))).statusCode).toBe(204);
+    const rows = (await detail(acme)).inserts as { id: number; linkedIds: number[]; parent: { stockCode: string } | null }[];
+    expect(rows.find((r) => r.id === leaflet)!.linkedIds).toEqual([reply]);
+    expect(rows.find((r) => r.id === reply)!.parent?.stockCode).toBe('L1');
+    // an insert can sit under one parent only, cannot link itself, and a linked insert cannot have links of its own
+    expect((await call('PUT', `/api/inserts/${other}`, ins({ stockCode: 'O1', linkedIds: [reply] }))).statusCode).toBe(422);
+    expect((await call('PUT', `/api/inserts/${other}`, ins({ stockCode: 'O1', linkedIds: [other] }))).statusCode).toBe(422);
+    expect((await call('PUT', `/api/inserts/${reply}`, ins({ stockCode: 'R1', linkedIds: [other] }))).statusCode).toBe(422);
+    expect((await call('PUT', `/api/inserts/${other}`, ins({ stockCode: 'O1', linkedIds: [leaflet] }))).statusCode).toBe(422);
+    // unlinking
+    await call('PUT', `/api/inserts/${leaflet}`, ins({ stockCode: 'L1', linkedIds: [] }));
+    expect(((await detail(acme)).inserts as { parent: unknown }[]).every((r) => r.parent === null)).toBe(true);
+  });
+  it("only links the customer's own inserts", async () => {
+    const mine = await add({ stockCode: 'M1' }); const theirs = await add({ stockCode: 'T1' }, store.seed({ code: 'OTHER', name: 'Other Ltd' }));
+    expect((await call('PUT', `/api/inserts/${mine}`, ins({ stockCode: 'M1', linkedIds: [theirs] }))).statusCode).toBe(422);
+  });
+  it('removes an insert and frees its links', async () => {
+    const parent = await add({ stockCode: 'P1' }); const child = await add({ stockCode: 'C1' });
+    await call('PUT', `/api/inserts/${parent}`, ins({ stockCode: 'P1', linkedIds: [child] }));
+    expect((await call('DELETE', `/api/inserts/${parent}`)).statusCode).toBe(204);
+    const rows = (await detail(acme)).inserts;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ stockCode: 'C1', parent: null });
+    expect((await call('DELETE', `/api/inserts/${parent}`)).statusCode).toBe(404);
+  });
+  it("shows a parent customer's inserts read only, following the inserts setting", async () => {
+    await add({ stockCode: 'PARENT1' });
+    const child = store.seed({ code: 'CHILD', name: 'Child Co' });
+    await call('PUT', `/api/customers/${child}`, details({ code: 'CHILD', name: 'Child Co', parentId: acme }));
+    expect((await detail(child)).inheritedInserts).toEqual([]);
+    await call('PUT', `/api/customers/${child}/inheritance`, { setting: 'inserts', mode: 'EXTEND' });
+    await add({ stockCode: 'OWN1' }, child);
+    const d = await detail(child);
+    expect(d.inserts.map((i: { stockCode: string }) => i.stockCode)).toEqual(['OWN1']);
+    expect(d.inheritedInserts.map((i: { stockCode: string; from: { code: string } }) => `${i.stockCode} from ${i.from.code}`)).toEqual(['PARENT1 from ACME']);
+    await call('PUT', `/api/customers/${child}/inheritance`, { setting: 'inserts', mode: 'OWN' });
+    expect((await detail(child)).inheritedInserts).toEqual([]);
   });
 });

@@ -1,8 +1,8 @@
 import sql from 'mssql';
 import { ConflictError, NotFoundError, ValidationError } from '../errors.js';
-import { describeBecameCustomer, describeBecameSubAccount, describeDetailsChange, describeEnvelope, describeMode, describeLeftAsCustomer, describeMatchRules, describeSequenceRules, describeSubAccountOf, noChildCustomers } from './describe.js';
+import { describeBecameCustomer, describeBecameSubAccount, describeDetailsChange, describeEnvelope, describeInsert, describeInsertChange, describeMode, describeLeftAsCustomer, describeMatchRules, describeSequenceRules, describeSubAccountOf, noChildCustomers } from './describe.js';
 import {
-  FLAGS, SETTINGS, type AuditEntry, type ColourMode, type CustomerDetail, type CustomerDetailsInput, type CustomerRow, type CustomerStore, type EnvelopeInput, type InheritMode, type FlagKey, type InheritedEnvelopeView, type InheritedSettings, type Lookups, type MatchRule, type ParentView, type SequenceRule, type SettingKey, type Modes,
+  FLAGS, SETTINGS, marginOf, type AuditEntry, type InheritedInsertView, type InsertInput, type InsertView, type ColourMode, type CustomerDetail, type CustomerDetailsInput, type CustomerRow, type CustomerStore, type EnvelopeInput, type InheritMode, type FlagKey, type InheritedEnvelopeView, type InheritedSettings, type Lookups, type MatchRule, type ParentView, type SequenceRule, type SettingKey, type Modes,
 } from './types.js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -14,7 +14,7 @@ const FLAG_COLUMNS: Record<FlagKey, string> = {
   isUseMrdf: 'is_use_mrdf', isTesting: 'is_testing', isDeleted: 'is_deleted',
 };
 
-const MODE_COLUMNS: Record<SettingKey, string> = { envelopes: 'envelopes_mode', brands: 'brands_mode', matching: 'matching_mode', sequence: 'sequence_mode', emails: 'emails_mode' };
+const MODE_COLUMNS: Record<SettingKey, string> = { envelopes: 'envelopes_mode', brands: 'brands_mode', matching: 'matching_mode', sequence: 'sequence_mode', emails: 'emails_mode', inserts: 'inserts_mode' };
 const isDuplicate = (e: unknown): boolean => { const n = (e as { number?: number }).number; return n === 2627 || n === 2601; };
 const rateLabel = (r: R): string => `${r.provider} – ${r.service} (${r.format}), ${r.min_weight_g <= 1 ? 'up to ' : `${r.min_weight_g}–`}${r.max_weight_g}g`;
 
@@ -145,6 +145,7 @@ export class MssqlCustomerStore implements CustomerStore {
     if (!a) throw new NotFoundError('Customer not found');
     const flags = {} as Record<FlagKey, boolean>;
     for (const f of FLAGS) flags[f] = !!a[FLAG_COLUMNS[f]];
+    const { own: inserts, inherited: inheritedInserts } = await this.insertsOf(id);
     return {
       id: a.account_id, code: a.account_code, name: a.name, misJobNumber: a.mis_job_number, pendingJobNumber: a.pending_mis_job_number ?? null,
       jobNumberRolloverDay: a.job_number_rollover_day,
@@ -161,12 +162,136 @@ export class MssqlCustomerStore implements CustomerStore {
         stockItemId: r.outer_stock_item_id, stockCode: r.stock_code, stockDescription: r.description, reference: r.reference, externalName: r.external_name, isOversticker: !!r.is_oversticker,
       })),
       modes: Object.fromEntries(SETTINGS.map((k) => [k, a[MODE_COLUMNS[k]] as InheritMode])) as Modes,
+      inserts, inheritedInserts,
       inheritedEnvelopes: this.inherited(inheritedRows.recordset as R[], (envs.recordset as R[])),
       inherited: this.inheritedSettings(a, { brands: brands.recordset, match: match.recordset, seq: seq.recordset, emails: emails.recordset }, { brands: inhBrands.recordset, rules: inhRules.recordset, seq: inhSeq.recordset, emails: inhEmails.recordset, singles: inhSingles.recordset }),
       matchRules: (match.recordset as R[]).map((r) => ({ isInclude: !!r.is_include, key: r.name, value: r.passthrough_value })),
       sequenceRules: (seq.recordset as R[]).map((r) => ({ value: r.passthrough_value, number: r.sequence_number })),
       emails: (emails.recordset as R[]).map((r) => r.email),
     };
+  }
+
+  private static readonly INSERT_SELECT = `SELECT s.stock_item_id, s.stock_code, s.brand_id, b.name AS brand, s.reference, s.description, s.hpod_guid, s.insert_size_id, z.name AS size,
+      CAST(s.width_mm AS FLOAT) AS width_mm, CAST(s.height_mm AS FLOAT) AS height_mm, CAST(s.thickness_mm AS FLOAT) AS thickness_mm, CAST(s.weight_g AS FLOAT) AS weight_g,
+      s.is_chargeable, CAST(s.cost_price AS FLOAT) AS cost_price, CAST(s.sell_price AS FLOAT) AS sell_price, s.parent_stock_item_id, p.stock_code AS parent_code, p.description AS parent_description,
+      s.account_id AS owner_id`;
+  private static readonly INSERT_FROM = `FROM idoc.stock_item s LEFT JOIN idoc.brand b ON b.brand_id = s.brand_id LEFT JOIN idoc.insert_size z ON z.insert_size_id = s.insert_size_id
+      LEFT JOIN idoc.stock_item p ON p.stock_item_id = s.parent_stock_item_id`;
+
+  private insertView(r: R, linked: Map<number, number[]>): InsertView {
+    const num = (v: unknown): number | null => (v === null || v === undefined ? null : Number(v));
+    const cost = num(r.cost_price), sell = num(r.sell_price);
+    return {
+      id: r.stock_item_id, stockCode: r.stock_code, brandId: r.brand_id, brandName: r.brand, reference: r.reference, description: r.description,
+      hpodGuid: r.hpod_guid ? String(r.hpod_guid).toLowerCase() : null, insertSizeId: r.insert_size_id, sizeName: r.size, widthMm: num(r.width_mm), heightMm: num(r.height_mm),
+      thicknessMm: Number(r.thickness_mm), weightG: Number(r.weight_g), isChargeable: !!r.is_chargeable, costPrice: cost, sellPrice: sell, margin: marginOf(cost, sell),
+      linkedIds: linked.get(r.stock_item_id) ?? [], parent: r.parent_stock_item_id === null ? null : { id: r.parent_stock_item_id, stockCode: r.parent_code, description: r.parent_description },
+    };
+  }
+
+  /** This customer's own inserts, and the inserts of the parents that its inserts setting takes in (nearest first). */
+  private async insertsOf(id: number): Promise<{ own: InsertView[]; inherited: InheritedInsertView[] }> {
+    const [own, inh, kids] = await Promise.all([
+      this.pool.request().input('id', sql.Int, id).query(`${MssqlCustomerStore.INSERT_SELECT} ${MssqlCustomerStore.INSERT_FROM}
+        WHERE s.account_id = @id AND s.is_insert = 1 AND s.is_active = 1 ORDER BY b.name, s.stock_code`),
+      this.pool.request().input('id', sql.Int, id).query(`${MssqlCustomerStore.INSERT_SELECT}, sa.account_code AS from_code, sa.name AS from_name, src.depth
+        ${MssqlCustomerStore.INSERT_FROM} JOIN idoc.v_account_setting_source src ON src.source_account_id = s.account_id AND src.setting = N'inserts' JOIN idoc.account sa ON sa.account_id = s.account_id
+        WHERE src.account_id = @id AND src.source_account_id <> @id AND s.is_insert = 1 AND s.is_active = 1 ORDER BY src.depth, b.name, s.stock_code`),
+      this.pool.request().input('id', sql.Int, id).query(`SELECT c.parent_stock_item_id AS parent_id, c.stock_item_id AS child_id FROM idoc.stock_item c JOIN idoc.stock_item pr ON pr.stock_item_id = c.parent_stock_item_id
+        WHERE c.is_active = 1 AND c.is_insert = 1 AND (pr.account_id = @id OR pr.account_id IN (SELECT source_account_id FROM idoc.v_account_setting_source WHERE account_id = @id AND setting = N'inserts'))
+        ORDER BY c.stock_code`),
+    ]);
+    const linked = new Map<number, number[]>();
+    for (const k of kids.recordset as R[]) linked.set(k.parent_id, [...(linked.get(k.parent_id) ?? []), k.child_id]);
+    return {
+      own: (own.recordset as R[]).map((r) => this.insertView(r, linked)),
+      inherited: (inh.recordset as R[]).map((r) => ({ ...this.insertView(r, linked), from: { id: r.owner_id, code: r.from_code, name: r.from_name } })),
+    };
+  }
+
+  /** The brand and size must exist and belong where they should, the code and H-POD GUID must be unused, and each linked insert must be one of this customer's that is free to be linked. */
+  private async checkInsert(t: sql.Transaction, customerId: number, i: InsertInput, selfId: number | null): Promise<void> {
+    const errs: Record<string, string> = {};
+    if (i.brandId !== null && (await this.req(t).input('b', sql.Int, i.brandId).input('a', sql.Int, customerId).query('SELECT 1 AS x FROM idoc.brand WHERE brand_id = @b AND account_id = @a')).recordset.length === 0) errs['brandId'] = 'That brand does not belong to this customer';
+    if (i.insertSizeId !== null && (await this.req(t).input('z', sql.Int, i.insertSizeId).query('SELECT 1 AS x FROM idoc.insert_size WHERE insert_size_id = @z')).recordset.length === 0) errs['insertSizeId'] = 'Size not found';
+    if (Object.keys(errs).length) throw new ValidationError(errs);
+    const code = await this.req(t).input('c', sql.NVarChar(50), i.stockCode).input('s', sql.Int, selfId).query('SELECT 1 AS x FROM idoc.stock_item WHERE stock_code = @c AND (@s IS NULL OR stock_item_id <> @s)');
+    if (code.recordset.length) throw new ConflictError(`Stock code ${i.stockCode} is already in use`);
+    if (i.hpodGuid !== null) {
+      const g = await this.req(t).input('g', sql.UniqueIdentifier, i.hpodGuid).input('s', sql.Int, selfId).query('SELECT 1 AS x FROM idoc.stock_item WHERE hpod_guid = @g AND (@s IS NULL OR stock_item_id <> @s)');
+      if (g.recordset.length) throw new ConflictError('That H-POD GUID is already used by another insert');
+    }
+    if (i.linkedIds.length === 0) return;
+    const self = selfId === null ? null : ((await this.req(t).input('s', sql.Int, selfId).query('SELECT parent_stock_item_id FROM idoc.stock_item WHERE stock_item_id = @s')).recordset[0] as R | undefined) ?? null;
+    if (self && self.parent_stock_item_id !== null) throw new ValidationError({ linkedIds: 'This insert is itself linked under another insert, so it cannot have linked inserts of its own' });
+    for (const l of i.linkedIds) {
+      const c = (await this.req(t).input('l', sql.Int, l).query(`SELECT c.stock_code, c.account_id, c.parent_stock_item_id, c.is_insert, c.is_active,
+        (SELECT COUNT(*) FROM idoc.stock_item k WHERE k.parent_stock_item_id = c.stock_item_id AND k.is_active = 1) AS children FROM idoc.stock_item c WHERE c.stock_item_id = @l`)).recordset[0] as R | undefined;
+      if (!c || !c.is_insert || !c.is_active || c.account_id !== customerId || l === selfId) throw new ValidationError({ linkedIds: 'Linked inserts must be other inserts of this customer' });
+      if (c.children > 0) throw new ValidationError({ linkedIds: `${c.stock_code} has linked inserts of its own, so it cannot be linked under another` });
+      if (c.parent_stock_item_id !== null && c.parent_stock_item_id !== selfId) throw new ValidationError({ linkedIds: `${c.stock_code} is already linked under another insert` });
+    }
+  }
+  private async setLinks(t: sql.Transaction, parentId: number, ids: number[]): Promise<void> {
+    await this.req(t).input('p', sql.Int, parentId).query('UPDATE idoc.stock_item SET parent_stock_item_id = NULL WHERE parent_stock_item_id = @p');
+    for (const c of ids) await this.req(t).input('p', sql.Int, parentId).input('c', sql.Int, c).query('UPDATE idoc.stock_item SET parent_stock_item_id = @p WHERE stock_item_id = @c');
+  }
+  private insertInputs(r: sql.Request, i: InsertInput): sql.Request {
+    return r.input('b', sql.Int, i.brandId).input('code', sql.NVarChar(50), i.stockCode).input('ref', sql.NVarChar(200), i.reference).input('d', sql.NVarChar(300), i.description)
+      .input('g', sql.UniqueIdentifier, i.hpodGuid).input('z', sql.Int, i.insertSizeId).input('w', sql.Decimal(7, 2), i.widthMm).input('h', sql.Decimal(7, 2), i.heightMm)
+      .input('th', sql.Decimal(6, 2), i.thicknessMm).input('wt', sql.Decimal(8, 2), i.weightG).input('ch', sql.Bit, i.isChargeable)
+      .input('cost', sql.Decimal(10, 4), i.costPrice).input('sell', sql.Decimal(10, 4), i.sellPrice);
+  }
+
+  async addInsert(customerId: number, i: InsertInput, by: string): Promise<number> {
+    await this.mustBeCustomer(undefined, customerId);
+    return this.tx(async (t) => {
+      await this.checkInsert(t, customerId, i, null);
+      const id = (await this.insertInputs(this.req(t).input('a', sql.Int, customerId), i).query(
+        `INSERT INTO idoc.stock_item (account_id, brand_id, stock_code, reference, description, hpod_guid, insert_size_id, width_mm, height_mm, thickness_mm, weight_g, is_chargeable, cost_price, sell_price, is_insert)
+         OUTPUT INSERTED.stock_item_id AS id VALUES (@a, @b, @code, @ref, @d, @g, @z, @w, @h, @th, @wt, @ch, @cost, @sell, 1)`)).recordset[0].id as number;
+      await this.setLinks(t, id, i.linkedIds);
+      await this.audit(t, customerId, by, `Added insert: ${describeInsert(i)}`);
+      return id;
+    }, 'That stock code or H-POD GUID is already in use');
+  }
+
+  private async insertOwner(insertId: number): Promise<{ account: number; was: InsertInput; names: { brand: string | null; size: string | null } }> {
+    const r = (await this.pool.request().input('id', sql.Int, insertId).query(`${MssqlCustomerStore.INSERT_SELECT} ${MssqlCustomerStore.INSERT_FROM} WHERE s.stock_item_id = @id AND s.is_insert = 1 AND s.is_active = 1`)).recordset[0] as R | undefined;
+    if (!r) throw new NotFoundError('Insert not found');
+    const kids = (await this.pool.request().input('id', sql.Int, insertId).query('SELECT stock_item_id FROM idoc.stock_item WHERE parent_stock_item_id = @id AND is_active = 1 ORDER BY stock_item_id')).recordset as R[];
+    const v = this.insertView(r, new Map([[insertId, kids.map((k) => k.stock_item_id as number)]]));
+    return { account: r.owner_id, names: { brand: v.brandName, size: v.sizeName }, was: {
+      stockCode: v.stockCode ?? '', brandId: v.brandId, reference: v.reference, description: v.description, hpodGuid: v.hpodGuid, insertSizeId: v.insertSizeId, widthMm: v.widthMm, heightMm: v.heightMm,
+      thicknessMm: v.thicknessMm, weightG: v.weightG, isChargeable: v.isChargeable, costPrice: v.costPrice, sellPrice: v.sellPrice, linkedIds: v.linkedIds } };
+  }
+  private async namesOf(t: sql.Transaction, i: InsertInput): Promise<{ brand: string | null; size: string | null }> {
+    const r = (await this.req(t).input('b', sql.Int, i.brandId).input('z', sql.Int, i.insertSizeId).query(
+      'SELECT (SELECT name FROM idoc.brand WHERE brand_id = @b) AS brand, (SELECT name FROM idoc.insert_size WHERE insert_size_id = @z) AS size')).recordset[0] as R;
+    return { brand: r.brand, size: r.size };
+  }
+
+  async updateInsert(insertId: number, i: InsertInput, by: string): Promise<void> {
+    const cur = await this.insertOwner(insertId);
+    await this.tx(async (t) => {
+      await this.checkInsert(t, cur.account, i, insertId);
+      await this.insertInputs(this.req(t).input('id', sql.Int, insertId), i).query(
+        `UPDATE idoc.stock_item SET brand_id = @b, stock_code = @code, reference = @ref, description = @d, hpod_guid = @g, insert_size_id = @z, width_mm = @w, height_mm = @h,
+           thickness_mm = @th, weight_g = @wt, is_chargeable = @ch, cost_price = @cost, sell_price = @sell WHERE stock_item_id = @id`);
+      await this.setLinks(t, insertId, i.linkedIds);
+      const changes = describeInsertChange(cur.was, i, { was: cur.names, next: await this.namesOf(t, i) });
+      if (changes.length) await this.audit(t, cur.account, by, `Changed insert ${i.stockCode}: ${changes.join('; ')}`);
+    }, 'That stock code or H-POD GUID is already in use');
+  }
+
+  async deleteInsert(insertId: number, by: string): Promise<void> {
+    const cur = await this.insertOwner(insertId);
+    await this.tx(async (t) => {
+      // Retired, not deleted: jobs that used the insert keep it. Its links go with it.
+      await this.req(t).input('id', sql.Int, insertId).query('UPDATE idoc.stock_item SET is_active = 0, parent_stock_item_id = NULL WHERE stock_item_id = @id');
+      await this.req(t).input('id', sql.Int, insertId).query('UPDATE idoc.stock_item SET parent_stock_item_id = NULL WHERE parent_stock_item_id = @id');
+      await this.audit(t, cur.account, by, `Removed insert: ${describeInsert(cur.was)}`);
+    });
   }
 
   /** Parent envelope rows as views; a nearer entry, or this customer's own, with the same brand name, band, rate and reference replaces a further one. */
@@ -246,7 +371,7 @@ export class MssqlCustomerStore implements CustomerStore {
   }
 
   async lookups(): Promise<Lookups> {
-    const [keys, bands, rates, custs, stock] = await Promise.all([
+    const [keys, bands, rates, custs, stock, sizes] = await Promise.all([
       this.pool.request().query('SELECT name FROM idoc.passthrough_key ORDER BY name'),
       this.pool.request().query(`SELECT DISTINCT delivery_band FROM idoc.account_envelope WHERE is_deleted = 0 ORDER BY delivery_band`),
       this.pool.request().query(`SELECT r.postal_rate_id, pp.name AS provider, ps.name AS service, pf.name AS format, r.min_weight_g, r.max_weight_g
@@ -257,12 +382,14 @@ export class MssqlCustomerStore implements CustomerStore {
       this.pool.request().query('SELECT account_id, account_code, name FROM idoc.account WHERE inherits_settings = 0 AND is_deleted = 0 ORDER BY name'),
       this.pool.request().query(`SELECT s.stock_item_id, s.stock_code, s.description, z.code AS size FROM idoc.stock_item s LEFT JOIN idoc.envelope_size z ON z.envelope_size_id = s.envelope_size_id
         WHERE s.is_envelope = 1 AND s.is_active = 1 AND s.envelope_size_id IS NOT NULL ORDER BY s.description`),
+      this.pool.request().query('SELECT insert_size_id, name FROM idoc.insert_size ORDER BY name'),
     ]);
     return {
       passthroughKeys: (keys.recordset as R[]).map((r) => r.name),
       customers: (custs.recordset as R[]).map((r) => ({ id: r.account_id, code: r.account_code, name: r.name })),
       deliveryBands: [...new Set(['1st Class', '2nd Class', ...(bands.recordset as R[]).map((r) => r.delivery_band as string)])].sort(),
       postalRates: (rates.recordset as R[]).map((r) => ({ id: r.postal_rate_id, label: rateLabel(r), format: r.format })),
+      insertSizes: (sizes.recordset as R[]).map((r) => ({ id: r.insert_size_id, name: r.name })),
       envelopeStock: (stock.recordset as R[]).map((r) => ({ id: r.stock_item_id, code: r.stock_code, description: r.description, size: r.size })),
     };
   }

@@ -114,3 +114,18 @@ describe('anonymous addressees', () => {
     expect((await app.inject({ method: 'DELETE', url: '/api/reference/anonymous/NOBODY' })).statusCode).toBe(404);
   });
 });
+
+describe('insert sizes', () => {
+  it('lists, adds and removes sizes, and keeps a size that inserts use', async () => {
+    const list = async () => (await get('/api/reference/insert-sizes')).json().sizes as { id: number; name: string; usedBy: number }[];
+    expect((await list()).map((z) => z.name)).toEqual(['A4', 'DL']);
+    const added = await post('/api/reference/insert-sizes', { name: 'A5' });
+    expect(added.statusCode).toBe(201);
+    expect((await post('/api/reference/insert-sizes', { name: 'a5' })).statusCode).toBe(409);
+    expect((await post('/api/reference/insert-sizes', { name: ' ' })).statusCode).toBe(422);
+    expect((await app.inject({ method: 'DELETE', url: '/api/reference/insert-sizes/1' })).statusCode).toBe(409); // A4 is used
+    expect((await app.inject({ method: 'DELETE', url: `/api/reference/insert-sizes/${added.json().id}` })).statusCode).toBe(204);
+    expect((await list()).map((z) => z.name)).toEqual(['A4', 'DL']);
+    expect((await get('/api/reference/history')).json().rows.map((r: { summary: string }) => r.summary)).toEqual(expect.arrayContaining(['Insert size A5 added', 'Insert size A5 removed']));
+  });
+});

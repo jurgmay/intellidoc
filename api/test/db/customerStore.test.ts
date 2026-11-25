@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import sql from 'mssql';
 import { assertScratchDatabase, resetAndSeed } from '../../../ingest/src/mssql/devDb.js';
 import { MssqlCustomerStore } from '../../src/customers/mssqlStore.js';
-import { FLAGS, type EnvelopeInput } from '../../src/customers/types.js';
+import { FLAGS, type EnvelopeInput, type InsertInput } from '../../src/customers/types.js';
 import { ConflictError, NotFoundError, ValidationError } from '../../src/errors.js';
 
 /** Runs against the scratch database named in INTELLIDOC_TEST_DB. It DROPS and recreates the idoc schema. */
@@ -313,5 +313,40 @@ describe.skipIf(!cs)('MssqlCustomerStore', { timeout: 120_000 }, () => {
     await expect(store.updateDetails(id, { code: 'FEXCO_CUSTOMER', name: 'Atomic', misJobNumber: '1', pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, archiveCustomerTag: null, archiveProviderTag: null, archiveDirectoryTag: null, logo1: null, logo2: null, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId: null, flags: flags() }, 'tester')).rejects.toBeInstanceOf(ConflictError);
     expect((await store.history(id, 50)).length).toBe(before);
     expect((await store.get(id)).misJobNumber).toBeNull();
+  });
+  it('inserts: add, edit, link, retire and inherit, with the margin worked out and each change audited', async () => {
+    const sizeId = (await store.lookups()).insertSizes[0]!.id;
+    const ins = (over: Partial<InsertInput> = {}): InsertInput => ({ stockCode: 'INS-1', brandId: null, reference: null, description: 'Spring leaflet', hpodGuid: null, insertSizeId: sizeId, widthMm: 210, heightMm: 297, thicknessMm: 0.1, weightG: 5, isChargeable: true, costPrice: 0.04, sellPrice: 0.1, linkedIds: [], ...over });
+    const parent = await store.create({ code: 'INSPAR', name: 'Insert Parent' }, 'tester');
+    const id = await store.addInsert(parent, ins(), 'tester');
+    expect((await store.get(parent)).inserts[0]).toMatchObject({ id, stockCode: 'INS-1', margin: 0.06, sizeName: (await store.lookups()).insertSizes[0]!.name, isChargeable: true, linkedIds: [], parent: null });
+    await expect(store.addInsert(parent, ins(), 'tester')).rejects.toBeInstanceOf(ConflictError); // stock code in use
+    const guid = '3f2b8c1e-5d4a-4e7b-9a10-2c6d8e0f1a23';
+    const reply = await store.addInsert(parent, ins({ stockCode: 'INS-2', description: 'Reply envelope', hpodGuid: guid }), 'tester');
+    await expect(store.addInsert(parent, ins({ stockCode: 'INS-3', hpodGuid: guid.toUpperCase() }), 'tester')).rejects.toBeInstanceOf(ConflictError);
+    await store.updateInsert(id, ins({ sellPrice: 0.12, linkedIds: [reply] }), 'tester');
+    const rows = (await store.get(parent)).inserts;
+    expect(rows.find((r) => r.id === id)).toMatchObject({ margin: 0.08, linkedIds: [reply] });
+    expect(rows.find((r) => r.id === reply)).toMatchObject({ hpodGuid: guid, parent: { id, stockCode: 'INS-1' } });
+    await expect(store.updateInsert(reply, ins({ stockCode: 'INS-2', linkedIds: [id] }), 'tester')).rejects.toBeInstanceOf(ValidationError); // a linked insert cannot have links of its own
+    // a child customer that extends its parent's inserts sees them read only; its own are separate
+    const child = await store.create({ code: 'INSCHILD', name: 'Insert Child' }, 'tester');
+    const input = (code: string, name: string, parentId: number | null) => ({ code, name, misJobNumber: null, pendingJobNumber: null, jobNumberRolloverDay: 1, invoicingAccountId: null, archiveCustomerTag: null, archiveProviderTag: null, archiveDirectoryTag: null, logo1: null, logo2: null, returnAddress: null, colourMode: 'ORIGINAL' as const, batchingKey: null, packSequenceKey: null, parentId, flags: flags({ isAddressMatching: true }) });
+    await store.updateDetails(child, input('INSCHILD', 'Insert Child', parent), 'tester');
+    expect((await store.get(child)).inheritedInserts).toEqual([]);
+    await store.setMode(child, 'inserts', 'EXTEND', 'tester');
+    await store.addInsert(child, ins({ stockCode: 'INS-OWN', description: 'Own leaflet' }), 'tester');
+    const kid = await store.get(child);
+    expect(kid.inserts.map((r) => r.stockCode)).toEqual(['INS-OWN']);
+    expect(kid.inheritedInserts.map((r) => `${r.stockCode} from ${r.from.code}`).sort()).toEqual(['INS-1 from INSPAR', 'INS-2 from INSPAR']);
+    expect(kid.inheritedInserts.find((r) => r.stockCode === 'INS-1')!.linkedIds).toEqual([reply]);
+    await expect(store.updateInsert(id, ins({ linkedIds: [(await store.get(child)).inserts[0]!.id] }), 'tester')).rejects.toBeInstanceOf(ValidationError); // another customer's insert
+    await store.deleteInsert(id, 'tester');
+    const after = (await store.get(parent)).inserts;
+    expect(after.map((r) => r.id)).toEqual([reply]);
+    expect(after[0]!.parent).toBeNull();
+    const lines = (await store.history(parent, 20)).map((h) => h.summary);
+    expect(lines).toEqual(expect.arrayContaining(['Added insert: INS-1 – Spring leaflet', 'Removed insert: INS-1 – Spring leaflet']));
+    await expect(store.deleteInsert(id, 'tester')).rejects.toBeInstanceOf(NotFoundError);
   });
 });

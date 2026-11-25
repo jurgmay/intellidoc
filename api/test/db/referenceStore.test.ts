@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import sql from 'mssql';
 import { assertScratchDatabase, resetAndSeed } from '../../../ingest/src/mssql/devDb.js';
 import { MssqlReferenceStore } from '../../src/reference/mssqlStore.js';
+import { ConflictError, NotFoundError } from '../../src/errors.js';
 
 /** Runs against the scratch database named in INTELLIDOC_TEST_DB. It DROPS and recreates the idoc schema. */
 const cs = process.env['INTELLIDOC_TEST_DB'];
@@ -56,5 +57,15 @@ describe.skipIf(!cs)('MssqlReferenceStore', { timeout: 120_000 }, () => {
     await store.deleteAnonymous('THEGUARDIAN', 'sam');
     await expect(store.deleteAnonymous('THEGUARDIAN', 'sam')).rejects.toThrow(/Not on the list/);
     expect(await store.anonymous()).not.toContain('THEGUARDIAN');
+  });
+  it('insert sizes: seeded list, add, refuse a duplicate, remove, and audit', async () => {
+    expect((await store.insertSizes()).map((z) => z.name)).toEqual(expect.arrayContaining(['A3', 'A4', 'A5', 'DL']));
+    const z = await store.addInsertSize('Square 150', 'tester');
+    await expect(store.addInsertSize('square 150', 'tester')).rejects.toBeInstanceOf(ConflictError);
+    await store.deleteInsertSize(z.id, 'tester');
+    expect((await store.insertSizes()).map((x) => x.name)).not.toContain('Square 150');
+    const lines = (await store.history(10)).map((h) => h.summary);
+    expect(lines).toEqual(expect.arrayContaining(['Insert size Square 150 added', 'Insert size Square 150 removed']));
+    await expect(store.deleteInsertSize(z.id, 'tester')).rejects.toBeInstanceOf(NotFoundError);
   });
 });

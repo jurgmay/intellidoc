@@ -1,6 +1,6 @@
 import { ValidationError } from '../errors.js';
 import { parseEmails } from '../settings/catalogue.js';
-import { COLOUR_MODES, INHERIT_MODES, SETTINGS, type InheritMode, type SettingKey, FLAGS, type ColourMode, type CustomerDetailsInput, type EnvelopeInput, type FlagKey, type MatchRule, type SequenceRule } from './types.js';
+import { COLOUR_MODES, INHERIT_MODES, SETTINGS, type InheritMode, type SettingKey, FLAGS, type ColourMode, type CustomerDetailsInput, type EnvelopeInput, type InsertInput, type FlagKey, type MatchRule, type SequenceRule } from './types.js';
 
 const EMAIL = /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/;
 type Body = Record<string, unknown> | null | undefined;
@@ -156,4 +156,39 @@ export function parseEmailList(body: Body): string[] {
   if (bad.length) throw new ValidationError({ emails: `Not an e-mail address: ${bad.join(', ')}` });
   const seen = new Set<string>();
   return all.filter((e) => { const k = e.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
+const GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function parseInsert(body: Body): InsertInput {
+  const errs: Record<string, string> = {};
+  const stockCode = text(errs, body, 'stockCode', 'Stock code', 50, true);
+  const description = text(errs, body, 'description', 'Description', 300, true);
+  const reference = text(errs, body, 'reference', 'Reference', 200, false);
+  let hpodGuid = text(errs, body, 'hpodGuid', 'H-POD GUID', 36, false);
+  if (hpodGuid !== null && !GUID.test(hpodGuid)) { errs['hpodGuid'] = 'H-POD GUID must look like 3f2b8c1e-5d4a-4e7b-9a10-2c6d8e0f1a23'; hpodGuid = null; }
+  const id = (field: string, label: string): number | null => {
+    const v = body?.[field];
+    if (v === null || v === undefined) return null;
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < 1) { errs[field] = `${label} is not valid`; return null; }
+    return v;
+  };
+  const num = (field: string, label: string, max: number, dp: number, required: boolean): number | null => {
+    const v = body?.[field];
+    if (v === null || v === undefined || v === '') { if (required) errs[field] = `${label} is required`; return null; }
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > max) { errs[field] = `${label} must be a number from 0 to ${max}`; return null; }
+    return Math.round(v * 10 ** dp) / 10 ** dp;
+  };
+  const brandId = id('brandId', 'Brand'); const insertSizeId = id('insertSizeId', 'Size');
+  const widthMm = num('widthMm', 'Width', 9999, 2, false); const heightMm = num('heightMm', 'Height', 9999, 2, false);
+  const thicknessMm = num('thicknessMm', 'Thickness', 9999, 2, true); const weightG = num('weightG', 'Weight', 999999, 2, true);
+  const costPrice = num('costPrice', 'Cost', 999999, 4, false); const sellPrice = num('sellPrice', 'Sell price', 999999, 4, false);
+  const chargeable = body?.['isChargeable'];
+  if (typeof chargeable !== 'boolean') errs['isChargeable'] = 'Chargeable must be yes or no';
+  const linked = body?.['linkedIds'] ?? [];
+  let linkedIds: number[] = [];
+  if (!Array.isArray(linked) || linked.some((x) => typeof x !== 'number' || !Number.isInteger(x) || x < 1)) errs['linkedIds'] = 'Linked inserts are not valid';
+  else linkedIds = [...new Set(linked as number[])];
+  done(errs);
+  return { stockCode: stockCode!, brandId, reference, description: description!, hpodGuid: hpodGuid ? hpodGuid.toLowerCase() : null, insertSizeId, widthMm, heightMm, thicknessMm: thicknessMm!, weightG: weightG!, isChargeable: chargeable as boolean, costPrice, sellPrice, linkedIds };
 }
