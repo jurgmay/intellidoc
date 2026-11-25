@@ -24,17 +24,22 @@ const HEADER = (when: Date) => `-- Your Settings values. Applied after the schem
 -- This file is not in git. Values are the same units as the Settings page (mm, pt, minutes, ...).
 `;
 
-/** The UPDATE for one idoc.settings row (the row read with SELECT *), every column but settings_id, in column order. */
-export function settingsSql(row: Record<string, unknown>, when: Date = new Date()): string {
+/** The UPDATE for one idoc.settings row (the row read with SELECT *), every column but settings_id, in column order; with `nextBatchCode`, also the batch code the next batch will take. */
+export function settingsSql(row: Record<string, unknown>, when: Date = new Date(), nextBatchCode?: number): string {
   const cols = Object.keys(row).filter((c) => c !== 'settings_id');
   if (!cols.length) throw new Error('The settings row has no columns');
-  return `${HEADER(when)}UPDATE idoc.settings SET\n${cols.map((c) => `    ${c} = ${sqlLiteral(row[c])}`).join(',\n')}\nWHERE settings_id = 1;\n`;
+  return `${HEADER(when)}UPDATE idoc.settings SET\n${cols.map((c) => `    ${c} = ${sqlLiteral(row[c])}`).join(',\n')}\nWHERE settings_id = 1;\n${nextBatchCode === undefined ? '' : `\n-- The next batch code. Change the number to make a rebuilt database start batches there.\nALTER SEQUENCE idoc.batch_code_seq RESTART WITH ${Math.floor(nextBatchCode)};\n`}`;
 }
 
 export async function exportSettingsSql(pool: sql.ConnectionPool, when?: Date): Promise<string> {
   const row = (await pool.request().query('SELECT * FROM idoc.settings WHERE settings_id = 1')).recordset[0] as Record<string, unknown> | undefined;
   if (!row) throw new Error('idoc.settings has no row');
-  return settingsSql(row, when);
+  // The next batch code: the sequence's current value when it is ahead of every batch (it was set, or none exists), otherwise one more than the highest batch
+  const seq = (await pool.request().query(`SELECT CAST(current_value AS BIGINT) AS v FROM sys.sequences WHERE name = N'batch_code_seq' AND schema_id = SCHEMA_ID(N'idoc')`)).recordset[0] as { v: number | string } | undefined;
+  const max = (await pool.request().query('SELECT MAX(batch_code) AS m FROM idoc.batch')).recordset[0].m as number | string | null;
+  const cur = seq ? Number(seq.v) : null, top = max === null ? null : Number(max);
+  const next = top === null ? cur : cur !== null && cur > top ? cur : top + 1;
+  return settingsSql(row, when, next ?? undefined);
 }
 
 /** Runs the file's SQL. A column the schema does not have is reported with what to do about it. */
