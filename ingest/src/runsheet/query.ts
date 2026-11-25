@@ -1,5 +1,5 @@
 import sql from 'mssql';
-import type { RunSheetInput } from './data.js';
+import { withLinkedInserts, type RunSheetInput } from './data.js';
 
 /** Loads one RunSheetInput per batch of a job, in batch code order. Read-only. */
 export async function loadRunSheetInputs(pool: sql.ConnectionPool, jobId: number): Promise<RunSheetInput[]> {
@@ -42,6 +42,14 @@ export async function loadRunSheetInputs(pool: sql.ConnectionPool, jobId: number
       SELECT si.stock_code, si.description, bi.quantity
       FROM idoc.batch_insert AS bi INNER JOIN idoc.stock_item AS si ON si.stock_item_id = bi.stock_item_id
       WHERE bi.batch_id = @b ORDER BY si.stock_code`)).recordset;
+    // The inserts linked to those used are listed with them
+    const links = (await pool.request().input('b', sql.BigInt, b.batch_id).query<{ parent_code: string; stock_code: string; description: string }>(`
+      SELECT p.stock_code AS parent_code, c.stock_code, c.description
+      FROM idoc.batch_insert AS bi INNER JOIN idoc.stock_item AS p ON p.stock_item_id = bi.stock_item_id
+      INNER JOIN idoc.stock_item AS c ON c.parent_stock_item_id = p.stock_item_id
+      WHERE bi.batch_id = @b AND p.stock_code IS NOT NULL AND c.stock_code IS NOT NULL`)).recordset;
+    const linked = new Map<string, { code: string; description: string }[]>();
+    for (const l of links) linked.set(l.parent_code, [...(linked.get(l.parent_code) ?? []), { code: l.stock_code, description: l.description }]);
     out.push({
       batchCode: b.batch_code, brand: b.brand_name, batchNumber: idx + 1, batchTotal: batches.length,
       jobNumber: b.mis_job_number ?? '',
@@ -55,7 +63,7 @@ export async function loadRunSheetInputs(pool: sql.ConnectionPool, jobId: number
       department: b.department,
       envelopeCode: b.envelope_code ?? '',
       envelopeDescription: b.envelope_description,
-      inserts: inserts.map((i) => ({ code: i.stock_code ?? '', description: i.description, quantity: i.quantity })),
+      inserts: withLinkedInserts(inserts.map((i) => ({ code: i.stock_code ?? '', description: i.description, quantity: i.quantity })), linked),
       postalProvider: b.provider_name,
       postalServiceName: b.service_name,
       serviceCode: b.service_code,
