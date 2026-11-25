@@ -23,6 +23,8 @@ export interface ComposeJobOptions {
   /** Where the customer's PDF is: the watcher's processed folder (it puts a prefix on the name, so the file is found by the end of its name). */
   pdfDir: string;
   outDir: string;
+  /** Check the PDF is filed before starting, throwing PdfNotFiledError without recording an Activity row (the automatic composer uses this). */
+  waitForPdf?: boolean;
   /** Where the MRDF files (<batchCode>.txt) go: the inserter's input folder. Without it no MRDF file is made, but the page codes are still printed. */
   mrdfDir?: string;
   logo?: Uint8Array;
@@ -56,7 +58,7 @@ export interface ComposedBatch { batchCode: number; files: string[]; mrdfFile?: 
 export async function findSourcePdf(dir: string, name: string): Promise<string> {
   const lower = name.toLowerCase();
   const hits = (await readdir(dir)).filter((f) => { const l = f.toLowerCase(); return l === lower || (l.endsWith(`_${lower}`) && /^\d{14}(-\d+)?$/.test(l.slice(0, l.length - lower.length - 1))); });
-  if (!hits.length) throw new Error(`The PDF "${name}" is not in ${dir}`);
+  if (!hits.length) throw new PdfNotFiledError(`The PDF "${name}" is not in ${dir}`);
   const withTime = await Promise.all(hits.map(async (f) => ({ f, t: (await stat(join(dir, f))).mtimeMs })));
   return join(dir, withTime.sort((a, b) => b.t - a.t)[0]!.f);
 }
@@ -70,10 +72,15 @@ export function printFileName(runSheetName: string, segment: number, segments: n
   return `${runSheetName.replace(/\.pdf$/i, '')} - Segment ${segment} of ${segments}.pdf`;
 }
 
+/** The job's PDF is not in the processed folder (yet). The watcher files the PDF just after it records the job, so this can be momentary. */
+export class PdfNotFiledError extends Error {}
+
 /** Composes the print file(s) of every batch of a job that is still Created. Safe to run again: it replaces its own files and records. */
 export async function composeJob(o: ComposeJobOptions): Promise<ComposedBatch[]> {
   const log = o.activity ?? noActivity;
   const job = await loadJobToCompose(o.pool, o.jobId);
+  // Asked to wait for a PDF that is not filed yet: say so before an Activity row is started, so nothing shows as Failed.
+  if (o.waitForPdf) await findSourcePdf(o.pdfDir, job.pdfFileName);
   const todo = job.batches.filter((b) => b.status === 'Created').length;
   // The bar counts mailpieces, so a batch of thousands is as long as it should be next to one of a few.
   const pieces = job.batches.filter((b) => b.status === 'Created').reduce((t, b) => t + b.mailpieces.length, 0);

@@ -4,10 +4,10 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type sql from 'mssql';
 import { AutoComposer } from '../src/compose/auto.js';
-import { findSourcePdf } from '../src/compose/job.js';
+import { findSourcePdf, PdfNotFiledError } from '../src/compose/job.js';
 import { loadConfig } from '../src/watcher/config.js';
 
-const make = (o: { enabled?: boolean; jobs?: number[]; compose?: (id: number) => Promise<{ batchCode: number; files: string[] }[]> }) => {
+const make = (o: { enabled?: boolean; jobs?: number[]; compose?: (id: number, wait: boolean) => Promise<{ batchCode: number; files: string[] }[]> }) => {
   const clock = { t: 0 };
   const logs: string[] = [], mails: string[] = [], composed: number[] = [];
   const c = new AutoComposer({
@@ -47,6 +47,26 @@ describe('AutoComposer', () => {
   });
   it('one failing job does not stop the next', async () => {
     const t = make({ jobs: [1, 2], compose: async (id) => { if (id === 1) throw new Error('boom'); return [{ batchCode: 2, files: ['x.pdf'] }]; } });
+    expect(await t.c.run()).toBe(1);
+  });
+});
+
+describe('AutoComposer waiting for the PDF', () => {
+  it('stays quiet while the PDF is not filed, then reports it after five minutes', async () => {
+    const waits: boolean[] = [];
+    const t = make({ compose: async (_id, wait) => { waits.push(wait); throw new PdfNotFiledError('The PDF "a.pdf" is not in x'); } });
+    await t.c.run(); t.clock.t = 60_000; await t.c.run();
+    expect(t.logs).toEqual([]);
+    t.clock.t = 5 * 60_000; await t.c.run();
+    expect(waits).toEqual([true, true, false]);
+    expect(t.logs).toHaveLength(1);
+    expect(t.logs[0]).toContain('not in');
+  });
+  it('composes as soon as the PDF turns up', async () => {
+    let filed = false;
+    const t = make({ compose: async (_id, _w) => { if (!filed) throw new PdfNotFiledError('x'); return [{ batchCode: 1, files: ['a.pdf'] }]; } });
+    expect(await t.c.run()).toBe(0);
+    filed = true; t.clock.t = 60_000;
     expect(await t.c.run()).toBe(1);
   });
 });
