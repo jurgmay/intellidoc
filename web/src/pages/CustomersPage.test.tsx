@@ -602,6 +602,30 @@ describe('Inheritance of brands, matching, pack order and e-mails', () => {
     await waitFor(() => expect(calls.find((c) => c.url === '/api/customers/7/inheritance')?.body).toEqual({ setting: 'sequence', mode: 'INHERIT' }));
   });
 
+  it('matching tab: Batching comes first with only the batching key; the pack sequence key sits in Pack sequencing', async () => {
+    withParent();
+    wrap('/customers/7');
+    await userEvent.click(await screen.findByRole('tab', { name: /Matching/ }));
+    await screen.findByRole('heading', { name: 'Batching' });
+    const titles = screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent);
+    expect(titles).toEqual(['Batching', 'Address matching', 'Matching rules', 'Pack sequencing']);
+    const group = (name: string) => screen.getByRole('heading', { name }).closest('.mantine-Paper-root') as HTMLElement;
+    expect(within(group('Batching')).getByRole('combobox', { name: 'Batching key' })).toBeInTheDocument();
+    expect(within(group('Batching')).queryByRole('combobox', { name: 'Pack sequence key' })).toBeNull();
+    expect(within(group('Pack sequencing')).getByRole('combobox', { name: 'Pack sequence key' })).toBeInTheDocument();
+    expect(within(group('Pack sequencing')).queryByRole('combobox', { name: 'Batching key' })).toBeNull();
+  });
+
+  it('matching tab: each key saves on its own, leaving the other as it was', async () => {
+    withParent();
+    wrap('/customers/7');
+    await userEvent.click(await screen.findByRole('tab', { name: /Matching/ }));
+    const group = (name: string) => screen.getByRole('heading', { name }).closest('.mantine-Paper-root') as HTMLElement;
+    await userEvent.type(within(group('Pack sequencing')).getByRole('combobox', { name: 'Pack sequence key' }), 'Priority');
+    await userEvent.click(within(group('Pack sequencing')).getByRole('button', { name: 'Save key' }));
+    await waitFor(() => expect(calls.find((c) => c.url === '/api/customers/7' && c.method === 'PUT')?.body).toMatchObject({ packSequenceKey: 'Priority', batchingKey: detail().batchingKey }));
+  });
+
   it('notification e-mails: shows the parent’s addresses and locks the box while the parent’s list is used', async () => {
     withParent({ modes: modes({ emails: 'INHERIT' }), inherited: { ...detail().inherited, emails: [{ email: 'ops@odevo.example', from: odevo }] } });
     wrap('/customers/7');
