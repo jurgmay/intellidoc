@@ -62,13 +62,12 @@ export function ActivityPage({ refreshMs }: { refreshMs?: number }) {
       {(
         <Paper withBorder>
           <Table highlightOnHover>
-            <Table.Thead><Table.Tr><Table.Th data-min-width={180} ta="center" style={{ whiteSpace: 'nowrap' }}>Status</Table.Th><Table.Th data-min-width={300}>Account</Table.Th><Table.Th data-min-width={128} ta="center" style={{ whiteSpace: 'nowrap' }}>PDF</Table.Th><Table.Th>Progress</Table.Th><Table.Th ta="center" style={{ whiteSpace: 'nowrap' }}>Start time</Table.Th><Table.Th ta="center" style={{ whiteSpace: 'nowrap' }}>End time</Table.Th><Table.Th ta="center">Duration</Table.Th></Table.Tr></Table.Thead>
+            <Table.Thead><Table.Tr><Table.Th data-min-width={180} ta="center" style={{ whiteSpace: 'nowrap' }}>Status</Table.Th><Table.Th data-min-width={300}>Account</Table.Th><Table.Th>Progress</Table.Th><Table.Th ta="center" style={{ whiteSpace: 'nowrap' }}>Start time</Table.Th><Table.Th ta="center" style={{ whiteSpace: 'nowrap' }}>End time</Table.Th><Table.Th ta="center">Duration</Table.Th></Table.Tr></Table.Thead>
             <Table.Tbody>
               {lines.map((l) => (
                 <Table.Tr key={l.key}>
                   <Table.Td ta="center" style={{ whiteSpace: 'nowrap' }}><Badge color={COLOUR[l.stage]} variant={l.stage === 'Completed' ? 'light' : 'filled'} styles={BADGE_FULL}>{l.stage}</Badge></Table.Td>
                   <Table.Td>{l.account}</Table.Td>
-                  <Table.Td ta="center" style={{ whiteSpace: 'nowrap' }}>{l.pdf === 'arrived' ? <Badge color="green" variant="light" styles={BADGE_FULL}>Arrived</Badge> : l.pdf === 'waiting' ? <Badge color="yellow" variant="light" styles={BADGE_FULL}>Not yet</Badge> : ''}</Table.Td>
                   <Table.Td miw={260}>
                     {l.progress && <Progress value={l.progress.total ? (l.progress.done / l.progress.total) * 100 : 0} mb={4} animated aria-label={`${l.progress.done} of ${l.progress.total} ${l.progress.unit}`} />}
                     {!l.progress && (l.stage === 'Processing' || l.stage === 'Making print files') && !l.stalled && <Progress value={100} animated mb={4} />}
@@ -80,8 +79,8 @@ export function ActivityPage({ refreshMs }: { refreshMs?: number }) {
                   <Table.Td ta="center" style={{ whiteSpace: 'nowrap' }}>{durationText(l, now)}</Table.Td>
                 </Table.Tr>
               ))}
-              {!data && !error && <Table.Tr><Table.Td colSpan={7}><Group justify="center" gap="xs" py="md" role="status"><Loader size="sm" /><Text c="dimmed">Loading…</Text></Group></Table.Td></Table.Tr>}
-              {data && lines.length === 0 && <Table.Tr><Table.Td colSpan={7}><Text c="dimmed" ta="center">Nothing in the inbox and nothing running.</Text></Table.Td></Table.Tr>}
+              {!data && !error && <Table.Tr><Table.Td colSpan={6}><Group justify="center" gap="xs" py="md" role="status"><Loader size="sm" /><Text c="dimmed">Loading…</Text></Group></Table.Td></Table.Tr>}
+              {data && lines.length === 0 && <Table.Tr><Table.Td colSpan={6}><Text c="dimmed" ta="center">Nothing in the inbox and nothing running.</Text></Table.Td></Table.Tr>}
             </Table.Tbody>
           </Table>
         </Paper>

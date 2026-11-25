@@ -27,8 +27,8 @@ describe('buildLines', () => {
     expect(l.map((x) => `${x.stage}:${x.name}`)).toEqual(['Making print files:j7.pdf', 'Processing:a.xml', 'Waiting:small.xml', 'Waiting:big.xml', 'Awaiting PDF:j2.pdf',
       'Failed:bad.xml', 'Failed:j4.pdf', 'Completed:j3.pdf', 'Completed:j1.pdf']);
     expect(l[0]!.progress).toEqual({ done: 120, total: 5000, unit: 'mailpieces' });
-    expect(l[2]).toMatchObject({ pdf: 'arrived', bytes: 10 });
-    expect(l[3]).toMatchObject({ pdf: 'waiting' });
+    expect(l[2]).toMatchObject({ detail: 'Ready.', bytes: 10 });
+    expect(l[3]).toMatchObject({ detail: 'Waiting for the PDF.' });
     expect(l[7]!.detail).toMatch(/^Waiting to create print files\./);
     expect(l[8]!.detail).toMatch(/^Print files created\./);
   });
@@ -195,9 +195,9 @@ describe('ActivityPage', () => {
     show();
     await screen.findByText('a.xml');   // the table is there from the start; wait for its first rows
     const ra = (await screen.findAllByRole('row')).find((r) => within(r).queryByText('a.xml'))!;
-    expect(within(ra).getByText('Arrived')).toBeInTheDocument(); expect(within(ra).queryByText('2 KB')).toBeNull();
+    expect(within(ra).getByText('Ready.')).toBeInTheDocument(); expect(within(ra).queryByText('2 KB')).toBeNull();
     const rb = (await screen.findAllByRole('row')).find((r) => within(r).queryByText('b.xml'))!;
-    expect(within(rb).getByText('Not yet')).toBeInTheDocument();
+    expect(within(rb).getByText('Waiting for the PDF.')).toBeInTheDocument(); expect(screen.queryByRole('columnheader', { name: 'PDF' })).toBeNull();
     expect(await screen.findByText(/Processing batch 1 of 4\. Built file 2 of 3/)).toBeInTheDocument();
     expect(screen.getByRole('progressbar', { name: '300 of 9000 mailpieces' })).toBeInTheDocument();
   });
