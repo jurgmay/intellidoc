@@ -34,6 +34,14 @@ describe('GET /api/activity', () => {
     settings.values.activityRowsShown = 45;
     expect((await app.inject({ method: 'GET', url: '/api/activity' })).json().recent).toHaveLength(45);
   });
+  it('keeps the rows that give a listed job its times even when they are older than the rows shown', async () => {
+    jobs.jobs = [{ id: 9, baseName: 'old-job', status: 'Received' } as never];
+    store.rows = [row(1, { label: 'old-job.xml' }), ...Array.from({ length: 40 }, (_, i) => row(i + 2, { label: `other${i}.xml` }))];
+    const ids = (await app.inject({ method: 'GET', url: '/api/activity' })).json().recent.map((r: { id: number }) => r.id);
+    expect(ids).toHaveLength(31);
+    expect(ids).toContain(1); // the old import row is kept for the listed job; the other old rows are not
+    expect(ids).not.toContain(5);
+  });
   it('returns the inbox, what is running, what finished lately and the newest jobs', async () => {
     inbox.items = [{ stem: 'a', xmlName: 'a.xml', xmlBytes: 10, pdfName: null, pdfBytes: null, modifiedAt: '2026-11-22T21:00:00.000Z' }];
     store.rows = [row(1), row(2, { kind: 'Print files', state: 'Running', detail: 'Batch 7 (1 of 3): file 2 of 5 built', done: 0, total: 3 }), row(3, { state: 'Failed', detail: 'Bad XML' })];
