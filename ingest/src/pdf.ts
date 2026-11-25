@@ -16,10 +16,10 @@ export interface PdfInspector {
 /** Reads the page colours in-process, which needs no external tool. */
 async function inkOf(path: string, progress?: Progress): Promise<PageInk[]> {
   const { readFile } = await import('node:fs/promises');
-  progress?.(0, null, 'Reading the PDF');
+  progress?.(0, null, 'Loading the PDF');
   const bytes = await readFile(path);
-  progress?.(0, null, 'Opening the PDF');
-  return analysePageInk(bytes, (done, total) => progress?.(done, total, `Checking the colour of page ${done.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')}`));
+  progress?.(0, null, 'Reading the PDF');
+  return analysePageInk(bytes, (done, total) => progress?.(done, total, `Inspecting page ${done.toLocaleString('en-GB')} of ${total.toLocaleString('en-GB')}`));
 }
 
 export class CliPdfInspector implements PdfInspector {

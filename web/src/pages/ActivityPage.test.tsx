@@ -113,7 +113,7 @@ describe('accounts and file names', () => {
 describe('PDF check progress and estimates', () => {
   it('shows pages for an import or PDF check, with the time left, and the estimate for each waiting file', () => {
     const l = buildLines(data({
-      running: [act(1, { kind: 'PDF check', state: 'Running', label: 'big.pdf', detail: 'Checking the colour of page 1,200 of 54,000', done: 1200, total: 54000, remainingSeconds: 540 })],
+      running: [act(1, { kind: 'PDF check', state: 'Running', label: 'big.pdf', detail: 'Inspecting page 1,200 of 54,000', done: 1200, total: 54000, remainingSeconds: 540 })],
       inbox: [{ stem: 'a', xmlName: 'a.xml', xmlBytes: 1, pdfName: 'a.pdf', pdfBytes: 1, modifiedAt: '2026-11-22T21:00:00.000Z', estimateSeconds: 95 }] }), NOW);
     expect(l[0]).toMatchObject({ stage: 'Processing', progress: { done: 1200, total: 54000, unit: 'pages' }, seconds: 540 });
     expect(l[1]).toMatchObject({ stage: 'Waiting', seconds: 95 });
@@ -167,12 +167,12 @@ describe('ActivityPage first load', () => {
 describe('ActivityPage estimates', () => {
   it('shows how long the inbox should take, and what is left of the file being checked', async () => {
     current = data({ queue: { basedOn: 40, seconds: 840, partial: false },
-      running: [act(1, { kind: 'PDF check', state: 'Running', label: 'big.pdf', detail: 'Checking the colour of page 1,200 of 54,000', done: 1200, total: 54000, remainingSeconds: 540 })],
+      running: [act(1, { kind: 'PDF check', state: 'Running', label: 'big.pdf', detail: 'Inspecting page 1,200 of 54,000', done: 1200, total: 54000, remainingSeconds: 540 })],
       inbox: [{ stem: 'a', xmlName: 'a.xml', xmlBytes: 1, pdfName: 'a.pdf', pdfBytes: 1, modifiedAt: new Date().toISOString(), estimateSeconds: 95 }] });
     show();
     expect(await screen.findByText('14 min')).toBeInTheDocument();
     expect(screen.getByText(/from the last 40 imports and PDF checks/)).toBeInTheDocument();
-    expect(screen.getByText('Checking the colour of page 1,200 of 54,000')).toBeInTheDocument();
+    expect(screen.getByText('Inspecting page 1,200 of 54,000')).toBeInTheDocument();
     expect(screen.getByRole('progressbar', { name: '1200 of 54000 pages' })).toBeInTheDocument();
     expect(screen.getByText(/about 9 min left/)).toBeInTheDocument();
     expect(screen.getByText(/\(about 2 min\)/)).toBeInTheDocument();

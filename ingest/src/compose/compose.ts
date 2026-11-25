@@ -57,8 +57,8 @@ export async function composeBatch(input: ComposeInput): Promise<ComposedFile[]>
 
   // Greyscale: one conversion for the whole batch
   const say = input.onProgress ?? (() => undefined);
-  say(0, 'opening the PDF');
-  const toGrey = await colourPagesToGrey(input.source, input.plan, (d, t) => say(0.2 * (d / t), `checking the colour of page ${d.toLocaleString('en-GB')} of ${t.toLocaleString('en-GB')}`));
+  say(0, 'reading the PDF');
+  const toGrey = await colourPagesToGrey(input.source, input.plan, (d, t) => say(0.2 * (d / t), `inspecting page ${d.toLocaleString('en-GB')} of ${t.toLocaleString('en-GB')}`));
   say(0.2, 'checked the colour of the pages');
   let greyDoc: PDFDocument | null = null;
   const greyIndex = new Map<number, number>();
