@@ -10,6 +10,8 @@ export interface ActivityLine {
   /** When a file arrived or a job started waiting (ISO), for how long it has been waiting; null when it is not waiting. */
   waitingSince: string | null;
   stalled: boolean;
+  /** On a failed row that can be tried again: the activity row and what it was. */
+  retry?: { id: number; kind: 'Import' | 'PDF check' | 'Print files'; jobId: number | null };
 }
 
 export const ORDER: Stage[] = ['Making print files', 'Processing', 'Waiting', 'Awaiting PDF', 'Failed', 'Completed'];
@@ -62,7 +64,7 @@ export function buildLines(d: ActivityData, now: number = Date.now()): ActivityL
     lines.push({ key: `j${j.id}`, stage: 'Awaiting PDF', name: j.pdfFileName, account: j.customerName, bytes: null, detail: 'Data imported; waiting for the PDF file.', progress: null, seconds: null, start: null, end: null, waitingSince: j.receivedAt, stalled: false });
   }
   for (const r of d.recent.filter((x) => x.state === 'Failed' && now - Date.parse(x.finishedAt ?? x.updatedAt) < FAILED_SHOWN_FOR_MS)) {
-    lines.push({ key: `f${r.id}`, stage: 'Failed', name: fileOf(r), account: jobOf(r)?.customerName ?? null, bytes: null, detail: r.detail, progress: null, seconds: null, start: r.startedAt, end: r.finishedAt ?? r.updatedAt, waitingSince: null, stalled: false });
+    lines.push({ key: `f${r.id}`, stage: 'Failed', retry: { id: r.id, kind: r.kind, jobId: r.jobId }, name: fileOf(r), account: jobOf(r)?.customerName ?? null, bytes: null, detail: r.detail, progress: null, seconds: null, start: r.startedAt, end: r.finishedAt ?? r.updatedAt, waitingSince: null, stalled: false });
   }
   for (const j of d.jobs.filter((x) => x.status !== 'Awaiting PDF').sort((a, b) => b.id - a.id)) {
     const made = j.batchCount > 0 && j.composedBatchCount === j.batchCount;

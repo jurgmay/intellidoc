@@ -38,4 +38,14 @@ describe.skipIf(!cs)('MssqlActivityStore', { timeout: 120_000 }, () => {
     expect(s.some((x) => !x.withPdf)).toBe(true);
     expect(s.every((x) => x.seconds < 500)).toBe(true);
   });
+  it('finds a row by number, and dismisses only a failed one', async () => {
+    await add('Import', 'retry-me.xml', 'Failed'); await add('Import', 'leave-me.xml', 'Done');
+    const all = await store.recent(50);
+    const bad = all.find((r) => r.label === 'retry-me.xml')!, ok = all.find((r) => r.label === 'leave-me.xml')!;
+    expect(await store.get(bad.id)).toMatchObject({ label: 'retry-me.xml', state: 'Failed' });
+    expect(await store.get(999999)).toBeNull();
+    await store.dismiss(bad.id); await store.dismiss(ok.id);
+    expect((await store.get(bad.id))!.state).toBe('Abandoned');
+    expect((await store.get(ok.id))!.state).toBe('Done');
+  });
 });

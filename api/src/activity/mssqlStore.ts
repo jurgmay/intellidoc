@@ -22,6 +22,13 @@ export class MssqlActivityStore implements ActivityStore {
   async running(): Promise<ActivityRow[]> {
     return ((await this.pool.request().query(`SELECT ${COLS} FROM idoc.activity WHERE state = N'Running' ORDER BY activity_id`)).recordset as R[]).map((r) => row(r));
   }
+  async get(id: number): Promise<ActivityRow | null> {
+    const rs = (await this.pool.request().input('i', sql.BigInt, id).query(`SELECT ${COLS} FROM idoc.activity WHERE activity_id = @i`)).recordset as R[];
+    return rs[0] ? row(rs[0]) : null;
+  }
+  async dismiss(id: number): Promise<void> {
+    await this.pool.request().input('i', sql.BigInt, id).query(`UPDATE idoc.activity SET state = N'Abandoned', updated_at = SYSUTCDATETIME() WHERE activity_id = @i AND state = N'Failed'`);
+  }
   async recent(limit: number): Promise<ActivityRow[]> {
     return ((await this.pool.request().input('n', sql.Int, limit).query(`SELECT TOP (@n) ${COLS} FROM idoc.activity WHERE state <> N'Running' ORDER BY activity_id DESC`)).recordset as R[]).map((r) => row(r));
   }

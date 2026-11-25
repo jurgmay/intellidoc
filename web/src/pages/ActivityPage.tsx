@@ -1,14 +1,45 @@
 import { useEffect, useState } from 'react';
+import { notifications } from '@mantine/notifications';
 import { Link } from 'react-router-dom';
-import { Alert, Anchor, Badge, Group, Loader, Paper, Progress, Stack, Table, Text, Title } from '@mantine/core';
-import { IconAlertCircle } from '@tabler/icons-react';
-import { getActivity, type ActivityData } from '../api/activity';
-import { buildLines, clock, COLOUR, duration, durationText, ORDER, type Stage } from './activityLines';
+import { ActionIcon, Alert, Anchor, Badge, Group, Loader, Paper, Progress, Stack, Table, Text, Title, Tooltip } from '@mantine/core';
+import { IconAlertCircle, IconRefresh } from '@tabler/icons-react';
+import { composeJob } from '../api/jobs';
+import { dismissActivity, getActivity, retryActivity, type ActivityData } from '../api/activity';
+import { buildLines, clock, COLOUR, duration, durationText, ORDER, type ActivityLine, type Stage } from './activityLines';
 
 /** Badges that always show all their text: Mantine's badge shortens its text with an ellipsis when its cell is narrow. */
 const BADGE_FULL = { root: { overflow: 'visible', maxWidth: 'none' }, label: { overflow: 'visible', textOverflow: 'clip' } } as const;
 
 /** What the watcher is doing: the inbox, what is being imported or printed, and what has finished. Refreshes itself. */
+/** Tries a failed row again: an import or PDF check goes back in the inbox; print files are made again for the job (only the batches that have none). */
+async function retryFailed(r: NonNullable<ActivityLine['retry']>): Promise<void> {
+  if (r.kind === 'Print files') {
+    if (r.jobId === null) throw new Error('This row does not say which job it was for.');
+    await composeJob(r.jobId, true);
+    await dismissActivity(r.id);
+    notifications.show({ color: 'green', title: 'Print files made', message: `Job ${r.jobId}` });
+  } else {
+    const { restored } = await retryActivity(r.id);
+    notifications.show({ color: 'green', title: 'Back in the inbox', message: restored.join(', ') });
+  }
+}
+
+function RetryButton({ line, onDone }: { line: ActivityLine; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const r = line.retry!;
+  const go = async () => {
+    setBusy(true);
+    try { await retryFailed(r); onDone(); }
+    catch (e) { notifications.show({ color: 'red', title: 'Could not retry', message: (e as Error).message, autoClose: false }); }
+    finally { setBusy(false); }
+  };
+  return (
+    <Tooltip label={r.kind === 'Print files' ? 'Make the print files again' : 'Put the files back in the inbox'}>
+      <ActionIcon variant="subtle" color="red" loading={busy} onClick={() => { void go(); }} aria-label={`Retry ${line.name}`}><IconRefresh size={18} /></ActionIcon>
+    </Tooltip>
+  );
+}
+
 export const ACTIVE_REFRESH_MS = 1500;
 export const IDLE_REFRESH_MS = 3000;
 
@@ -34,6 +65,9 @@ export function ActivityPage({ refreshMs }: { refreshMs?: number }) {
     void load();
     return () => { live = false; clearTimeout(timer); };
   }, [refreshMs]);
+
+  /** One extra refresh now (after a retry), so the failed row goes at once rather than at the next tick. */
+  const refresh = async () => { try { setData(await getActivity()); setNow(Date.now()); } catch { /* the next scheduled refresh shows any error */ } };
 
   const lines = data ? buildLines(data, now) : [];
   const count = (s: Stage) => lines.filter((l) => l.stage === s).length;
@@ -66,7 +100,7 @@ export function ActivityPage({ refreshMs }: { refreshMs?: number }) {
             <Table.Tbody>
               {lines.map((l) => (
                 <Table.Tr key={l.key}>
-                  <Table.Td ta="center" style={{ whiteSpace: 'nowrap' }}><Badge color={COLOUR[l.stage]} variant={l.stage === 'Completed' ? 'light' : 'filled'} styles={BADGE_FULL}>{l.stage}</Badge></Table.Td>
+                  <Table.Td ta="center" style={{ whiteSpace: 'nowrap' }}><Group gap={6} justify="center" wrap="nowrap"><Badge color={COLOUR[l.stage]} variant={l.stage === 'Completed' ? 'light' : 'filled'} styles={BADGE_FULL}>{l.stage}</Badge>{l.retry && <RetryButton line={l} onDone={() => { void refresh(); }} />}</Group></Table.Td>
                   <Table.Td>{l.account}</Table.Td>
                   <Table.Td miw={260}>
                     {l.progress && <Progress value={l.progress.total ? (l.progress.done / l.progress.total) * 100 : 0} mb={4} animated aria-label={`${l.progress.done} of ${l.progress.total} ${l.progress.unit}`} />}

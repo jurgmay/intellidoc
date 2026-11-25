@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { ConflictError, NotFoundError } from '../errors.js';
 import { estimator, itemSeconds, queueEstimate, remainingSeconds } from './estimate.js';
 import type { ActivityDeps, ActivityResponse } from './types.js';
 
@@ -23,4 +24,24 @@ export function activityRoutes(app: FastifyInstance, { store, inbox, jobs, setti
     const queue = queueEstimate(e, filesWithEstimate.map((f) => f.estimateSeconds), runningWithEstimate.filter((r) => r.kind !== 'Print files').map((r) => r.remainingSeconds ?? null));
     return { inbox: filesWithEstimate, inboxUnavailable: inbox.unavailable(), running: runningWithEstimate, recent, jobs: jobRows, queue, autoCompose: setting.autoCompose === true };
   });
+
+  const failedRow = async (raw: string) => {
+    const id = Number(raw);
+    const row = Number.isInteger(id) && id > 0 ? await store.get(id) : null;
+    if (!row) throw new NotFoundError('Activity row not found');
+    if (row.state !== 'Failed') throw new ConflictError('Only a failed row can be retried or cleared.');
+    return row;
+  };
+  /** Puts a failed import or PDF check back in the inbox for the watcher to take again, and takes the failed row off the list. (Print files are retried with the job's own compose route.) */
+  app.post<{ Params: { id: string } }>('/api/activity/:id/retry', async (req) => {
+    const row = await failedRow(req.params.id);
+    if (row.kind === 'Print files') throw new ConflictError('Print files are retried by making them again for the job.');
+    const why = inbox.unavailable();
+    if (why) throw new ConflictError(why);
+    const restored = await inbox.restoreFailed(row.label, row.kind === 'Import');
+    await store.dismiss(row.id);
+    return { restored };
+  });
+  /** Takes a failed row off the list without doing anything else (used once its print files have been made again). */
+  app.post<{ Params: { id: string } }>('/api/activity/:id/dismiss', async (req) => { const row = await failedRow(req.params.id); await store.dismiss(row.id); return { ok: true }; });
 }
