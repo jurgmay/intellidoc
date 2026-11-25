@@ -26,9 +26,10 @@ export function MatchingTab({ detail, lookups, reload, patchDetails }: TabProps)
     const res = await run(() => saveMatchRules(detail.id, rules.map((r) => ({ ...r, key: r.key.trim(), value: r.isInclude ? null : orNull(r.value ?? '') }))), 'Matching rules saved');
     if (res.ok) await reload(); else setRuleErrors(res.fieldErrors ?? {});
   };
-  const saveKeys = async () => { try { await patchDetails({ batchingKey: orNull(batchKey), packSequenceKey: orNull(seqKey) }); } catch { /* shown by the page */ } };
+  const saveBatchKey = async () => { try { await patchDetails({ batchingKey: orNull(batchKey) }); } catch { /* shown by the page */ } };
+  const saveSeqKey = async () => { try { await patchDetails({ packSequenceKey: orNull(seqKey) }); } catch { /* shown by the page */ } };
   const saveSeq = async () => {
-    const res = await run(() => saveSequenceRules(detail.id, seq.map((r) => ({ value: r.value.trim(), number: Number(r.number) }))), 'Pack sequence saved');
+    const res = await run(() => saveSequenceRules(detail.id, seq.map((r) => ({ value: r.value.trim(), number: Number(r.number) }))), 'Pack sequencing saved');
     if (res.ok) await reload(); else setSeqErrors(res.fieldErrors ?? {});
   };
   const setRule = (i: number, patch: Partial<MatchRule>) => setRules((rs) => rs.map((r, j) => (j === i ? { ...r, ...patch } : r)));
@@ -44,6 +45,17 @@ export function MatchingTab({ detail, lookups, reload, patchDetails }: TabProps)
         hint="Covers the pack sequence key and its order. With the parent's plus this customer's own, the order adds up; the key stays this customer's own. A number set here for the same value replaces the parent's.">
         {lockedQ && <Text size="sm" c="dimmed" mt="sm">The pack sequence key and order below are the parent&apos;s and cannot be changed here.</Text>}
       </ModeSelect>
+      <Paper withBorder p="lg">
+        <Title order={4} mb={4} c="brand.6">Batching</Title>
+        <Text size="sm" c="dimmed" mb="md">
+          A batch is one customer, outer envelope, postal service, format, brand, inserts, batching key, paper and route. The batching key is a passthrough key from the XML that splits batches further (for example Department).
+        </Text>
+        <Group align="flex-end" justify="space-between">
+          <Autocomplete label="Batching key" description="Leave empty to batch without one." w={360} disabled={lockedM} data={lookups.passthroughKeys} value={lockedM ? inhM?.batchingKey ?? '' : batchKey} onChange={setBatchKey} />
+          <Button onClick={saveBatchKey} disabled={lockedM || orNull(batchKey) === detail.batchingKey}>Save</Button>
+        </Group>
+      </Paper>
+
       <Paper withBorder p="lg">
         <Title order={4} mb={4} c="brand.6">Address matching</Title>
         <Text size="sm" c="dimmed" mb="md">
@@ -83,22 +95,14 @@ export function MatchingTab({ detail, lookups, reload, patchDetails }: TabProps)
       <FromParent head={['Rule']} rows={detail.inherited.matchRules.map((r, i) => ({ key: `m${i}`, cells: [r.isInclude ? `Include ${r.key} in the match` : `Exclude ${r.key} = "${r.value ?? ''}"`], from: r.from.name }))} />
 
       <Paper withBorder p="lg">
-        <Title order={4} mb={4} c="brand.6">Batching and pack order</Title>
+        <Title order={4} mb={4} c="brand.6">Pack sequencing</Title>
         <Text size="sm" c="dimmed" mb="md">
-          A batch is one customer, outer envelope, postal service, format, brand, inserts, batching key, paper and route. The batching key is a passthrough key from the XML that splits batches further (for example Department). The pack sequence key decides the order of packs inside a merged envelope.
+          The pack sequence key decides the order of packs inside a merged envelope; the order below sets where each value of the key goes{seqKeyShown ? ` (${seqKeyShown})` : ''}.
         </Text>
-        <Group align="flex-start" grow>
-          <Autocomplete label="Batching key" description="Leave empty to batch without one." disabled={lockedM} data={lookups.passthroughKeys} value={lockedM ? inhM?.batchingKey ?? '' : batchKey} onChange={setBatchKey} />
-          <Autocomplete label="Pack sequence key" disabled={lockedQ} data={lookups.passthroughKeys} value={lockedQ ? inhQ?.key ?? '' : seqKey} onChange={setSeqKey} />
+        <Group align="flex-end" justify="space-between" mb="md">
+          <Autocomplete label="Pack sequence key" w={360} disabled={lockedQ} data={lookups.passthroughKeys} value={lockedQ ? inhQ?.key ?? '' : seqKey} onChange={setSeqKey} />
+          <Button onClick={saveSeqKey} disabled={lockedQ || orNull(seqKey) === detail.packSequenceKey}>Save key</Button>
         </Group>
-        <Group justify="flex-end" mt="md"><Button onClick={saveKeys} disabled={(lockedM && lockedQ) || (orNull(batchKey) === detail.batchingKey && orNull(seqKey) === detail.packSequenceKey)}>Save keys</Button></Group>
-      </Paper>
-
-      <Paper withBorder p="lg">
-        <Title order={4} mb={4} c="brand.6">Pack sequence</Title>
-        <Text size="sm" c="dimmed" mb="md">
-          The order of packs inside a merged envelope, by the value of the pack sequence key{seqKeyShown ? ` (${seqKeyShown})` : ''}.
-        </Text>
         {lockedQ ? <Text c="dimmed" size="sm">This customer takes the parent&apos;s order, shown below.</Text> : (<>
         <Table verticalSpacing="xs">
           <Table.Tbody>
