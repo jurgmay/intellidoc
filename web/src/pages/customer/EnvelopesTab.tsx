@@ -14,6 +14,8 @@ export function EnvelopesTab({ detail, lookups, reload }: TabProps) {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [general, setGeneral] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<EnvelopeView | null>(null);
+  // Brand filter: 'all', 'none' (settings with no brand) or a brand id. It only changes what is listed.
+  const [brandFilter, setBrandFilter] = useState<string>('all');
 
   const open = (e: EnvelopeView | 'new') => {
     setEditing(e); setErrors({}); setGeneral(null);
@@ -40,6 +42,11 @@ export function EnvelopesTab({ detail, lookups, reload }: TabProps) {
   };
 
   const mode = detail.modes.envelopes;
+  const filterName = brandFilter === 'all' || brandFilter === 'none' ? null : detail.brands.find((b) => String(b.id) === brandFilter)?.name.toLowerCase() ?? null;
+  const shown = detail.envelopes.filter((e) => brandFilter === 'all' || (brandFilter === 'none' ? e.brandId === null : String(e.brandId) === brandFilter));
+  // A parent's settings belong to the parent's brands, so they are matched by brand name.
+  const shownInherited = detail.inheritedEnvelopes.filter((e) => brandFilter === 'all' || (brandFilter === 'none' ? e.brandName === null : e.brandName?.toLowerCase() === filterName));
+  const filtering = brandFilter !== 'all';
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setForm((f) => ({ ...f, [k]: v }));
   const stockLabel = (s: { code: string | null; description: string; size: string | null }) => `${s.code ?? 'no code'} – ${s.description}${s.size ? ` (${s.size})` : ''}`;
   // Keep the saved choice visible even if it is no longer in the current lists.
@@ -58,11 +65,18 @@ export function EnvelopesTab({ detail, lookups, reload }: TabProps) {
         </Text>
         <Button leftSection={<IconPlus size={16} />} onClick={() => open('new')} disabled={mode === 'INHERIT'}>Add envelope</Button>
       </Group>
+      {(detail.brands.length > 0 || detail.inheritedEnvelopes.some((e) => e.brandName !== null)) && (
+        <Group align="flex-end">
+          <Select label="Show brand" w={260} allowDeselect={false} value={brandFilter} onChange={(v) => setBrandFilter(v ?? 'all')}
+            data={[{ value: 'all', label: 'All brands' }, { value: 'none', label: 'No brand (any brand)' }, ...detail.brands.map((b) => ({ value: String(b.id), label: b.name }))]} />
+          {filtering && <Text size="sm" c="dimmed" pb={6}>Showing {shown.length} of {detail.envelopes.length}</Text>}
+        </Group>
+      )}
       <Paper withBorder>
         <Table verticalSpacing="sm">
           <Table.Thead><Table.Tr><Table.Th>Brand</Table.Th><Table.Th>Delivery band</Table.Th><Table.Th>Postal service and weight band</Table.Th><Table.Th>Envelope</Table.Th><Table.Th>Reference</Table.Th><Table.Th /></Table.Tr></Table.Thead>
           <Table.Tbody>
-            {detail.envelopes.map((e) => (
+            {shown.map((e) => (
               <Table.Tr key={e.id}>
                 <Table.Td>{e.brandName ?? <Text span c="dimmed">Any brand</Text>}</Table.Td>
                 <Table.Td>{e.deliveryBand}</Table.Td>
@@ -72,17 +86,17 @@ export function EnvelopesTab({ detail, lookups, reload }: TabProps) {
                 <Table.Td><Group justify="flex-end" gap="xs"><Button size="xs" variant="default" onClick={() => open(e)}>Edit</Button><Button size="xs" variant="subtle" color="red" onClick={() => setConfirm(e)}>Remove</Button></Group></Table.Td>
               </Table.Tr>
             ))}
-            {detail.envelopes.length === 0 && <Table.Tr><Table.Td colSpan={6}><Text c="dimmed" ta="center" py="md">{mode === 'OWN' ? 'No envelope settings. Files for this customer cannot be given an envelope until one is added.' : 'No envelope settings of its own.'}</Text></Table.Td></Table.Tr>}
+            {shown.length === 0 && <Table.Tr><Table.Td colSpan={6}><Text c="dimmed" ta="center" py="md">{filtering && detail.envelopes.length > 0 ? 'No envelope settings for this brand.' : mode === 'OWN' ? 'No envelope settings. Files for this customer cannot be given an envelope until one is added.' : 'No envelope settings of its own.'}</Text></Table.Td></Table.Tr>}
           </Table.Tbody>
         </Table>
       </Paper>
-      {detail.inheritedEnvelopes.length > 0 && (
+      {shownInherited.length > 0 && (
         <Paper withBorder>
           <Text fw={600} px="md" pt="sm">From the parent</Text>
           <Table verticalSpacing="sm" c="dimmed">
             <Table.Thead><Table.Tr><Table.Th>Brand</Table.Th><Table.Th>Delivery band</Table.Th><Table.Th>Postal service and weight band</Table.Th><Table.Th>Envelope</Table.Th><Table.Th>Reference</Table.Th><Table.Th>From</Table.Th></Table.Tr></Table.Thead>
             <Table.Tbody>
-              {detail.inheritedEnvelopes.map((e) => (
+              {shownInherited.map((e) => (
                 <Table.Tr key={`i${e.id}`}>
                   <Table.Td>{e.brandName ?? 'Any brand'}</Table.Td><Table.Td>{e.deliveryBand}</Table.Td><Table.Td>{e.rateLabel}</Table.Td>
                   <Table.Td>{e.stockCode ?? 'no code'} – {e.stockDescription}</Table.Td><Table.Td>{e.reference ?? '–'}</Table.Td><Table.Td>{e.from.name}</Table.Td>
