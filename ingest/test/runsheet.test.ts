@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PDFDocument } from 'pdf-lib';
-import { envelopeText, buildRunSheet, runSheetsFromIngest, printMethod, weightBandLines, postalServiceText, type RunSheetInput } from '../src/runsheet/data.js';
+import { withLinkedInserts, envelopeText, buildRunSheet, runSheetsFromIngest, printMethod, weightBandLines, postalServiceText, type RunSheetInput } from '../src/runsheet/data.js';
 import { mergePdfs, renderRunSheet } from '../src/runsheet/pdf.js';
 import { printFileName } from '../src/compose/job.js';
 import { spawnSync } from 'node:child_process';
@@ -20,6 +20,22 @@ describe('run sheet data', () => {
     const r = await run([{ pages: 3 }, { pages: 2, surname: 'Jones' }]);
     const total = runSheetsFromIngest(r, fixtureReference(), { firstCode: 1 }).reduce((t, d) => t + d.totalPages, 0);
     expect(total).toBe(6);
+  });
+  it('lists the inserts linked to each insert used, once, with the same quantity as the insert they come with', () => {
+    const linked = new Map([['P', [{ code: 'C1', description: 'Reply envelope' }, { code: 'C2', description: 'Form' }]]]);
+    expect(withLinkedInserts([{ code: 'P', description: 'Leaflet', quantity: 2 }], linked)).toEqual([
+      { code: 'C1', description: 'Reply envelope', quantity: 2 }, { code: 'C2', description: 'Form', quantity: 2 }, { code: 'P', description: 'Leaflet', quantity: 2 },
+    ]);
+    // used directly as well as linked: one line, quantities added (as the weight is); inserts with nothing linked are unchanged
+    expect(withLinkedInserts([{ code: 'P', description: 'Leaflet', quantity: 1 }, { code: 'C1', description: 'Reply envelope', quantity: 3 }, { code: 'Z', description: 'Other', quantity: 1 }], linked)).toEqual([
+      { code: 'C1', description: 'Reply envelope', quantity: 4 }, { code: 'C2', description: 'Form', quantity: 1 }, { code: 'P', description: 'Leaflet', quantity: 1 }, { code: 'Z', description: 'Other', quantity: 1 },
+    ]);
+    expect(withLinkedInserts([], linked)).toEqual([]);
+  });
+  it('shows a linked insert on the run sheet of a batch that uses its parent', async () => {
+    const r = await run([{ pages: 2, inserts: ['INSERT-PARENT'] }]);
+    const [sheet] = runSheetsFromIngest(r, fixtureReference(), { firstCode: 1 });
+    expect(sheet!.inserts.map((i) => i.split(' : ')[0])).toEqual(['INSERT-CHILD', 'INSERT-PARENT']);
   });
   it('wording of print method follows the FileMaker calculation', () => {
     expect(printMethod('A4 White', true, 'Colour')).toBe('Finished size A4; printed 1-up on A4 White; colour; duplex');

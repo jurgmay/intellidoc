@@ -54,6 +54,25 @@ export interface RunSheetInput {
 }
 
 /** Paper names look like "A4 White", "A5 White", "A4 White - Edge-to-edge". */
+export interface RunSheetInsert { code: string; description: string; quantity: number }
+
+/**
+ * The inserts to list on a run sheet: each insert used, plus the inserts linked to it (once per insert, as many as its parent), so the whole set is on the sheet.
+ * An insert that is both used directly and linked is listed once with the quantities added, the same as it is weighed. `linked` maps an insert's code to its linked inserts.
+ */
+export function withLinkedInserts(direct: RunSheetInsert[], linked: Map<string, { code: string; description: string }[]>): RunSheetInsert[] {
+  const out = new Map<string, RunSheetInsert>();
+  const add = (code: string, description: string, quantity: number): void => {
+    const have = out.get(code);
+    if (have) have.quantity += quantity; else out.set(code, { code, description, quantity });
+  };
+  for (const d of direct) {
+    add(d.code, d.description, d.quantity);
+    for (const c of linked.get(d.code) ?? []) add(c.code, c.description, d.quantity);
+  }
+  return [...out.values()].sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
+}
+
 export function paperFacts(paper: string): { size: string; description: string; edgeToEdge: boolean } {
   return { size: paper.slice(0, 2).toUpperCase(), description: paper.slice(3).toLowerCase(), edgeToEdge: /edge[- ]?to[- ]?edge/i.test(paper) };
 }
@@ -140,7 +159,10 @@ export function runSheetsFromIngest(r: IngestResult, ref: ReferenceData, opts: {
       department: DEPARTMENT[b.enclosing],
       envelopeCode: b.envelopeCode,
       envelopeDescription: stock?.description ?? b.envelopeSize,
-      inserts: b.inserts.map((x) => ({ code: x.code, description: ref.stock.get(x.code)?.description ?? '', quantity: x.quantity })),
+      inserts: withLinkedInserts(
+        b.inserts.map((x) => ({ code: x.code, description: ref.stock.get(x.code)?.description ?? '', quantity: x.quantity })),
+        new Map([...ref.stock.values()].filter((i) => i.linked?.length).map((i) => [i.code, i.linked!.map((c) => ({ code: c, description: ref.stock.get(c)?.description ?? '' }))])),
+      ),
       postalProvider: opt?.postalProvider ?? '',
       postalServiceName: opt?.postalServiceName ?? b.postalService,
       serviceCode: opt?.serviceCode ?? null,

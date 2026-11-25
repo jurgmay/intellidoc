@@ -544,6 +544,15 @@ describe.skipIf(!hasDb)('MssqlRepository', { timeout: 120_000 }, () => {
     expect(b).toMatchObject({ d: 'Hand enclosing', env: 'C4-REMUS', fmt: 'Large Letter' });
   });
 
+  it('run sheet inputs list the inserts linked to an insert used, at the parent\'s quantity', async () => {
+    await load([person('Li', 'Nk', { inserts: ['INSERT-PARENT'] })], 'job-linked.xml');
+    const jobId = await scalar(`SELECT job_id AS n FROM idoc.job WHERE base_name = N'job-linked'`);
+    const inputs = await loadRunSheetInputs(pool, jobId);
+    expect(inputs[0]!.inserts.map((i) => i.code)).toEqual(['INSERT-CHILD', 'INSERT-PARENT']);
+    const qty = new Map(inputs[0]!.inserts.map((i) => [i.code, i.quantity]));
+    expect(qty.get('INSERT-CHILD')).toBe(qty.get('INSERT-PARENT'));
+  });
+
   it('DATABASE refuses to attach a pack to another person\'s mailpiece (GDPR)', async () => {
     await load([person('Cy', 'Kay'), person('Di', 'Kay')], 'job-gdpr.xml');
     const rows = (await pool.request().query(`SELECT p.pack_id, p.mailpiece_id FROM idoc.pack p JOIN idoc.job j ON j.job_id = p.job_id WHERE j.base_name = N'job-gdpr' ORDER BY p.pack_id`)).recordset;
