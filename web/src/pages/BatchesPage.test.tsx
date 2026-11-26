@@ -14,7 +14,7 @@ const batch = (batchCode: number, over: Record<string, unknown> = {}) => ({
 });
 const piece = (mailpieceId: number, name: string, sequenceNumber: number | null) => ({
   mailpieceId, sequenceNumber, batchCode: 7001, batchStatus: 'Printed', job: 'job-9', releaseDate: '2026-11-18T09:30:00', addressLines: [name, '12 Mill Lane', 'Leeds'], postcode: 'LS1 4AB', isCancelled: false,
-  accountCode: 'ODEVO', accountName: 'Odevo', accountPath: 'Odevo', invoicingCode: 'ODEVO', invoicingName: 'Odevo', brand: null, priceSell: 1.25 as number | null,
+  accountCode: 'ODEVO', accountName: 'Odevo', accountPath: 'Odevo', invoicingCode: 'ODEVO', invoicingName: 'Odevo', brand: null, priceSell: 1.25 as number | null, priceIncomplete: false,
   packs: [{ packId: mailpieceId * 10, packGuid: `aaaaaaaa-0000-4000-8000-${String(mailpieceId).padStart(12, '0')}`, jobGuid: 'bbbbbbbb-0000-4000-8000-000000000001', position: 1, sequence: 1, startPage: 1, pageCount: 2, releaseDate: '2026-11-18T09:30:00', references: { 'Tenant Reference': `T-${mailpieceId}` } }],
 });
 let urls: string[];
@@ -125,6 +125,20 @@ describe('BatchesPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Price of the mailpiece to Mrs A Patel' }));
     await waitFor(() => expect(urls).toContain('/api/mailpieces/5/price'));
     expect(screen.getAllByTestId('mailpiece')).toHaveLength(2);
+  });
+
+  it('shows the price button in orange when part of the price is missing', async () => {
+    respond = ((inner) => (url: string) => url.startsWith('/api/recipients/search')
+      ? { status: 200, json: { scope: { id: 1, label: 'Odevo' }, rows: [{ ...piece(5, 'Mrs A Patel', 1), priceIncomplete: true }, piece(6, 'Mr J Smith', 2)], truncated: false } }
+      : inner(url))(respond);
+    show(); await search();
+    await userEvent.click(screen.getByRole('button', { name: 'Show the mailpieces in batch 7001' }));
+    await screen.findByText('Mrs A Patel');
+    const incomplete = screen.getByRole('button', { name: 'Price of the mailpiece to Mrs A Patel' });
+    const complete = screen.getByRole('button', { name: 'Price of the mailpiece to Mr J Smith' });
+    expect(incomplete.getAttribute('style')).toMatch(/orange/);
+    expect(complete.getAttribute('style') ?? '').not.toMatch(/orange/);
+    expect(incomplete).toHaveAttribute('title', expect.stringMatching(/missing/));
   });
 
   it('sends the other criteria', async () => {

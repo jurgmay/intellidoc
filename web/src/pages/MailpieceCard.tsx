@@ -43,7 +43,7 @@ export function MailpieceCard({ row: r, open, onToggle, onPrice, showSequence = 
           <Field label="Sent from">{r.accountPath}{r.brand && <Text size="xs" c="dimmed">{r.brand}</Text>}</Field>
           <Field label="Invoiced to">{r.invoicingName ?? '–'}</Field>
         </Group>
-        {onPrice && <Button size="compact-sm" variant="light" aria-label={`Price of the mailpiece to ${who}`} onClick={(e) => { e.stopPropagation(); onPrice(r.mailpieceId); }}>{r.priceSell == null ? 'Not priced' : `£${r.priceSell.toFixed(2)}`}</Button>}
+        {onPrice && <Button size="compact-sm" variant="light" color={r.priceIncomplete ? 'orange' : undefined} title={r.priceIncomplete ? 'Part of the price is missing. Click to see what.' : undefined} aria-label={`Price of the mailpiece to ${who}`} onClick={(e) => { e.stopPropagation(); onPrice(r.mailpieceId); }}>{r.priceSell == null ? 'Not priced' : `£${r.priceSell.toFixed(2)}`}</Button>}
       </Group>
       {/* the letters in the envelope, in the order they go in: what is specific to each */}
       {open && <Box p="sm">
