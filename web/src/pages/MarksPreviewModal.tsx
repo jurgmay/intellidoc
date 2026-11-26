@@ -35,8 +35,11 @@ export function MarksPreviewModal({ opened, onClose, values }: Props) {
       setZoom((z) => clampZoom(e.deltaY < 0 ? z * ZOOM_STEP : z / ZOOM_STEP));
     };
     box.addEventListener('wheel', onWheel, { passive: false });
-    return () => box.removeEventListener('wheel', onWheel);
-  }, [box]);
+    // The page is fitted to the box again when the window changes size.
+    const resized = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => measure());
+    resized?.observe(box);
+    return () => { box.removeEventListener('wheel', onWheel); resized?.disconnect(); };
+  }, [box, measure]);
 
   useEffect(() => {
     if (!opened) return;
@@ -52,15 +55,16 @@ export function MarksPreviewModal({ opened, onClose, values }: Props) {
   }, [opened, page]);
 
   return (
-    <Modal opened={opened} onClose={onClose} title="Where the control marks fall" size="min(1200px, 95vw)" centered>
-      <Stack gap="sm">
+    <Modal opened={opened} onClose={onClose} title="Where the control marks fall" size="min(1200px, 95vw)" yOffset={0}
+      styles={{ content: { height: '100dvh', maxHeight: '100dvh', display: 'flex', flexDirection: 'column' }, body: { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } }}>
+      <Stack gap="sm" style={{ flex: 1, minHeight: 0 }}>
         <SegmentedControl value={page} onChange={(v) => setPage(v as MarksPreviewPage)} data={[
           { value: 'window', label: 'First page of a mailpiece' }, { value: 'mrdf', label: 'MRDF page codes' }]} />
         <Text size="xs" c="dimmed">
           Drawn from the values on screen, including changes you have not saved. To check a change, close this window, edit, and open it again. The blue box is the envelope window; the orange dashes are the boxes the marks are fitted in (the solid edge of the OCR box is where its text starts; the box is not turned, so make it tall for 90° or 270°). The grid is every 10 mm from the top left of the page.
         </Text>
         {error && <Alert color="red" icon={<IconAlertCircle />} title="Could not draw the preview">{error}</Alert>}
-        {!error && !url && <Center h={300}><Loader /></Center>}
+        {!error && !url && <Center h={300} style={{ flex: 1 }}><Loader /></Center>}
         {url && (
           <>
             <Group gap="xs" justify="flex-end">
@@ -69,7 +73,7 @@ export function MarksPreviewModal({ opened, onClose, values }: Props) {
               <Tooltip label="Zoom in"><ActionIcon variant="default" aria-label="Zoom in" disabled={zoom >= MAX_ZOOM} onClick={() => setZoom((z) => clampZoom(z * ZOOM_STEP))}><IconZoomIn size={18} /></ActionIcon></Tooltip>
               <Button variant="default" size="compact-sm" disabled={zoom === 1} onClick={() => setZoom(1)}>Fit page</Button>
             </Group>
-            <Box ref={setBox} h="calc(100vh - 380px)" mih={300} style={{ overflow: 'auto', border: '1px solid var(--mantine-color-gray-4)', background: 'var(--mantine-color-gray-0)' }}>
+            <Box ref={setBox} mih={200} style={{ flex: 1, minHeight: 0, overflow: 'auto', border: '1px solid var(--mantine-color-gray-4)', background: 'var(--mantine-color-gray-0)' }}>
               <img ref={imgRef} src={url} onLoad={measure}
                 style={{ display: 'block', margin: '0 auto', maxWidth: 'none', width: fitWidth ? fitWidth * zoom : `${zoom * 100}%` }}
                 alt={page === 'window' ? 'The first page of a mailpiece with the envelope window and control marks' : 'A sheet front with the MRDF page codes'} />
