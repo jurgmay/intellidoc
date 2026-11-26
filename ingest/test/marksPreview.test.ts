@@ -25,6 +25,12 @@ describe('the marks preview page', () => {
       expect(doc.catalog.lookup(PDFName.of('OCProperties'), PDFDict).has(PDFName.of('OCGs'))).toBe(true);
     }
   });
+  it('puts the MRDF page codes on the first page preview too, when they are set', async () => {
+    const withMrdf = await buildMarksPreviewPdf('window', marks, win, DEFAULT_PAGE_MM);
+    const without = await buildMarksPreviewPdf('window', { ...marks, mrdf: undefined }, win, DEFAULT_PAGE_MM);
+    expect(withMrdf.length).toBeGreaterThan(without.length + 500);
+    expect(await PDFDocument.load(withMrdf)).toBeTruthy();
+  });
   it('needs the MRDF settings for the MRDF page', async () => {
     await expect(buildMarksPreviewPdf('mrdf', { ...marks, mrdf: undefined }, win, DEFAULT_PAGE_MM)).rejects.toThrow(/MRDF/);
   });

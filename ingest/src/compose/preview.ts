@@ -55,6 +55,13 @@ function outline(page: PDFPage, r: ReturnType<typeof rect>, startEdgeDeg?: numbe
   page.drawLine({ start: { x: x0, y: y0 }, end: { x: x1, y: y1 }, thickness: 1.2, color: BOX_LINE });
 }
 
+/** The dashed boxes the MRDF Data Matrix and OCR code are fitted in. */
+function drawMrdfBoxes(page: PDFPage, frame: Frame, m: NonNullable<MarkSettings['mrdf']>): void {
+  const side = Math.min(m.dm.widthMm, m.dm.heightMm);
+  outline(page, rect(frame, { leftMm: m.dm.leftMm, topMm: m.dm.topMm, widthMm: side, heightMm: side }));
+  outline(page, rect(frame, m.ocr), m.ocr.rotationDeg ?? 0);
+}
+
 /** The preview as a one-page PDF of the given page size (the trim box is the whole page). */
 export async function buildMarksPreviewPdf(which: PreviewPage, marks: MarkSettings, win: WindowSettings, size: PageSize): Promise<Uint8Array> {
   const doc = await PDFDocument.create();
@@ -75,13 +82,16 @@ export async function buildMarksPreviewPdf(which: PreviewPage, marks: MarkSettin
     const side = Math.min(marks.dm.widthMm, marks.dm.heightMm);
     outline(page, rect(frame, { leftMm: marks.dm.leftMm, topMm: marks.dm.topMm, widthMm: side, heightMm: side }));
     drawMarks(page, ocg, ocrb, marks, { sequence: sequenceText(SAMPLE.batchCode, SAMPLE.sequence), matrix: dataMatrixText(SAMPLE.batchCode, SAMPLE.sequence) }, trim, 'red');
-    caption = 'First page of a mailpiece';
+    // The MRDF page codes too, when they are set, so the two sets can be checked against each other (the MRDF page below draws them alone).
+    if (marks.mrdf) {
+      drawMrdfBoxes(page, frame, marks.mrdf);
+      drawMrdfMarks(page, ocg, ocrb, marks.mrdf, mrdfPageCodes(SAMPLE.batchCode, SAMPLE.sequence, 1, 2), trim);
+    }
+    caption = marks.mrdf ? 'First page of a mailpiece, with the MRDF page codes' : 'First page of a mailpiece';
   } else {
     if (!marks.mrdf) throw new Error('The MRDF page codes are not set');
     const m = marks.mrdf;
-    const side = Math.min(m.dm.widthMm, m.dm.heightMm);
-    outline(page, rect(frame, { leftMm: m.dm.leftMm, topMm: m.dm.topMm, widthMm: side, heightMm: side }));
-    outline(page, rect(frame, m.ocr), m.ocr.rotationDeg ?? 0);
+    drawMrdfBoxes(page, frame, m);
     drawMrdfMarks(page, ocg, ocrb, m, mrdfPageCodes(SAMPLE.batchCode, SAMPLE.sequence, 1, 2), trim);
     caption = 'Front of a sheet, MRDF page codes';
   }
