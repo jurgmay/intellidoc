@@ -66,7 +66,8 @@ export class MssqlRecipientStore implements RecipientStore {
              CONVERT(NVARCHAR(19), rel.release_date, 126) AS release_date, ad.postcode, m.is_cancelled,
              m.submitting_account_code AS account_code, m.submitting_account_name AS account_name, m.submitting_account_path AS account_path,
              m.invoicing_account_code, m.invoicing_account_name, COALESCE(m.brand_name, br.name) AS brand,
-             CASE WHEN m.priced_at IS NULL THEN NULL ELSE m.production_sell + m.postage_sell END AS price_sell
+             CASE WHEN m.priced_at IS NULL THEN NULL ELSE m.production_sell + m.postage_sell END AS price_sell,
+             CASE WHEN m.priced_at IS NOT NULL AND NULLIF(m.price_warnings, N'') IS NOT NULL THEN 1 ELSE 0 END AS price_incomplete
       FROM idoc.mailpiece m
       JOIN tree ON tree.account_id = m.submitting_account_id
       JOIN idoc.job j ON j.job_id = m.job_id
@@ -115,7 +116,7 @@ export class MssqlRecipientStore implements RecipientStore {
         job: r['job'], releaseDate: r['release_date'], addressLines: lines.get(id) ?? [], postcode: r['postcode'], isCancelled: Boolean(r['is_cancelled']),
         accountCode: r['account_code'], accountName: r['account_name'], accountPath: r['account_path'],
         invoicingCode: r['invoicing_account_code'] ?? null, invoicingName: r['invoicing_account_name'] ?? null, brand: r['brand'] ?? null,
-        priceSell: r['price_sell'] == null ? null : Number(r['price_sell']), packs: packs.get(id) ?? [],
+        priceSell: r['price_sell'] == null ? null : Number(r['price_sell']), priceIncomplete: Boolean(r['price_incomplete']), packs: packs.get(id) ?? [],
       };
     });
     return { scope: { id: q.accountId, label }, rows, truncated };

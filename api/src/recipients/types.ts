@@ -63,6 +63,8 @@ export interface RecipientRow {
   brand: string | null;
   /** What the customer pays for the mailpiece (production and postage), or null when it has not been priced. */
   priceSell: number | null;
+  /** True when the price is only part of the price (no postage rate or envelope price, for example); see the price's warnings. */
+  priceIncomplete: boolean;
   packs: RecipientPack[];
 }
 

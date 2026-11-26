@@ -23,7 +23,7 @@ const pack = (packId: number, position: number, over: Partial<RecipientPack> = {
 const row = (mailpieceId: number, ancestors: number[], over: Partial<MemoryRecipient>): MemoryRecipient => ({
   mailpieceId, sequenceNumber: null, batchCode: 9000 + mailpieceId, batchStatus: 'Printed', job: `job-${mailpieceId}`, releaseDate: '2026-11-18T09:00:00', isCancelled: false,
   addressLines: ['Ann Lee', '1 High Street', 'Town'], postcode: 'AB1 2CD', accountCode: 'X', accountName: 'X', accountPath: 'X', invoicingCode: 'X', invoicingName: 'X', brand: null,
-  priceSell: null, packs: [pack(mailpieceId * 10, 1)], ancestors, ...over,
+  priceSell: null, priceIncomplete: false, packs: [pack(mailpieceId * 10, 1)], ancestors, ...over,
 });
 
 beforeEach(async () => {

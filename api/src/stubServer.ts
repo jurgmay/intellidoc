@@ -61,7 +61,7 @@ recipients.scopeList = [
 const pk = (packId: number, position: number, sequence: number | null, startPage: number, pageCount: number, releaseDate: string, references: Record<string, string>) => ({ packId, packGuid: `7a1c0000-0000-4000-8000-${String(packId).padStart(12, '0')}`, jobGuid: '2ce8e2ed-b620-4ce3-9ef7-f52f7b449789', position, sequence, startPage, pageCount, releaseDate, references });
 const rec = (mailpieceId: number, ancestors: number[], over: Record<string, unknown>) => recipients.recipients.push({
   mailpieceId, batchCode: 7000 + Math.floor(mailpieceId / 2), batchStatus: 'Printed', job: `job-${mailpieceId}`, releaseDate: '2026-11-18T09:30:00', isCancelled: false,
-  addressLines: [], postcode: '', accountCode: '', accountName: '', accountPath: '', invoicingCode: null, invoicingName: null, brand: null, priceSell: null, packs: [], ancestors, ...over,
+  addressLines: [], postcode: '', accountCode: '', accountName: '', accountPath: '', invoicingCode: null, invoicingName: null, brand: null, priceSell: null, priceIncomplete: false, packs: [], ancestors, ...over,
 } as never);
 rec(501, [101], { addressLines: ['Mrs A Patel', '12 Mill Lane', 'Leeds'], postcode: 'LS1 4AB', accountCode: 'ACME', accountName: 'Acme Energy Ltd', accountPath: 'Acme Energy Ltd', invoicingCode: 'ACME', invoicingName: 'Acme Energy Ltd', brand: 'Acme Home',
   packs: [pk(1, 1, 1, 1, 2, '2026-11-18T09:30:00', { 'Tenant Reference': 'T-1001', 'Document Type': 'Bill' }), pk(2, 2, 2, 3, 2, '2026-11-18T09:30:00', { 'Tenant Reference': 'T-1001', 'Document Type': 'Arrears' }), pk(3, 3, null, 5, 1, '2026-11-18T09:30:00', { 'Tenant Reference': 'T-1001', 'Document Type': 'Leaflet' })] });
